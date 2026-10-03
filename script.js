@@ -389,7 +389,8 @@ function basculerPriorite(idActivite) {
 function cocherToutPlan(source) { document.querySelectorAll('.cb-plan-valider').forEach(cb => cb.checked = source.checked); }
 
 function validerSelectionPlan() {
-    if(!idEleveCourant) return; const checks = document.querySelectorAll('.cb-plan-valider:checked:not(:disabled)');
+    if(!idEleveCourant) return; 
+    const checks = document.querySelectorAll('.cb-plan-valider:checked:not(:disabled)');
     if(checks.length === 0) { showToast("Cochez au moins une activité.", "error"); return; }
     checks.forEach(cb => { marquerCommeValideSansRafraichir(cb.value, eleves[idEleveCourant]); });
     sauvegarderEleves(); afficherPlanHebdo(); afficherHistorique(); afficherRessourcesDisponibles(); rafraichirDashboard(); showToast("Sélection validée !", "success");
