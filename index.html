@@ -17,7 +17,7 @@
 <body>
 
     <button class="btn-tablet-toggle no-print" onclick="basculerModeClasse()">📱 Mode Classe</button>
-    <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" title="Remonter tout en haut">⬆️</button>
+    <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" title="Remonter tout en haut">⬆️️</button>
     <div id="toast-container" class="no-print"></div>
 
     <div class="navbar no-print">
@@ -138,7 +138,7 @@
                 <input type="text" id="pdtDateFin" placeholder="ex: 10/11" style="width: 80px; padding: 5px; text-align: center;" oninput="rafraichirFicheImpression()">
             </div>
             <div style="margin-left: auto; display: flex; gap: 10px;">
-                <button type="button" class="btn-print" onclick="window.print()" style="background: #2980b9;">🖨 Imprimer (Portrait)</button>
+                <button type="button" class="btn-print" onclick="window.print()" style="background: #2980b9;">🖨️ Imprimer (Portrait)</button>
             </div>
         </div>
         <div id="containerFichesImpression"><div style="text-align: center; padding: 40px; color: #7f8c8d;" class="no-print"><h2>Veuillez sélectionner un élève ou l'option "Tous les élèves" ci-dessus.</h2></div></div>
@@ -153,43 +153,42 @@
                 <div style="margin-bottom: 15px; background: white; padding: 10px; border-radius: 5px; border: 1px solid #ccc;">
                     <label style="font-size: 13px; font-weight: bold; color: #7f8c8d; text-transform: uppercase; display: block; margin-bottom: 5px;">1. Niveau(x) concerné(s) (Cochez un ou plusieurs) :</label>
                     <div style="display: flex; gap: 15px; flex-wrap: wrap;">
-                        <label><input type="checkbox" class="cb-niveau-form" value="CP" onchange="onChangementNiveauForm()"> CP</label>
-                        <label><input type="checkbox" class="cb-niveau-form" value="CE1" onchange="onChangementNiveauForm()"> CE1</label>
-                        <label><input type="checkbox" class="cb-niveau-form" value="CE2" onchange="onChangementNiveauForm()"> CE2</label>
-                        <label><input type="checkbox" class="cb-niveau-form" value="CM1" onchange="onChangementNiveauForm()"> CM1</label>
-                        <label><input type="checkbox" class="cb-niveau-form" value="CM2" onchange="onChangementNiveauForm()"> CM2</label>
+                        <label><input type="checkbox" class="cb-niveau-form" value="CP"> CP</label>
+                        <label><input type="checkbox" class="cb-niveau-form" value="CE1"> CE1</label>
+                        <label><input type="checkbox" class="cb-niveau-form" value="CE2"> CE2</label>
+                        <label><input type="checkbox" class="cb-niveau-form" value="CM1"> CM1</label>
+                        <label><input type="checkbox" class="cb-niveau-form" value="CM2"> CM2</label>
                     </div>
                 </div>
                 <div class="form-row">
                     <div style="flex: 1; display: flex; gap: 5px; align-items: center; min-width: 200px;">
-                        <select id="addMatiereSelect" onchange="onChangementMatiereForm(this.value)" style="flex: 1;"></select>
+                        <select id="addMatiereSelect" onchange="surChangementMatiereForm(this.value)" style="flex: 1;"></select>
                         <button type="button" class="no-print" onclick="ouvrirModal('modalMatieres'); afficherListeMatieresModal();" style="background: #7f8c8d; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer;">⚙️</button>
                         <input type="text" id="addMatiereCustom" placeholder="Nouvelle matière..." style="display: none; flex: 1;">
                     </div>
                     <div style="flex: 1; display: flex; gap: 5px; align-items: center; min-width: 200px;">
                         <select id="addSequenceSelect" onchange="surChangementSequenceForm(this.value)" style="flex: 1;"></select>
                         <button type="button" class="no-print" onclick="ouvrirModal('modalSequences'); afficherListeSequencesModal();" style="background: #7f8c8d; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer;">⚙️</button>
-                        <input type="text" id="addSequenceCustom" placeholder="Nouvelle séquence..." style="display: none; flex: 1;" oninput="majAideNumerotation()">
+                        <input type="text" id="addSequenceCustom" placeholder="Nouvelle séquence..." style="display: none; flex: 1;">
                     </div>
                     <input type="text" id="addLecon" placeholder="4. N° Leçon" style="flex: 1; min-width: 120px;">
                 </div>
                 <div class="form-row">
                     <div style="flex: 2; display: flex; gap: 5px; align-items: center;">
                         <select id="addCompetenceSelect" onchange="surChangementCompetenceForm(this.value)" style="flex: 1;"></select>
-                        <button type="button" class="no-print" onclick="ouvrirModal('modalCompetences'); afficherListeCompetencesModal();" style="background: #7f8c8d; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer;">⚙</button>
+                        <button type="button" class="no-print" onclick="ouvrirModal('modalCompetences'); afficherListeCompetencesModal();" style="background: #7f8c8d; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer;">⚙️</button>
                         <input type="text" id="addCompetenceCustom" placeholder="Nouvelle compétence..." style="display: none; flex: 1;">
                     </div>
                     <input type="text" id="addRessource" placeholder="6. Ressource (Nom)" style="flex: 1;">
                 </div>
                 <div class="form-row">
                     <div style="flex: 1; display: flex; gap: 5px; align-items: center; min-width: 200px;">
-                        <select id="addTypeSelect" onchange="surChangementType(this.value)" style="flex: 1;"></select>
+                        <select id="addTypeSelect" style="flex: 1;"></select>
                         <button type="button" class="no-print" onclick="ouvrirModal('modalTypes'); afficherListeTypesModal();" style="background: #7f8c8d; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer;" title="Gérer les types et images">⚙️</button>
-                        <input type="text" id="addTypeCustom" placeholder="Nouveau type..." style="display: none; flex: 1;" oninput="majImageAutoDepuisCustom(this.value)">
+                        <input type="text" id="addTypeCustom" placeholder="Nouveau type..." style="display: none; flex: 1;">
                     </div>
                     <div style="flex: 1; display: flex; flex-direction: column;">
                         <input type="text" id="addSymbole" placeholder="8. Numéro d'atelier" style="width: 100%;">
-                        <span id="aideNumerotation" style="font-size: 11px; color: #2980b9; margin-top: 2px; font-weight: bold;"></span>
                     </div>
                 </div>
                 <div style="margin-bottom: 15px; background: white; padding: 10px; border-radius: 5px; border: 1px solid #ccc;">
@@ -203,8 +202,8 @@
                 <div class="form-row" style="background: white; padding: 10px; border-radius: 5px; align-items: center;">
                     <label style="font-size: 14px; font-weight: bold; width: 100%; margin-bottom: 5px;">10. Visuel / Couleur :</label>
                     <div style="display: flex; gap: 8px; align-items: center; flex: 1; min-width: 280px;">
-                        <select id="selectCouleurRapide" onchange="surChangementSelectCouleur(this.value)" style="flex: 1; font-weight: bold;"><option value="">-- Choisir une couleur rapide --</option></select>
-                        <input type="color" id="addColor" value="#ffffff" style="width: 45px; height: 38px; padding: 0; cursor: pointer; display: none;" onchange="surChangementCouleurManuelle(this.value)">
+                        <select id="selectCouleurRapide" style="flex: 1; font-weight: bold;"><option value="">-- Choisir une couleur rapide --</option></select>
+                        <input type="color" id="addColor" value="#ffffff" style="width: 45px; height: 38px; padding: 0; cursor: pointer; display: none;">
                     </div>
                     <span style="font-size: 14px; font-weight:bold; color: #7f8c8d; margin: 0 10px;"> OU </span>
                     <input type="text" id="addImage" placeholder="Lien image auto ou URL perso..." style="flex: 2;">
@@ -218,7 +217,7 @@
 
             <div style="background: #eaf2f8; border: 1px solid #3498db; padding: 15px; border-radius: 8px; margin-bottom: 20px;" class="no-print">
                 <h3 style="margin-top:0; color: #2980b9;">⚡ Importation depuis Google Sheets</h3>
-                <p style="font-size:13px; color:#555; margin-bottom:10px;">Assurez-vous d'avoir un fichier nommé exactement <strong>Base de données</strong> (10 colonnes) sur votre Google Drive.</p>
+                <p style="font-size:13px; color:#555; margin-bottom:10px;">Assurez-vous d'avoir un fichier nommé exactement <strong>Base de données</strong> sur votre Google Drive.</p>
                 <div>
                     <button type="button" id="btnImportSheets" class="btn-action" style="background:#2980b9;" onclick="importerDepuisSheets(this)">📥 Importer les données du Drive</button> 
                     <button type="button" onclick="viderBase()" style="background: #e74c3c; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; float:right;">🗑️ Vider la base</button>
@@ -228,7 +227,7 @@
             <div style="background: #f8f9f9; padding: 15px; border-radius: 8px; border: 1px solid #d5dbdb; margin-bottom: 15px;" class="no-print">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
                     <div style="flex: 1; min-width: 250px;">
-                        <input type="text" id="searchBase" placeholder="🔍 Rechercher une ressource, séquence..." style="width: 100%; padding: 10px; border: 1px solid #3498db; border-radius: 20px;" oninput="afficherBase()">
+                        <input type="text" id="searchBase" placeholder="🔍 Rechercher une ressource, séquence, compétence..." style="width: 100%; padding: 10px; border: 1px solid #3498db; border-radius: 20px;" oninput="afficherBase()">
                     </div>
                 </div>
                 <div style="font-size: 12px; font-weight: bold; color: #7f8c8d; margin-bottom: 5px;">Filtrer par Niveau :</div>
@@ -298,7 +297,7 @@
 
                 <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;" class="no-print">
                     <button type="button" onclick="toggleAfficherArchives()" id="btnToggleArchives" style="background: #7f8c8d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">📂 Voir les archives (0)</button>
-                    <button type="button" onclick="viderArchives()" style="background: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">🗑 Supprimer définitivement les archives</button>
+                    <button type="button" onclick="viderArchives()" style="background: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">🗑️ Supprimer définitivement les archives</button>
                 </div>
                 <div id="zoneArchivesDashboard" style="display: none; background: #f8f9f9; border: 1px solid #bdc3c7; padding: 10px; border-radius: 5px; margin-top: 10px;">
                     <h4 style="margin: 0 0 8px 0; color: #2c3e50; font-size: 13px;">Actions archivées (cliquez sur "Restaurer" en cas d'erreur) :</h4>

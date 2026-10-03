@@ -38,7 +38,7 @@ Object.values(eleves).forEach(e => {
     if(!e.enAttente || !Array.isArray(e.enAttente)) e.enAttente = [];
     if(!e.historique || !Array.isArray(e.historique)) e.historique = [];
     if(!e.masquees || !Array.isArray(e.masquees)) e.masquees = [];
-    if(!e.priorites) e.priorites = []; // Nouvelle variable pour les étoiles
+    if(!e.priorites) e.priorites = [];
 });
 localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves));
 
@@ -58,7 +58,7 @@ function getListeTrie(idsArray, priosArray = []) {
     planObjects.sort((a, b) => {
         let prioA = priosArray.includes(a.id) ? 1 : 0;
         let prioB = priosArray.includes(b.id) ? 1 : 0;
-        if (prioA !== prioB) return prioB - prioA; // Les priorités en haut
+        if (prioA !== prioB) return prioB - prioA;
         
         let matA = nettoyerNomPourTri(a.matiere); let matB = nettoyerNomPourTri(b.matiere);
         if (matA !== matB) return matA.localeCompare(matB, 'fr');
@@ -92,7 +92,6 @@ function showToast(message, type = 'success') {
     setTimeout(() => { toast.remove(); }, 3000);
 }
 
-// Interception discrète de l'ancienne fonction alert() pour utiliser les toasts à la place (sauf pour les gros messages/confirmations)
 const originalAlert = window.alert;
 window.alert = function(msg) {
     if (msg.includes("succès") || msg.includes("mise à jour") || msg.includes("enregistrées")) { showToast(msg, 'success'); }
@@ -157,7 +156,7 @@ function calculTailleStockage() {
 // ==========================================
 // 3. SYNCHRONISATION GOOGLE DRIVE
 // ==========================================
-const CLIENT_ID = '231878278735-mld3k1s4cub6toulursis1eat0hnfbmv.apps.googleusercontent.com';
+const CLIENT_ID = '133293729951-pv43qv8a9758rbm4atpiiq3rv0g79vnd.apps.googleusercontent.com';
 const API_KEY = ''; 
 const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
 let driveAccessToken = null; let driveFileId = null; let intervalVerificationSession = null; let timerAutoSave;
@@ -289,7 +288,7 @@ function tenterConnexionAuto() {
 }
 
 // ==========================================
-// 4. GESTION DES ELEVES & ASSIGNATIONS (Listes, Priorités, Nouvelle Semaine)
+// 4. GESTION DES ELEVES & ASSIGNATIONS
 // ==========================================
 function majListeEleves() {
     const select = document.getElementById('selectEleveProfile'); const selectImp = document.getElementById('selectEleveImpression'); const selectBilan = document.getElementById('selectEleveBilan');
@@ -369,7 +368,7 @@ function validerAssignationMultiple() {
 
 function commencerNouvelleSemaine() {
     if(!idEleveCourant) return; let eleve = eleves[idEleveCourant];
-    if(confirm(`Voulez-vous commencer une nouvelle semaine pour ${eleve.nom} ?\n\nCela va vider le plan actuel et transférer automatiquement les activités en attente (À revoir / À refaire) dans le nouveau plan.`)) {
+    if(confirm(`Voulez-vous commencer une nouvelle semaine pour ${eleve.nom} ?\n\nCela va vider le plan actuel et transférer automatiquement les activités en attente dans le nouveau plan.`)) {
         eleve.planHebdo = [...(eleve.enAttente || [])]; eleve.enAttente = []; eleve.valides = {}; eleve.priorites = [];
         dashboardArchives = dashboardArchives.filter(cle => !cle.startsWith(eleve.id + '_')); localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
         sauvegarderEleves(); chargerEleve(); rafraichirDashboard(); showToast("✅ Nouvelle semaine initialisée !", "success");
@@ -499,7 +498,7 @@ function afficherPlanHebdo() {
     if(eleve.planHebdo.length === 0) tbodyApercu.innerHTML = '<tr><td colspan="7" style="text-align:center;">Le plan est vide.</td></tr>';
 
     if (eleve.enAttente && eleve.enAttente.length > 0) {
-        tbodyApercu.innerHTML += `<tr><td colspan="7" style="background:#f39c12; color:white; font-weight:bold; text-align:center; padding:10px; font-size:14px;">⏳ LISTE D'ATTENTE POUR LA SEMAINE PROCHAINE (À revoir / À refaire)</td></tr>`;
+        tbodyApercu.innerHTML += `<tr><td colspan="7" style="background:#f39c12; color:white; font-weight:bold; text-align:center; padding:10px; font-size:14px;">⏳ LISTE D'ATTENTE (À revoir / À refaire)</td></tr>`;
         let attenteObjects = getListeTrie(eleve.enAttente);
         attenteObjects.forEach((a) => {
             let badge = a.estEvaluation ? `<span class="badge-eval">🎯</span>` : '';
@@ -593,7 +592,7 @@ function setSuivi(idEleve, idAct, statut) {
         }
     } else {
         let actionName = statut === 'a_revoir' ? "À revoir avec la maitresse" : "À refaire seul";
-        let result = prompt(`[${actionName}]\nL'activité sera retirée du plan et mise en attente (semaine pro).\nAjouter une note :`, e.suivi[idAct].commentaire || '');
+        let result = prompt(`[${actionName}]\nL'activité sera retirée du plan et mise en attente.\nAjouter une note :`, e.suivi[idAct].commentaire || '');
         if(result !== null) { 
             e.suivi[idAct].statut = statut; e.suivi[idAct].commentaire = result.trim();
             let idx = e.planHebdo.indexOf(idAct);
@@ -657,7 +656,7 @@ function rafraichirDashboard() {
         groupes[idAct].a_revoir.forEach(x => {
             let cle = `${x.eleve.id}_${idAct}_a_revoir`;
             memoHtml += `<div style="background:#fdedec; border-left:4px solid #e74c3c; padding:8px 10px; margin-bottom:6px; font-size:14px; display:flex; justify-content:space-between;">
-                <div>👩‍🏫 <strong>À revoir :</strong> ${title} ➔ Avec : <strong>${escHTML(x.eleve.nom)}</strong> ${x.commentaire ? `(💬 ${escHTML(x.commentaire)})` : ''}</div>
+                <div>👩‍‍🏫 <strong>À revoir :</strong> ${title} ➔ Avec : <strong>${escHTML(x.eleve.nom)}</strong> ${x.commentaire ? `(💬 ${escHTML(x.commentaire)})` : ''}</div>
                 <label style="cursor:pointer; font-size:12px; font-weight:bold; color:#c0392b;"><input type="checkbox" onchange="archiverItem('${cle}')"> Archiver</label></div>`;
         });
         groupes[idAct].a_refaire.forEach(x => {
@@ -710,7 +709,7 @@ function rafraichirDashboard() {
             let styleRefaire = s.statut === 'a_refaire' ? 'background:#f39c12; color:white;' : 'background:#ecf0f1; color:#333;';
             let styleRevoir = s.statut === 'a_revoir' ? 'background:#e74c3c; color:white;' : 'background:#ecf0f1; color:#333;';
             let infoC = s.commentaire ? `<br><span style="color:#7f8c8d; font-size:11px; font-style:italic;">💬 ${escHTML(s.commentaire)}</span>` : '';
-            let attenteTag = isAttente ? `<br><span style="color:#e67e22; font-size:11px; font-weight:bold;">⏳ En attente (Semaine pro.)</span>` : '';
+            let attenteTag = isAttente ? `<br><span style="color:#e67e22; font-size:11px; font-weight:bold;">⏳ En attente</span>` : '';
 
             planMiniHtml += `<tr>
                 <td style="width:25px; font-weight:bold; text-align:center; color:#e74c3c;">#${idx+1}</td>
@@ -733,8 +732,6 @@ function rafraichirDashboard() {
         <tr id="dash_details_${e.id}" style="${dashboardExpanded.has(e.id) ? '' : 'display:none;'} background:#f2f4f4;"><td colspan="3" style="padding:15px;">${planMiniHtml}</td></tr>`;
     });
     tbody.innerHTML = html;
-    
-    // Génère également la Matrice des compétences
     genererMatriceCompetences();
 }
 
@@ -743,7 +740,6 @@ function genererMatriceCompetences() {
     let listeEleves = Object.values(eleves).sort((a,b) => (a.nom||"").localeCompare(b.nom||""));
     if (listeEleves.length === 0 || baseDonnees.length === 0) { table.innerHTML = "<tr><td>Aucune donnée pour la matrice.</td></tr>"; return; }
 
-    // On extrait toutes les compétences validées au moins une fois
     let compsSet = new Set();
     listeEleves.forEach(e => { e.historique.forEach(h => { let act = baseDonnees.find(b => b.id === h.idActivite); if (act && act.competence) compsSet.add(act.competence); }); });
     let competences = Array.from(compsSet).sort((a,b) => a.localeCompare(b, 'fr'));
@@ -755,7 +751,6 @@ function genererMatriceCompetences() {
     listeEleves.forEach(e => {
         html += `<tr><td>${escHTML(e.nom)}</td>`;
         competences.forEach(c => {
-            // Cherche si l'élève a validé cette compétence
             let actValidee = e.historique.find(h => { let act = baseDonnees.find(b => b.id === h.idActivite); return act && act.competence === c; });
             if (actValidee) {
                 html += `<td style="background-color: #27ae60; color: white; font-weight:bold;" title="Validé le ${actValidee.date}">V</td>`;
@@ -782,7 +777,6 @@ function genererBilanEleve() {
                     <p style="margin:5px 0 0 0; color:#7f8c8d; font-size:14px;">Généré le ${new Date().toLocaleDateString('fr-FR')}</p>
                 </div>`;
     
-    // Grouper par matière
     let groupes = {};
     eleve.historique.forEach(h => {
         let act = baseDonnees.find(b => b.id === h.idActivite);
@@ -1125,7 +1119,7 @@ function viderBase() {
     } 
 }
 
-// --- 11. IMPORTATION EXTERNE ---
+// --- 8. IMPORTATION EXTERNE ---
 function importerDonnees(btnElement) {
     const btn = btnElement || document.getElementById('btnImport');
     const texte = document.getElementById('importText').value;
@@ -1215,7 +1209,7 @@ function importerDepuisSheets(btnElement) {
         let ajouts = 0; let doublonsIgnores = 0; let nouvellesActivites = []; if (!Array.isArray(baseDonnees)) baseDonnees = [];
 
         data.values.forEach((row, index) => {
-            if (index === 0 && row[5] && row[5].toLowerCase().includes('ressource')) return; // Ignore l'en-tête
+            if (index === 0 && row[5] && row[5].toLowerCase().includes('ressource')) return;
             let col = [ row[0] || "", row[1] || "", row[2] || "", row[3] || "", row[4] || "", row[5] || "", row[6] || "", row[7] || "", row[8] || "", row[9] || "" ];
 
             if(col[5].trim() !== "") {
@@ -1261,13 +1255,12 @@ function importerDepuisSheets(btnElement) {
     .finally(() => { btn.innerText = originalText; btn.style.backgroundColor = "#2980b9"; btn.style.cursor = "pointer"; });
 }
 
-// --- 12. AFFICHAGE DE LA BASE ET ETIQUETTES ---
+// --- 9. AFFICHAGE DE LA BASE ET ETIQUETTES ---
 function afficherBase() {
     const tbody = document.getElementById('tableBase'); let html = ''; 
     if (!Array.isArray(baseDonnees)) return;
     let donneesAffichees = baseDonnees;
 
-    // Filtre de recherche par mot clé
     const searchInput = document.getElementById('searchBase');
     if (searchInput && searchInput.value) {
         let terms = searchInput.value.toLowerCase().split(' ');
@@ -1405,7 +1398,7 @@ function lancerImpressionEtiquettes() {
     document.body.classList.add('print-mode-etiquettes'); window.print(); document.body.classList.remove('print-mode-etiquettes');
 }
 
-// --- 13. IMPRESSION DES PLANS ET NAVIGATION ---
+// --- 10. SAUVEGARDE LOCALE & NAVIGATION ---
 function exporterSauvegarde() {
     const data = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives };
     const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
@@ -1540,14 +1533,13 @@ function genererHtmlFicheEleve(eleve, estUnique) {
     </div>`;
 }
 
-// --- DELEGATION D'EVENEMENTS TACTILES (Compatibilité maximale tablettes Android & iOS) ---
+// --- DELEGATION D'EVENEMENTS TACTILES ---
 document.addEventListener("DOMContentLoaded", function() {
     document.addEventListener('click', function(e) {
         const navBtn = e.target.closest('.nav-btn');
         if (navBtn) { e.preventDefault(); const pageId = navBtn.getAttribute('onclick').match(/'(.*?)'/)[1]; if (pageId) changerOnglet(pageId, navBtn); }
     });
 
-    // Patch Android Samsung Internet
     document.querySelectorAll('.nav-btn').forEach(btn => {
         btn.addEventListener('touchstart', function(e) {
             e.preventDefault();
