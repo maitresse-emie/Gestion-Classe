@@ -30,6 +30,67 @@ if (!baseDonnees || !Array.isArray(baseDonnees)) { baseDonnees = []; }
 let eleves = JSON.parse(localStorage.getItem(KEY_ELEVES));
 if (!eleves) { eleves = {}; }
 
+function sauvegarderEleves() {
+    localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves));
+    declencherAutoSaveDrive();
+}
+
+function sauvegarderBase() {
+    localStorage.setItem(KEY_ATELIERS, JSON.stringify(baseDonnees));
+    declencherAutoSaveDrive();
+}
+
+function trierBaseDonnees() {
+    if (!Array.isArray(baseDonnees)) return;
+    baseDonnees.sort((a, b) => {
+        let matA = nettoyerNomPourTri(a.matiere); let matB = nettoyerNomPourTri(b.matiere);
+        if (matA !== matB) return matA.localeCompare(matB, 'fr');
+        let sA = (a.sequence || "").trim(); let sB = (b.sequence || "").trim();
+        if (sA !== sB) return sA.localeCompare(sB, 'fr');
+        return (a.ressource || "").localeCompare(b.ressource || "", 'fr');
+    });
+}
+
+function eliminerDoublonsHistoriques() {
+    Object.values(eleves).forEach(e => {
+        if (e.historique && Array.isArray(e.historique)) {
+            let uniqueMap = new Map();
+            e.historique.forEach(h => { uniqueMap.set(h.idActivite, h); });
+            e.historique = Array.from(uniqueMap.values());
+        }
+    });
+}
+
+function getNiveauxCochesFormulaire() {
+    let res = [];
+    document.querySelectorAll('.cb-niveau-form:checked').forEach(cb => res.push(cb.value));
+    return res;
+}
+
+function verifierDoublonActivite(matiere, sequence, competence, ressource, visuel, idExclu) {
+    return baseDonnees.find(a => 
+        a.id !== idExclu &&
+        (a.ressource || "").trim().toLowerCase() === ressource.trim().toLowerCase() &&
+        (a.matiere || "").trim().toLowerCase() === matiere.trim().toLowerCase() &&
+        (a.sequence || "").trim().toLowerCase() === sequence.trim().toLowerCase()
+    );
+}
+
+function majSelectCouleursRapides(valeurForcee) {
+    const select = document.getElementById('selectCouleurRapide');
+    if (!select) return;
+    let optionsHtml = '<option value="">-- Choisir une couleur rapide --</option>' +
+        '<option value="#ffe599">🟡 Jaune clair (Maths CP)</option>' +
+        '<option value="#f6b26b">🟠 Orange (Maths CE)</option>' +
+        '<option value="#ea9999">🔴 Rouge clair (Maths CM)</option>' +
+        '<option value="#d5a6bd">🟣 Violet clair (Français CP)</option>' +
+        '<option value="#b6d7a8">🟢 Vert clair (Français CE)</option>' +
+        '<option value="#9fc5e8">🔵 Bleu clair (Français CM)</option>' +
+        '<option value="#ffffff">⚪ Blanc (Neutre)</option>';
+    select.innerHTML = optionsHtml;
+    if (valeurForcee) select.value = valeurForcee;
+}
+
 Object.values(eleves).forEach(e => { 
     if(!e.maxAteliers) e.maxAteliers = 15; 
     if(!e.suivi) e.suivi = {}; 
@@ -298,11 +359,22 @@ function majListeEleves() {
         optHtml += `<option value="${e.id}">${escHTML(e.nom)}</option>`; optImp += `<option value="${e.id}">${escHTML(e.nom)}</option>`; 
     });
     
-    select.innerHTML = optHtml; selectImp.innerHTML = optImp; selectBilan.innerHTML = optImp;
+    if (select) select.innerHTML = optHtml; 
+    if (selectImp) selectImp.innerHTML = optImp; 
+    if (selectBilan) selectBilan.innerHTML = optImp;
     
-    if(idEleveCourant && eleves[idEleveCourant]) { select.value = idEleveCourant; document.getElementById('inputMaxAteliersEleve').value = eleves[idEleveCourant].maxAteliers || 15; document.getElementById('maxAteliersAffiche').innerText = eleves[idEleveCourant].maxAteliers || 15; }
+    if(idEleveCourant && eleves[idEleveCourant]) { 
+        if (select) select.value = idEleveCourant; 
+        let inputMax = document.getElementById('inputMaxAteliersEleve');
+        let maxAff = document.getElementById('maxAteliersAffiche');
+        if (inputMax) inputMax.value = eleves[idEleveCourant].maxAteliers || 15; 
+        if (maxAff) maxAff.innerText = eleves[idEleveCourant].maxAteliers || 15; 
+    }
     if(idEleveCourant && !idEleveImpressionCourant) { idEleveImpressionCourant = idEleveCourant; }
-    if(idEleveImpressionCourant) { selectImp.value = idEleveImpressionCourant; selectBilan.value = idEleveImpressionCourant; }
+    if(idEleveImpressionCourant) { 
+        if (selectImp) selectImp.value = idEleveImpressionCourant; 
+        if (selectBilan) selectBilan.value = idEleveImpressionCourant; 
+    }
 }
 
 function modifierMaxAteliersEleve() { if(!idEleveCourant) return; let val = parseInt(document.getElementById('inputMaxAteliersEleve').value); if(isNaN(val) || val < 1) val = 1; if(val > 25) val = 25; eleves[idEleveCourant].maxAteliers = val; sauvegarderEleves(); document.getElementById('maxAteliersAffiche').innerText = val; }
@@ -310,14 +382,18 @@ function creerEleve() { const nom = document.getElementById('nouvelEleveNom').va
 function supprimerEleve() { if(!idEleveCourant) return; if(confirm("Supprimer définitivement cet élève ?")) { delete eleves[idEleveCourant]; idEleveCourant = null; idEleveImpressionCourant = null; sauvegarderEleves(); majListeEleves(); chargerEleve(); rafraichirDashboard(); } }
 
 function chargerEleve() {
-    idEleveCourant = document.getElementById('selectEleveProfile').value;
+    const sel = document.getElementById('selectEleveProfile');
+    if (!sel) return;
+    idEleveCourant = sel.value;
     const zoneTravail = document.getElementById('zoneTravail'); const message = document.getElementById('messageSelectEleve');
-    if(!idEleveCourant) { zoneTravail.style.display = 'none'; message.style.display = 'block'; return; }
-    zoneTravail.style.display = 'block'; message.style.display = 'none';
+    if(!idEleveCourant) { if(zoneTravail) zoneTravail.style.display = 'none'; if(message) message.style.display = 'block'; return; }
+    if(zoneTravail) zoneTravail.style.display = 'block'; if(message) message.style.display = 'none';
     document.querySelectorAll('.nomEleveAffiche').forEach(el => el.innerText = eleves[idEleveCourant].nom);
-    document.getElementById('inputMaxAteliersEleve').value = eleves[idEleveCourant].maxAteliers || 15;
-    document.getElementById('maxAteliersAffiche').innerText = eleves[idEleveCourant].maxAteliers || 15;
-    afficherPlanHebdo(); afficherHistorique(); if(document.getElementById('selectSequence').value) afficherRessourcesDisponibles();
+    let inputMax = document.getElementById('inputMaxAteliersEleve');
+    let maxAff = document.getElementById('maxAteliersAffiche');
+    if(inputMax) inputMax.value = eleves[idEleveCourant].maxAteliers || 15;
+    if(maxAff) maxAff.innerText = eleves[idEleveCourant].maxAteliers || 15;
+    afficherPlanHebdo(); afficherHistorique(); if(document.getElementById('selectSequence') && document.getElementById('selectSequence').value) afficherRessourcesDisponibles();
 }
 
 function ouvrirModalDuplication() {
@@ -386,11 +462,10 @@ function basculerPriorite(idActivite) {
 // ==========================================
 // 5. VALIDATIONS ET AFFICHAGE DU PLAN HEBDO
 // ==========================================
-function cocherToutPlan(source) { document.querySelectorAll('.cb-plan-valider').forEach(cb => cb.checked = source.checked); }
+function cocherToutPlan(source) { document.querySelectorAll('.cb-plan-valider:not(:disabled)').forEach(cb => cb.checked = source.checked); }
 
 function validerSelectionPlan() {
-    if(!idEleveCourant) return; 
-    const checks = document.querySelectorAll('.cb-plan-valider:checked:not(:disabled)');
+    if(!idEleveCourant) return; const checks = document.querySelectorAll('.cb-plan-valider:checked:not(:disabled)');
     if(checks.length === 0) { showToast("Cochez au moins une activité.", "error"); return; }
     checks.forEach(cb => { marquerCommeValideSansRafraichir(cb.value, eleves[idEleveCourant]); });
     sauvegarderEleves(); afficherPlanHebdo(); afficherHistorique(); afficherRessourcesDisponibles(); rafraichirDashboard(); showToast("Sélection validée !", "success");
@@ -463,7 +538,7 @@ function desarchiverActivite(idActivite) {
 }
 
 function afficherPlanHebdo() {
-    const eleve = eleves[idEleveCourant]; const tbodyApercu = document.getElementById('tableApercuPlan'); tbodyApercu.innerHTML = '';
+    const eleve = eleves[idEleveCourant]; const tbodyApercu = document.getElementById('tableApercuPlan'); if(!tbodyApercu) return; tbodyApercu.innerHTML = '';
     document.getElementById('compteurAteliersEleve').innerText = eleve.planHebdo.length;
     document.getElementById('maxAteliersAffiche').innerText = eleve.maxAteliers || 15;
 
@@ -491,7 +566,7 @@ function afficherPlanHebdo() {
 
         tbodyApercu.innerHTML += `<tr class="${rowClass}">
             <td style="text-align:center;"><input type="checkbox" class="cb-plan-valider" value="${a.id}" ${estValide ? 'checked disabled' : ''} style="transform: scale(1.3); cursor:pointer;"></td>
-            <td style="text-align:center;" class="badge-prio" onclick="basculerPriorite('${a.id}')" style="${prioStyle}">${prioStar}</td>
+            <td style="text-align:center; cursor:pointer;" class="badge-prio" onclick="basculerPriorite('${a.id}')" style="${prioStyle}">${prioStar}</td>
             <td class="col-num">${num}</td><td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td><td>${a.lecon ? '<em>'+escHTML(a.lecon)+'</em> - ' : ''}${escHTML(a.competence)}</td><td><strong>${escHTML(a.ressource)}</strong> ${badge} ${suiviHtml}</td>
             <td>${actionHtml}</td>
         </tr>`;
@@ -523,6 +598,7 @@ function afficherPlanHebdo() {
 function afficherHistorique() {
     const eleve = eleves[idEleveCourant];
     const tbodyHist = document.getElementById('tableHistorique'); const tbodyMasq = document.getElementById('tableMasquees');
+    if(!tbodyHist || !tbodyMasq) return;
     tbodyHist.innerHTML = ''; tbodyMasq.innerHTML = '';
     
     [...eleve.historique].reverse().forEach(hist => {
@@ -543,8 +619,8 @@ function afficherRessourcesDisponibles() {
     const sequence = document.getElementById('selectSequence').value; const zoneRessources = document.getElementById('zoneRessources');
     const tbody = document.getElementById('tableRessourcesDispo');
 
-    if(!sequence || !idEleveCourant) { zoneRessources.style.display = 'none'; return; }
-    zoneRessources.style.display = 'block'; tbody.innerHTML = '';
+    if(!sequence || !idEleveCourant) { if(zoneRessources) zoneRessources.style.display = 'none'; return; }
+    if(zoneRessources) zoneRessources.style.display = 'block'; if(tbody) tbody.innerHTML = '';
     
     const eleve = eleves[idEleveCourant];
     const activites = baseDonnees.filter(a => a.niveau && a.niveau.toUpperCase().includes(niveau.toUpperCase()) && a.matiere === matiere && a.sequence === sequence);
@@ -619,8 +695,10 @@ function viderArchives() {
 }
 function toggleAfficherArchives() {
     afficherArchivesMode = !afficherArchivesMode;
-    document.getElementById('zoneArchivesDashboard').style.display = afficherArchivesMode ? 'block' : 'none';
-    document.getElementById('btnToggleArchives').innerText = afficherArchivesMode ? "📂 Masquer les archives" : `📂 Voir les archives (${dashboardArchives.length})`;
+    let zone = document.getElementById('zoneArchivesDashboard');
+    let btn = document.getElementById('btnToggleArchives');
+    if(zone) zone.style.display = afficherArchivesMode ? 'block' : 'none';
+    if(btn) btn.innerText = afficherArchivesMode ? "📂 Masquer les archives" : `📂 Voir les archives (${dashboardArchives.length})`;
 }
 
 function rafraichirDashboard() {
@@ -657,7 +735,7 @@ function rafraichirDashboard() {
         groupes[idAct].a_revoir.forEach(x => {
             let cle = `${x.eleve.id}_${idAct}_a_revoir`;
             memoHtml += `<div style="background:#fdedec; border-left:4px solid #e74c3c; padding:8px 10px; margin-bottom:6px; font-size:14px; display:flex; justify-content:space-between;">
-                <div>👩‍‍🏫 <strong>À revoir :</strong> ${title} ➔ Avec : <strong>${escHTML(x.eleve.nom)}</strong> ${x.commentaire ? `(💬 ${escHTML(x.commentaire)})` : ''}</div>
+                <div>👩‍🏫 <strong>À revoir :</strong> ${title} ➔ Avec : <strong>${escHTML(x.eleve.nom)}</strong> ${x.commentaire ? `(💬 ${escHTML(x.commentaire)})` : ''}</div>
                 <label style="cursor:pointer; font-size:12px; font-weight:bold; color:#c0392b;"><input type="checkbox" onchange="archiverItem('${cle}')"> Archiver</label></div>`;
         });
         groupes[idAct].a_refaire.forEach(x => {
@@ -667,7 +745,8 @@ function rafraichirDashboard() {
                 <label style="cursor:pointer; font-size:12px; font-weight:bold; color:#d35400;"><input type="checkbox" onchange="archiverItem('${cle}')"> Archiver</label></div>`;
         });
     }
-    document.getElementById('memoListContent').innerHTML = memoHtml || '<p style="color:#7f8c8d; font-style:italic;">Aucune remédiation en attente.</p>';
+    let memoDiv = document.getElementById('memoListContent');
+    if(memoDiv) memoDiv.innerHTML = memoHtml || '<p style="color:#7f8c8d; font-style:italic;">Aucune remédiation en attente.</p>';
 
     let antonHtml = '';
     for (let idAct in antonGroupes) {
@@ -677,7 +756,8 @@ function rafraichirDashboard() {
             <span style="font-size:13px;">👥 <strong>${item.eleves.length} élève(s) :</strong> ${escHTML(item.eleves.sort().join(', '))}</span></div>
             <label style="cursor:pointer; font-size:12px; font-weight:bold; color:#2980b9;"><input type="checkbox" onchange="archiverItem('${cleAnton}')"> Archiver</label></div>`;
     }
-    document.getElementById('antonListContent').innerHTML = antonHtml || '<p style="color:#7f8c8d; font-style:italic;">Aucun atelier Anton en cours.</p>';
+    let antonDiv = document.getElementById('antonListContent');
+    if(antonDiv) antonDiv.innerHTML = antonHtml || '<p style="color:#7f8c8d; font-style:italic;">Aucun atelier Anton en cours.</p>';
 
     let archiveHtml = '';
     dashboardArchives.forEach(cle => {
@@ -689,10 +769,14 @@ function rafraichirDashboard() {
             if (e && act) archiveHtml += `<div style="display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid #eee;"><span>${parts[2] === 'a_revoir' ? '👩‍🏫 Revoir' : '🔄 Refaire'} - <strong>${escHTML(e.nom)}</strong> : ${escHTML(act.matiere)} (${escHTML(act.ressource)})</span><button onclick="restaurerArchive('${cle}')" style="background:#27ae60; color:white; border:none; border-radius:3px;">↩️</button></div>`;
         }
     });
-    document.getElementById('listeArchivesContent').innerHTML = archiveHtml || '<p style="font-size:12px; color:#7f8c8d; font-style:italic;">Aucune archive.</p>';
-    document.getElementById('btnToggleArchives').innerText = afficherArchivesMode ? "📂 Masquer les archives" : `📂 Voir les archives (${dashboardArchives.length})`;
+    let archList = document.getElementById('listeArchivesContent');
+    if(archList) archList.innerHTML = archiveHtml || '<p style="font-size:12px; color:#7f8c8d; font-style:italic;">Aucune archive.</p>';
+    let btnToggle = document.getElementById('btnToggleArchives');
+    if(btnToggle) btnToggle.innerText = afficherArchivesMode ? "📂 Masquer les archives" : `📂 Voir les archives (${dashboardArchives.length})`;
 
-    const tbody = document.getElementById('tableDashboard'); let html = '';
+    const tbody = document.getElementById('tableDashboard'); 
+    if(!tbody) return;
+    let html = '';
     let listeEleves = Object.values(eleves).sort((a,b) => (a.nom||"").localeCompare(b.nom||""));
     if(listeEleves.length === 0) { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">Aucun élève enregistré.</td></tr>'; return; }
 
@@ -738,6 +822,7 @@ function rafraichirDashboard() {
 
 function genererMatriceCompetences() {
     const table = document.getElementById('tableMatrice');
+    if (!table) return;
     let listeEleves = Object.values(eleves).sort((a,b) => (a.nom||"").localeCompare(b.nom||""));
     if (listeEleves.length === 0 || baseDonnees.length === 0) { table.innerHTML = "<tr><td>Aucune donnée pour la matrice.</td></tr>"; return; }
 
@@ -766,8 +851,10 @@ function genererMatriceCompetences() {
 }
 
 function genererBilanEleve() {
-    let idEleve = document.getElementById('selectEleveBilan').value;
+    let selectBilan = document.getElementById('selectEleveBilan');
     let zone = document.getElementById('zoneBilanPrint');
+    if (!selectBilan || !zone) return;
+    let idEleve = selectBilan.value;
     if (!idEleve || idEleve === "TOUS_ELEVES") { zone.innerHTML = '<h3 style="text-align: center; color: #7f8c8d; margin-top: 50px;">Sélectionnez un seul élève pour voir son bilan.</h3>'; return; }
     
     let eleve = eleves[idEleve];
@@ -827,21 +914,40 @@ function initNiveaux() {
 }
 
 function majCascadeMatiere() {
-    const niveau = document.getElementById('selectNiveau').value; const selectMatiere = document.getElementById('selectMatiere'); const selectSequence = document.getElementById('selectSequence');
-    if(!niveau) { selectMatiere.innerHTML = '<option value="">-- --</option>'; selectMatiere.disabled = true; selectSequence.innerHTML = '<option value="">-- --</option>'; selectSequence.disabled = true; document.getElementById('zoneRessources').style.display = 'none'; return; }
+    const niveau = document.getElementById('selectNiveau'); 
+    const selectMatiere = document.getElementById('selectMatiere'); 
+    const selectSequence = document.getElementById('selectSequence');
+    if (!niveau || !selectMatiere || !selectSequence) return;
+    
+    if(!niveau.value) { 
+        selectMatiere.innerHTML = '<option value="">-- --</option>'; selectMatiere.disabled = true; 
+        selectSequence.innerHTML = '<option value="">-- --</option>'; selectSequence.disabled = true; 
+        let zoneRes = document.getElementById('zoneRessources');
+        if(zoneRes) zoneRes.style.display = 'none'; 
+        return; 
+    }
     
     selectMatiere.disabled = false;
-    let matieres = [...new Set(baseDonnees.filter(a => a.niveau && a.niveau.toUpperCase().includes(niveau.toUpperCase())).map(a => a.matiere))].filter(m => m).sort((a,b)=>nettoyerNomPourTri(a).localeCompare(nettoyerNomPourTri(b), 'fr'));
+    let matieres = [...new Set(baseDonnees.filter(a => a.niveau && a.niveau.toUpperCase().includes(niveau.value.toUpperCase())).map(a => a.matiere))].filter(m => m).sort((a,b)=>nettoyerNomPourTri(a).localeCompare(nettoyerNomPourTri(b), 'fr'));
     let html = '<option value="">-- Matière --</option>';
     matieres.forEach(m => { html += `<option value="${escHTML(m)}">${escHTML(m)}</option>`; });
     selectMatiere.innerHTML = html; majCascadeSequence();
 }
 
 function majCascadeSequence() {
-    const niveau = document.getElementById('selectNiveau').value; const matiere = document.getElementById('selectMatiere').value; const selectSequence = document.getElementById('selectSequence');
-    if(!matiere) { selectSequence.innerHTML = '<option value="">-- --</option>'; selectSequence.disabled = true; document.getElementById('zoneRessources').style.display = 'none'; return; }
+    const niveau = document.getElementById('selectNiveau'); 
+    const matiere = document.getElementById('selectMatiere'); 
+    const selectSequence = document.getElementById('selectSequence');
+    if (!niveau || !matiere || !selectSequence) return;
+    
+    if(!matiere.value) { 
+        selectSequence.innerHTML = '<option value="">-- --</option>'; selectSequence.disabled = true; 
+        let zoneRes = document.getElementById('zoneRessources');
+        if(zoneRes) zoneRes.style.display = 'none'; 
+        return; 
+    }
     selectSequence.disabled = false;
-    let sequences = [...new Set(baseDonnees.filter(a => a.niveau && a.niveau.toUpperCase().includes(niveau.toUpperCase()) && a.matiere === matiere).map(a => a.sequence))].filter(s => s).sort((a,b)=>a.localeCompare(b));
+    let sequences = [...new Set(baseDonnees.filter(a => a.niveau && a.niveau.toUpperCase().includes(niveau.value.toUpperCase()) && a.matiere === matiere.value).map(a => a.sequence))].filter(s => s).sort((a,b)=>a.localeCompare(b));
     let html = '<option value="">-- Séquence --</option>';
     sequences.forEach(s => { html += `<option value="${escHTML(s)}">${escHTML(s)}</option>`; });
     selectSequence.innerHTML = html; afficherRessourcesDisponibles();
@@ -853,22 +959,34 @@ function majFiltresNiveaux() {
     let niveauxExistants = Array.from(niveauxExtraits).filter(n => n); ["CP", "CE1", "CE2", "CM1", "CM2"].forEach(n => { if(!niveauxExistants.includes(n)) niveauxExistants.push(n); });
     niveauxExistants.sort((a, b) => { let vA = ordreNiveaux[a] || 99; let vB = ordreNiveaux[b] || 99; return vA !== vB ? vA - vB : a.localeCompare(b); });
     
-    let htmlDB = `<button type="button" class="filter-btn ${filtreCourantDB === 'Tous' ? 'active' : ''}" onclick="appliquerFiltreDB('Tous')">📁 Tous</button>`;
-    niveauxExistants.forEach(n => { htmlDB += `<button type="button" class="filter-btn ${filtreCourantDB === n ? 'active' : ''}" onclick="appliquerFiltreDB('${escJS(n)}')">📘 ${escHTML(n)}</button>`; });
-    document.getElementById('dbFilters').innerHTML = htmlDB;
+    let dbFilters = document.getElementById('dbFilters');
+    if (dbFilters) {
+        let htmlDB = `<button type="button" class="filter-btn ${filtreCourantDB === 'Tous' ? 'active' : ''}" onclick="appliquerFiltreDB('Tous')">📁 Tous</button>`;
+        niveauxExistants.forEach(n => { htmlDB += `<button type="button" class="filter-btn ${filtreCourantDB === n ? 'active' : ''}" onclick="appliquerFiltreDB('${escJS(n)}')">📘 ${escHTML(n)}</button>`; });
+        dbFilters.innerHTML = htmlDB;
+    }
 
     let matieresDispos = filtreCourantDB === 'Tous' ? getMatieresDisponibles() : [...new Set(baseDonnees.filter(a => a.niveau && a.niveau.toUpperCase().includes(filtreCourantDB.toUpperCase())).map(a => a.matiere))].filter(m => m).sort((a,b) => nettoyerNomPourTri(a).localeCompare(nettoyerNomPourTri(b), 'fr'));
-    let htmlMat = `<button type="button" class="filter-btn filter-btn-matiere ${filtreCourantMatiere === 'Toutes' ? 'active' : ''}" onclick="appliquerFiltreMatiere('Toutes')">📂 Toutes</button>`;
-    matieresDispos.forEach(m => { htmlMat += `<button type="button" class="filter-btn filter-btn-matiere ${filtreCourantMatiere === m ? 'active' : ''}" onclick="appliquerFiltreMatiere('${escJS(m)}')">📗 ${escHTML(m)}</button>`; });
-    document.getElementById('dbMatiereFilters').innerHTML = htmlMat;
+    let dbMatFilters = document.getElementById('dbMatiereFilters');
+    if (dbMatFilters) {
+        let htmlMat = `<button type="button" class="filter-btn filter-btn-matiere ${filtreCourantMatiere === 'Toutes' ? 'active' : ''}" onclick="appliquerFiltreMatiere('Toutes')">📂 Toutes</button>`;
+        matieresDispos.forEach(m => { htmlMat += `<button type="button" class="filter-btn filter-btn-matiere ${filtreCourantMatiere === m ? 'active' : ''}" onclick="appliquerFiltreMatiere('${escJS(m)}')">📗 ${escHTML(m)}</button>`; });
+        dbMatFilters.innerHTML = htmlMat;
+    }
     
     let typesDisposDB = Object.keys(imagesParType).sort((a,b) => a.localeCompare(b));
-    let htmlTypeDB = `<button type="button" class="filter-btn filter-btn-matiere ${filtreCourantTypeDB === 'Tous' ? 'active' : ''}" onclick="appliquerFiltreTypeDB('Tous')">📂 Tous</button>`;
-    typesDisposDB.forEach(t => { htmlTypeDB += `<button type="button" class="filter-btn filter-btn-matiere ${filtreCourantTypeDB === t ? 'active' : ''}" onclick="appliquerFiltreTypeDB('${escJS(t)}')">🏷️ ${escHTML(t)}</button>`; });
-    document.getElementById('dbTypeFilters').innerHTML = htmlTypeDB;
+    let dbTypeFilters = document.getElementById('dbTypeFilters');
+    if (dbTypeFilters) {
+        let htmlTypeDB = `<button type="button" class="filter-btn filter-btn-matiere ${filtreCourantTypeDB === 'Tous' ? 'active' : ''}" onclick="appliquerFiltreTypeDB('Tous')">📂 Tous</button>`;
+        typesDisposDB.forEach(t => { htmlTypeDB += `<button type="button" class="filter-btn filter-btn-matiere ${filtreCourantTypeDB === t ? 'active' : ''}" onclick="appliquerFiltreTypeDB('${escJS(t)}')">🏷️ ${escHTML(t)}</button>`; });
+        dbTypeFilters.innerHTML = htmlTypeDB;
+    }
 
-    let htmlTypes = ''; typesDisposDB.forEach(t => { htmlTypes += `<label style="font-size: 13px; cursor: pointer;"><input type="checkbox" class="cb-type-etq" value="${escHTML(t)}" checked onchange="afficherChoixEtiquettes()"> ${escHTML(t)}</label>`; });
-    document.getElementById('etqTypeCheckboxes').innerHTML = htmlTypes;
+    let etqTypeCheckboxes = document.getElementById('etqTypeCheckboxes');
+    if (etqTypeCheckboxes) {
+        let htmlTypes = ''; typesDisposDB.forEach(t => { htmlTypes += `<label style="font-size: 13px; cursor: pointer;"><input type="checkbox" class="cb-type-etq" value="${escHTML(t)}" checked onchange="afficherChoixEtiquettes()"> ${escHTML(t)}</label>`; });
+        etqTypeCheckboxes.innerHTML = htmlTypes;
+    }
 }
 
 function basculerTousTypes(source) { document.querySelectorAll('.cb-type-etq').forEach(cb => cb.checked = source.checked); afficherChoixEtiquettes(); }
@@ -896,7 +1014,9 @@ function getCompetencesDisponibles(sequence) {
 }
 
 function initialiserSelectsFormulaire() {
-    const selMat = document.getElementById('addMatiereSelect'); let matActuelle = selMat.value; let mats = getMatieresDisponibles(); 
+    const selMat = document.getElementById('addMatiereSelect'); 
+    if (!selMat) return;
+    let matActuelle = selMat.value; let mats = getMatieresDisponibles(); 
     if (matActuelle && matActuelle !== 'AUTRE' && !mats.includes(matActuelle)) mats.push(matActuelle); mats.sort((a,b) => nettoyerNomPourTri(a).localeCompare(nettoyerNomPourTri(b), 'fr'));
     let htmlMat = '<option value="">-- 2. Sélectionner Matière --</option>'; mats.forEach(m => htmlMat += `<option value="${escHTML(m)}">${escHTML(m)}</option>`); htmlMat += `<option value="AUTRE">➕ Autre matière...</option>`;
     selMat.innerHTML = htmlMat; if (mats.includes(matActuelle) || matActuelle === 'AUTRE') selMat.value = matActuelle;
@@ -904,8 +1024,10 @@ function initialiserSelectsFormulaire() {
 }
 
 function surChangementMatiereForm(valMatiere) {
-    const inputCustom = document.getElementById('addMatiereCustom'); const selSeq = document.getElementById('addSequenceSelect'); let seqActuelle = selSeq.value;
-    if(valMatiere === 'AUTRE') { inputCustom.style.display = 'block'; inputCustom.focus(); } else { inputCustom.style.display = 'none'; inputCustom.value = ''; }
+    const inputCustom = document.getElementById('addMatiereCustom'); const selSeq = document.getElementById('addSequenceSelect'); 
+    if (!selSeq) return;
+    let seqActuelle = selSeq.value;
+    if(valMatiere === 'AUTRE') { if(inputCustom) { inputCustom.style.display = 'block'; inputCustom.focus(); } } else { if(inputCustom) { inputCustom.style.display = 'none'; inputCustom.value = ''; } }
     let seqs = getSequencesDisponibles(valMatiere); if (seqActuelle && seqActuelle !== 'AUTRE' && !seqs.includes(seqActuelle)) seqs.push(seqActuelle); seqs.sort((a,b) => a.localeCompare(b));
     let htmlSeq = '<option value="">-- 3. Sélectionner Séquence --</option>'; seqs.forEach(s => htmlSeq += `<option value="${escHTML(s)}">${escHTML(s)}</option>`); htmlSeq += `<option value="AUTRE">➕ Autre séquence...</option>`;
     selSeq.innerHTML = htmlSeq; if (seqs.includes(seqActuelle) || seqActuelle === 'AUTRE') selSeq.value = seqActuelle;
@@ -913,8 +1035,10 @@ function surChangementMatiereForm(valMatiere) {
 }
 
 function surChangementSequenceForm(valSeq) {
-    const inputCustom = document.getElementById('addSequenceCustom'); const selComp = document.getElementById('addCompetenceSelect'); let compActuelle = selComp.value;
-    if(valSeq === 'AUTRE') { inputCustom.style.display = 'block'; inputCustom.focus(); } else { inputCustom.style.display = 'none'; inputCustom.value = ''; }
+    const inputCustom = document.getElementById('addSequenceCustom'); const selComp = document.getElementById('addCompetenceSelect'); 
+    if (!selComp) return;
+    let compActuelle = selComp.value;
+    if(valSeq === 'AUTRE') { if(inputCustom) { inputCustom.style.display = 'block'; inputCustom.focus(); } } else { if(inputCustom) { inputCustom.style.display = 'none'; inputCustom.value = ''; } }
     let comps = getCompetencesDisponibles(valSeq); if (compActuelle && compActuelle !== 'AUTRE' && !comps.includes(compActuelle)) comps.push(compActuelle); comps.sort((a,b) => a.localeCompare(b));
     let htmlComp = '<option value="">-- 5. Sélectionner Compétence --</option>'; comps.forEach(c => htmlComp += `<option value="${escHTML(c)}">${escHTML(c)}</option>`); htmlComp += `<option value="AUTRE">➕ Autre compétence...</option>`;
     selComp.innerHTML = htmlComp; if (comps.includes(compActuelle) || compActuelle === 'AUTRE') selComp.value = compActuelle;
@@ -923,17 +1047,19 @@ function surChangementSequenceForm(valSeq) {
 
 function surChangementCompetenceForm(valComp) {
     const inputCustom = document.getElementById('addCompetenceCustom');
+    if(!inputCustom) return;
     if(valComp === 'AUTRE') { inputCustom.style.display = 'block'; inputCustom.focus(); } else { inputCustom.style.display = 'none'; inputCustom.value = ''; }
 }
 
-function ouvrirModal(idModal) { document.getElementById(idModal).style.display = 'flex'; }
-function fermerModal(idModal) { document.getElementById(idModal).style.display = 'none'; initialiserSelectsFormulaire(); }
+function ouvrirModal(idModal) { let m = document.getElementById(idModal); if(m) m.style.display = 'flex'; }
+function fermerModal(idModal) { let m = document.getElementById(idModal); if(m) m.style.display = 'none'; initialiserSelectsFormulaire(); }
 
 function afficherListeMatieresModal() {
     let mats = [...new Set(baseDonnees.map(a => a.matiere))].filter(m => m).sort((a,b)=>nettoyerNomPourTri(a).localeCompare(nettoyerNomPourTri(b), 'fr'));
     let html = '<table style="width:100%; font-size:12px;"><thead><tr><th>Matière</th><th>Ateliers liés</th></tr></thead><tbody>';
     mats.forEach(m => { let nb = baseDonnees.filter(a => a.matiere === m).length; html += `<tr><td><input type="text" class="input-edit-matiere" data-ancienne="${escHTML(m)}" value="${escHTML(m)}" style="width:100%; padding:4px;"></td><td style="text-align:center;">${nb}</td></tr>`; });
-    html += '</tbody></table><button type="button" onclick="sauvegarderToutesMatieres()" class="btn-valid" style="width:100%; margin-top:10px;">💾 Valider</button>'; document.getElementById('listeMatieresModal').innerHTML = html;
+    html += '</tbody></table><button type="button" onclick="sauvegarderToutesMatieres()" class="btn-valid" style="width:100%; margin-top:10px;">💾 Valider</button>'; 
+    let box = document.getElementById('listeMatieresModal'); if(box) box.innerHTML = html;
 }
 function sauvegarderToutesMatieres() { document.querySelectorAll('.input-edit-matiere').forEach(input => { let ancienne = input.getAttribute('data-ancienne'); let nouvelle = input.value.trim(); if(nouvelle && ancienne !== nouvelle) { baseDonnees.forEach(a => { if(a.matiere === ancienne) a.matiere = nouvelle; }); } }); postEditGlobal(); fermerModal('modalMatieres'); showToast("Matières mises à jour !"); }
 
@@ -941,7 +1067,8 @@ function afficherListeSequencesModal() {
     let seqs = [...new Set(baseDonnees.map(a => a.sequence))].filter(s => s).sort();
     let html = '<table style="width:100%; font-size:12px;"><thead><tr><th>Séquence</th><th>Ateliers liés</th></tr></thead><tbody>';
     seqs.forEach(s => { let nb = baseDonnees.filter(a => a.sequence === s).length; html += `<tr><td><input type="text" class="input-edit-sequence" data-ancienne="${escHTML(s)}" value="${escHTML(s)}" style="width:100%; padding:4px;"></td><td style="text-align:center;">${nb}</td></tr>`; });
-    html += '</tbody></table><button type="button" onclick="sauvegarderToutesSequences()" class="btn-valid" style="width:100%; margin-top:10px;">💾 Valider</button>'; document.getElementById('listeSequencesModal').innerHTML = html;
+    html += '</tbody></table><button type="button" onclick="sauvegarderToutesSequences()" class="btn-valid" style="width:100%; margin-top:10px;">💾 Valider</button>'; 
+    let box = document.getElementById('listeSequencesModal'); if(box) box.innerHTML = html;
 }
 function sauvegarderToutesSequences() { document.querySelectorAll('.input-edit-sequence').forEach(input => { let ancienne = input.getAttribute('data-ancienne'); let nouvelle = input.value.trim(); if(nouvelle && ancienne !== nouvelle) { baseDonnees.forEach(a => { if(a.sequence === ancienne) a.sequence = nouvelle; }); } }); postEditGlobal(); fermerModal('modalSequences'); showToast("Séquences mises à jour !"); }
 
@@ -949,7 +1076,8 @@ function afficherListeCompetencesModal() {
     let comps = [...new Set(baseDonnees.map(a => a.competence))].filter(c => c).sort();
     let html = '<table style="width:100%; font-size:12px;"><thead><tr><th>Compétence</th><th>Ateliers liés</th></tr></thead><tbody>';
     comps.forEach(c => { let nb = baseDonnees.filter(a => a.competence === c).length; html += `<tr><td><input type="text" class="input-edit-competence" data-ancienne="${escHTML(c)}" value="${escHTML(c)}" style="width:100%; padding:4px;"></td><td style="text-align:center;">${nb}</td></tr>`; });
-    html += '</tbody></table><button type="button" onclick="sauvegarderToutesCompetences()" class="btn-valid" style="width:100%; margin-top:10px;">💾 Valider</button>'; document.getElementById('listeCompetencesModal').innerHTML = html;
+    html += '</tbody></table><button type="button" onclick="sauvegarderToutesCompetences()" class="btn-valid" style="width:100%; margin-top:10px;">💾 Valider</button>'; 
+    let box = document.getElementById('listeCompetencesModal'); if(box) box.innerHTML = html;
 }
 function sauvegarderToutesCompetences() { document.querySelectorAll('.input-edit-competence').forEach(input => { let ancienne = input.getAttribute('data-ancienne'); let nouvelle = input.value.trim(); if(nouvelle && ancienne !== nouvelle) { baseDonnees.forEach(a => { if(a.competence === ancienne) a.competence = nouvelle; }); } }); postEditGlobal(); fermerModal('modalCompetences'); showToast("Compétences mises à jour !"); }
 
@@ -960,7 +1088,8 @@ function afficherListeTypesModal() {
         let remplacerChecked = (typeof cfg === 'object' && cfg.remplacerNum) ? "checked" : ""; let couleurChecked = (typeof cfg === 'object' && cfg.appliquerCouleur !== false) ? "checked" : "";
         html += `<tr><td><strong>${escHTML(t)}</strong></td><td><input type="text" class="input-type-img" data-nom="${escHTML(t)}" value="${escHTML(imgVal)}" style="width: 100%; padding: 4px;"></td><td style="text-align:center;"><input type="checkbox" class="input-type-remp" data-nom="${escHTML(t)}" ${remplacerChecked}></td><td style="text-align:center;"><input type="checkbox" class="input-type-coul" data-nom="${escHTML(t)}" ${couleurChecked}></td><td style="text-align:center;"><button type="button" onclick="supprimerType('${escJS(t)}')">🗑️</button></td></tr>`;
     });
-    html += '</tbody></table><button type="button" onclick="sauvegarderTousLesTypes()" class="btn-valid" style="width:100%; margin-top:15px;">💾 Valider</button>'; document.getElementById('listeTypesModal').innerHTML = html;
+    html += '</tbody></table><button type="button" onclick="sauvegarderTousLesTypes()" class="btn-valid" style="width:100%; margin-top:15px;">💾 Valider</button>'; 
+    let box = document.getElementById('listeTypesModal'); if(box) box.innerHTML = html;
 }
 function sauvegarderTousLesTypes() {
     document.querySelectorAll('#listeTypesModal tbody tr').forEach(tr => {
@@ -981,7 +1110,8 @@ function sauvegarderTousLesTypes() {
 function supprimerType(nomType) { if (baseDonnees.filter(a => a.typeRes && a.typeRes.trim().toLowerCase() === nomType.trim().toLowerCase()).length > 0) { showToast(`Impossible, utilisé par des ateliers.`, "error"); return; } if (confirm(`Supprimer le type "${nomType}" ?`)) { delete imagesParType[nomType]; localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType)); majListeTypesSelect(); afficherListeTypesModal(); declencherAutoSaveDrive(); } }
 
 function majListeTypesSelect() {
-    const selectType = document.getElementById('addTypeSelect'); let typeActuel = selectType.value; let htmlOpts = '<option value="">-- 7. Sélectionner un Type --</option>';
+    const selectType = document.getElementById('addTypeSelect'); if(!selectType) return;
+    let typeActuel = selectType.value; let htmlOpts = '<option value="">-- 7. Sélectionner un Type --</option>';
     if (imagesParType && typeof imagesParType === 'object') { Object.keys(imagesParType).sort((a,b) => a.localeCompare(b)).forEach(t => { htmlOpts += `<option value="${escHTML(t)}">${escHTML(t)}</option>`; }); }
     htmlOpts += `<option value="AUTRE">➕ Autre type (Saisir manuellement)...</option>`; selectType.innerHTML = htmlOpts; if(typeActuel) selectType.value = typeActuel;
 }
@@ -996,50 +1126,79 @@ function editerActiviteBase(idActivite) {
     initialiserSelectsFormulaire();
 
     const selMat = document.getElementById('addMatiereSelect'); let matTrouvee = false;
-    for(let opt of selMat.options) { if(opt.value === a.matiere) { selMat.value = a.matiere; matTrouvee = true; break; } }
-    if(!matTrouvee && a.matiere) { selMat.value = 'AUTRE'; document.getElementById('addMatiereCustom').style.display = 'block'; document.getElementById('addMatiereCustom').value = a.matiere; } else { document.getElementById('addMatiereCustom').style.display = 'none'; }
-    surChangementMatiereForm(selMat.value);
+    if(selMat) {
+        for(let opt of selMat.options) { if(opt.value === a.matiere) { selMat.value = a.matiere; matTrouvee = true; break; } }
+        if(!matTrouvee && a.matiere) { selMat.value = 'AUTRE'; document.getElementById('addMatiereCustom').style.display = 'block'; document.getElementById('addMatiereCustom').value = a.matiere; } else { document.getElementById('addMatiereCustom').style.display = 'none'; }
+        surChangementMatiereForm(selMat.value);
+    }
 
     const selSeq = document.getElementById('addSequenceSelect'); let seqTrouvee = false;
-    for(let opt of selSeq.options) { if(opt.value === a.sequence) { selSeq.value = a.sequence; seqTrouvee = true; break; } }
-    if(!seqTrouvee && a.sequence) { selSeq.value = 'AUTRE'; document.getElementById('addSequenceCustom').style.display = 'block'; document.getElementById('addSequenceCustom').value = a.sequence; } else { document.getElementById('addSequenceCustom').style.display = 'none'; }
-    surChangementSequenceForm(selSeq.value);
+    if(selSeq) {
+        for(let opt of selSeq.options) { if(opt.value === a.sequence) { selSeq.value = a.sequence; seqTrouvee = true; break; } }
+        if(!seqTrouvee && a.sequence) { selSeq.value = 'AUTRE'; document.getElementById('addSequenceCustom').style.display = 'block'; document.getElementById('addSequenceCustom').value = a.sequence; } else { document.getElementById('addSequenceCustom').style.display = 'none'; }
+        surChangementSequenceForm(selSeq.value);
+    }
 
-    document.getElementById('addLecon').value = a.lecon || '';
+    let leconInput = document.getElementById('addLecon'); if(leconInput) leconInput.value = a.lecon || '';
     const selComp = document.getElementById('addCompetenceSelect'); let compTrouvee = false;
-    for(let opt of selComp.options) { if(opt.value === a.competence) { selComp.value = a.competence; compTrouvee = true; break; } }
-    if(!compTrouvee && a.competence) { selComp.value = 'AUTRE'; document.getElementById('addCompetenceCustom').style.display = 'block'; document.getElementById('addCompetenceCustom').value = a.competence; } else { document.getElementById('addCompetenceCustom').style.display = 'none'; }
+    if(selComp) {
+        for(let opt of selComp.options) { if(opt.value === a.competence) { selComp.value = a.competence; compTrouvee = true; break; } }
+        if(!compTrouvee && a.competence) { selComp.value = 'AUTRE'; document.getElementById('addCompetenceCustom').style.display = 'block'; document.getElementById('addCompetenceCustom').value = a.competence; } else { document.getElementById('addCompetenceCustom').style.display = 'none'; }
+    }
 
-    document.getElementById('addRessource').value = a.ressource || '';
+    let resInput = document.getElementById('addRessource'); if(resInput) resInput.value = a.ressource || '';
     const selectType = document.getElementById('addTypeSelect'); const inputCustom = document.getElementById('addTypeCustom'); let typeTrouve = false;
-    for(let opt of selectType.options) { if(opt.value === a.typeRes) { selectType.value = a.typeRes; inputCustom.style.display = 'none'; typeTrouve = true; break; } }
-    if(!typeTrouve && a.typeRes) { selectType.value = 'AUTRE'; inputCustom.style.display = 'block'; inputCustom.value = a.typeRes; } else if(!a.typeRes) { selectType.value = ''; inputCustom.style.display = 'none'; }
+    if(selectType) {
+        for(let opt of selectType.options) { if(opt.value === a.typeRes) { selectType.value = a.typeRes; inputCustom.style.display = 'none'; typeTrouve = true; break; } }
+        if(!typeTrouve && a.typeRes) { selectType.value = 'AUTRE'; inputCustom.style.display = 'block'; inputCustom.value = a.typeRes; } else if(!a.typeRes) { selectType.value = ''; inputCustom.style.display = 'none'; }
+    }
 
-    document.getElementById('addSymbole').value = a.symbole || '';
+    let symInput = document.getElementById('addSymbole'); if(symInput) symInput.value = a.symbole || '';
     document.querySelectorAll('.cb-pers-form').forEach(cb => { cb.checked = a.personnes && a.personnes.includes(cb.value); });
-    document.getElementById('addIsEval').checked = a.estEvaluation || false;
+    let evalInput = document.getElementById('addIsEval'); if(evalInput) evalInput.checked = a.estEvaluation || false;
 
     if (a.visuel && (a.visuel.startsWith('http') || a.visuel.startsWith('data:image'))) { document.getElementById('addImage').value = a.visuel; majSelectCouleursRapides('#ffffff'); document.getElementById('addColor').value = '#ffffff'; document.getElementById('addColor').style.display = 'none'; } 
     else if (a.visuel && a.visuel.startsWith('#')) { majSelectCouleursRapides(a.visuel); document.getElementById('addColor').value = a.visuel; document.getElementById('addImage').value = ''; } 
     else { majSelectCouleursRapides('#ffffff'); document.getElementById('addColor').value = '#ffffff'; document.getElementById('addColor').style.display = 'none'; document.getElementById('addImage').value = ''; }
 
-    const box = document.getElementById('boxFormulaireManuel'); box.classList.add('edit-mode');
-    document.getElementById('titreFormulaireManuel').innerHTML = "✏️ Modifier l'activité"; document.getElementById('titreFormulaireManuel').style.color = "#d35400";
-    const btnValider = document.getElementById('btnValiderForm'); btnValider.innerHTML = "💾 Enregistrer"; btnValider.style.backgroundColor = "#d35400";
-    document.getElementById('btnAnnulerForm').style.display = "inline-block"; window.scrollTo({ top: 0, behavior: 'smooth' });
+    const box = document.getElementById('boxFormulaireManuel'); 
+    if(box) box.classList.add('edit-mode');
+    let titreForm = document.getElementById('titreFormulaireManuel');
+    if(titreForm) { titreForm.innerHTML = "✏️ Modifier l'activité"; titreForm.style.color = "#d35400"; }
+    const btnValider = document.getElementById('btnValiderForm'); 
+    if(btnValider) { btnValider.innerHTML = "💾 Enregistrer"; btnValider.style.backgroundColor = "#d35400"; }
+    let btnAnnuler = document.getElementById('btnAnnulerForm');
+    if(btnAnnuler) btnAnnuler.style.display = "inline-block"; 
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     isFormLoading = false; 
 }
 
 function annulerEdition() {
     idEnCoursEdition = null; couleurManuelleModifiee = false; isFormLoading = false;
     document.querySelectorAll('.cb-niveau-form').forEach(cb => cb.checked = false); document.querySelectorAll('.cb-pers-form').forEach(cb => cb.checked = false);
-    document.getElementById('addLecon').value = ''; document.getElementById('addCompetenceCustom').value = ''; document.getElementById('addRessource').value = ''; document.getElementById('addSymbole').value = '';
-    document.getElementById('addTypeSelect').value = ''; document.getElementById('addTypeCustom').style.display = 'none'; document.getElementById('addTypeCustom').value = '';
-    document.getElementById('addMatiereSelect').value = ''; document.getElementById('addMatiereCustom').style.display = 'none'; document.getElementById('addSequenceSelect').value = ''; document.getElementById('addSequenceCustom').style.display = 'none';
-    document.getElementById('addImage').value = ''; majSelectCouleursRapides('#ffffff'); document.getElementById('addColor').value = '#ffffff'; document.getElementById('addColor').style.display = 'none'; document.getElementById('addIsEval').checked = false; document.getElementById('aideNumerotation').innerText = "";
-    const box = document.getElementById('boxFormulaireManuel'); box.classList.remove('edit-mode');
-    document.getElementById('titreFormulaireManuel').innerHTML = "➕ Ajouter une activité manuellement"; document.getElementById('titreFormulaireManuel').style.color = "#2980b9";
-    const btnValider = document.getElementById('btnValiderForm'); btnValider.innerHTML = "➕ Ajouter l'activité"; btnValider.style.backgroundColor = "#27ae60"; document.getElementById('btnAnnulerForm').style.display = "none"; initialiserSelectsFormulaire();
+    let l = document.getElementById('addLecon'); if(l) l.value = ''; 
+    let cc = document.getElementById('addCompetenceCustom'); if(cc) cc.value = ''; 
+    let ar = document.getElementById('addRessource'); if(ar) ar.value = ''; 
+    let as = document.getElementById('addSymbole'); if(as) as.value = '';
+    let ats = document.getElementById('addTypeSelect'); if(ats) ats.value = ''; 
+    let atc = document.getElementById('addTypeCustom'); if(atc) { atc.style.display = 'none'; atc.value = ''; }
+    let ams = document.getElementById('addMatiereSelect'); if(ams) ams.value = ''; 
+    let amc = document.getElementById('addMatiereCustom'); if(amc) { amc.style.display = 'none'; amc.value = ''; }
+    let ass = document.getElementById('addSequenceSelect'); if(ass) ass.value = ''; 
+    let asc = document.getElementById('addSequenceCustom'); if(asc) { asc.style.display = 'none'; asc.value = ''; }
+    let adi = document.getElementById('addImage'); if(adi) adi.value = ''; 
+    majSelectCouleursRapides('#ffffff'); 
+    let adc = document.getElementById('addColor'); if(adc) { adc.value = '#ffffff'; adc.style.display = 'none'; }
+    let aie = document.getElementById('addIsEval'); if(aie) aie.checked = false; 
+    
+    const box = document.getElementById('boxFormulaireManuel'); if(box) box.classList.remove('edit-mode');
+    let titreForm = document.getElementById('titreFormulaireManuel');
+    if(titreForm) { titreForm.innerHTML = "➕ Ajouter une activité manuellement"; titreForm.style.color = "#2980b9"; }
+    const btnValider = document.getElementById('btnValiderForm'); 
+    if(btnValider) { btnValider.innerHTML = "➕ Ajouter l'activité"; btnValider.style.backgroundColor = "#27ae60"; } 
+    let btnAnnuler = document.getElementById('btnAnnulerForm');
+    if(btnAnnuler) btnAnnuler.style.display = "none"; 
+    initialiserSelectsFormulaire();
 }
 
 function sauvegarderFormulaire() {
@@ -1047,16 +1206,43 @@ function sauvegarderFormulaire() {
     if (niveauxCoches.length === 0) { alert("Veuillez cocher au moins un niveau."); return; }
     const niveauStr = niveauxCoches.join(', '); 
     let persCoches = []; document.querySelectorAll('.cb-pers-form:checked').forEach(cb => persCoches.push(cb.value)); const persStr = persCoches.join(' ');
-    let matVal = document.getElementById('addMatiereSelect').value; let matiereFinal = matVal === 'AUTRE' ? document.getElementById('addMatiereCustom').value.trim() : matVal;
-    let seqVal = document.getElementById('addSequenceSelect').value; let sequenceFinal = seqVal === 'AUTRE' ? document.getElementById('addSequenceCustom').value.trim() : seqVal;
-    let compVal = document.getElementById('addCompetenceSelect').value; let competenceFinal = compVal === 'AUTRE' ? document.getElementById('addCompetenceCustom').value.trim() : compVal;
-    const ressource = document.getElementById('addRessource').value.trim(); const symbole = document.getElementById('addSymbole').value.trim();
-    let selectTypeVal = document.getElementById('addTypeSelect').value; let typeFinal = selectTypeVal === 'AUTRE' ? document.getElementById('addTypeCustom').value.trim() : selectTypeVal;
+    
+    let matSelect = document.getElementById('addMatiereSelect');
+    let matCustom = document.getElementById('addMatiereCustom');
+    let matVal = matSelect ? matSelect.value : ''; 
+    let matiereFinal = matVal === 'AUTRE' && matCustom ? matCustom.value.trim() : matVal;
+
+    let seqSelect = document.getElementById('addSequenceSelect');
+    let seqCustom = document.getElementById('addSequenceCustom');
+    let seqVal = seqSelect ? seqSelect.value : ''; 
+    let sequenceFinal = seqVal === 'AUTRE' && seqCustom ? seqCustom.value.trim() : seqVal;
+
+    let compSelect = document.getElementById('addCompetenceSelect');
+    let compCustom = document.getElementById('addCompetenceCustom');
+    let compVal = compSelect ? compSelect.value : ''; 
+    let competenceFinal = compVal === 'AUTRE' && compCustom ? compCustom.value.trim() : compVal;
+
+    let resElem = document.getElementById('addRessource');
+    let symElem = document.getElementById('addSymbole');
+    const ressource = resElem ? resElem.value.trim() : ''; 
+    const symbole = symElem ? symElem.value.trim() : '';
+
+    let selectTypeElem = document.getElementById('addTypeSelect');
+    let typeCustomElem = document.getElementById('addTypeCustom');
+    let selectTypeVal = selectTypeElem ? selectTypeElem.value : ''; 
+    let typeFinal = selectTypeVal === 'AUTRE' && typeCustomElem ? typeCustomElem.value.trim() : selectTypeVal;
 
     if(!matiereFinal || !sequenceFinal || !competenceFinal || !ressource) { alert("Veuillez remplir Matière, Séquence, Compétence et Ressource."); return; }
     if(typeFinal && !imagesParType.hasOwnProperty(typeFinal)) { imagesParType[typeFinal] = { img: "", remplacerNum: false, appliquerCouleur: true }; localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType)); majListeTypesSelect(); }
 
-    let visuel = ""; const imageUrl = document.getElementById('addImage').value.trim(); const colorPickerVal = document.getElementById('addColor').value; const selectCouleurVal = document.getElementById('selectCouleurRapide').value;
+    let visuel = ""; 
+    let imgElem = document.getElementById('addImage');
+    let colElem = document.getElementById('addColor');
+    let colRapideElem = document.getElementById('selectCouleurRapide');
+
+    const imageUrl = imgElem ? imgElem.value.trim() : ''; 
+    const colorPickerVal = colElem ? colElem.value : '#ffffff'; 
+    const selectCouleurVal = colRapideElem ? colRapideElem.value : '';
     let couleurAuto = calculerCouleurAutomatique(matiereFinal, niveauStr, typeFinal);
 
     if (imageUrl) { visuel = imageUrl; } 
@@ -1072,13 +1258,16 @@ function sauvegarderFormulaire() {
         return; 
     }
 
+    let leconElem = document.getElementById('addLecon');
+    let evalElem = document.getElementById('addIsEval');
+
     if(idEnCoursEdition) {
         const idx = baseDonnees.findIndex(a => a.id === idEnCoursEdition);
         if(idx > -1) {
-            baseDonnees[idx] = { id: idEnCoursEdition, niveau: niveauStr, matiere: matiereFinal, sequence: sequenceFinal, lecon: document.getElementById('addLecon').value.trim(), competence: competenceFinal, ressource: ressource, typeRes: typeFinal, symbole: symbole, atelier: "", personnes: persStr, correction: "", visuel: visuel, estEvaluation: document.getElementById('addIsEval').checked };
+            baseDonnees[idx] = { id: idEnCoursEdition, niveau: niveauStr, matiere: matiereFinal, sequence: sequenceFinal, lecon: leconElem ? leconElem.value.trim() : '', competence: competenceFinal, ressource: ressource, typeRes: typeFinal, symbole: symbole, atelier: "", personnes: persStr, correction: "", visuel: visuel, estEvaluation: evalElem ? evalElem.checked : false };
         }
     } else {
-        baseDonnees.push({ id: 'act_' + Date.now() + Math.random().toString(36).substr(2, 9), niveau: niveauStr, matiere: matiereFinal, sequence: sequenceFinal, lecon: document.getElementById('addLecon').value.trim(), competence: competenceFinal, ressource: ressource, typeRes: typeFinal, symbole: symbole, atelier: "", personnes: persStr, correction: "", visuel: visuel, estEvaluation: document.getElementById('addIsEval').checked });
+        baseDonnees.push({ id: 'act_' + Date.now() + Math.random().toString(36).substr(2, 9), niveau: niveauStr, matiere: matiereFinal, sequence: sequenceFinal, lecon: leconElem ? leconElem.value.trim() : '', competence: competenceFinal, ressource: ressource, typeRes: typeFinal, symbole: symbole, atelier: "", personnes: persStr, correction: "", visuel: visuel, estEvaluation: evalElem ? evalElem.checked : false });
     }
     
     trierBaseDonnees(); sauvegarderBase(); initNiveaux(); afficherBase(); initialiserSelectsFormulaire(); afficherChoixEtiquettes();
@@ -1123,7 +1312,9 @@ function viderBase() {
 // --- 8. IMPORTATION EXTERNE ---
 function importerDonnees(btnElement) {
     const btn = btnElement || document.getElementById('btnImport');
-    const texte = document.getElementById('importText').value;
+    const txtArea = document.getElementById('importText');
+    if(!txtArea) return;
+    const texte = txtArea.value;
     if(!texte) return; 
     btn.innerText = "⏳ Importation en cours..."; btn.style.backgroundColor = "#e67e22"; btn.style.cursor = "wait";
 
@@ -1163,7 +1354,7 @@ function importerDonnees(btnElement) {
             
             if(ajouts > 0) {
                 baseDonnees = baseDonnees.concat(nouvellesActivites); localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
-                majListeTypesSelect(); initialiserSelectsFormulaire(); trierBaseDonnees(); document.getElementById('importText').value = '';
+                majListeTypesSelect(); initialiserSelectsFormulaire(); trierBaseDonnees(); txtArea.value = '';
                 sauvegarderBase(); initNiveaux(); afficherBase(); afficherChoixEtiquettes(); 
                 let msg = `${ajouts} activités importées avec succès !`;
                 if(doublonsIgnores > 0) msg += `\n(${doublonsIgnores} doublons ignorés).`;
@@ -1258,7 +1449,7 @@ function importerDepuisSheets(btnElement) {
 
 // --- 9. AFFICHAGE DE LA BASE ET ETIQUETTES ---
 function afficherBase() {
-    const tbody = document.getElementById('tableBase'); let html = ''; 
+    const tbody = document.getElementById('tableBase'); if(!tbody) return; let html = ''; 
     if (!Array.isArray(baseDonnees)) return;
     let donneesAffichees = baseDonnees;
 
@@ -1313,7 +1504,7 @@ function afficherBase() {
 }
 
 function afficherChoixEtiquettes() {
-    const tbody = document.getElementById('tableChoixEtiquettes'); let html = '';
+    const tbody = document.getElementById('tableChoixEtiquettes'); if(!tbody) return; let html = '';
     let typesCochés = []; document.querySelectorAll('.cb-type-etq:checked').forEach(cb => typesCochés.push(cb.value));
     let donneesAffichees = (typesCochés.length > 0) ? baseDonnees.filter(a => a.typeRes && typesCochés.some(t => t.trim().toLowerCase() === a.typeRes.trim().toLowerCase())) : [];
     let mapUniques = new Map();
@@ -1346,7 +1537,8 @@ function afficherChoixEtiquettes() {
 function cocherToutesEtiquettes(source) { document.querySelectorAll('.cb-etiquette').forEach(cb => cb.checked = source.checked); genererApercuEtiquettes(); }
 
 function genererApercuEtiquettes() {
-    const container = document.getElementById('printEtiquettesContainer'); const checkboxes = document.querySelectorAll('.cb-etiquette:checked');
+    const container = document.getElementById('printEtiquettesContainer'); if(!container) return; 
+    const checkboxes = document.querySelectorAll('.cb-etiquette:checked');
     const w = document.getElementById('etqWidth').value; const h = document.getElementById('etqHeight').value;
     const fs = document.getElementById('etqFontSize').value; const gap = document.getElementById('etqGap').value;
     const mt = document.getElementById('etqMarginTop').value; const mb = document.getElementById('etqMarginBottom').value;
@@ -1408,7 +1600,7 @@ function exporterSauvegarde() {
 }
 
 function restaurerSauvegarde() {
-    const fileInput = document.getElementById('fileImport'); if(fileInput.files.length === 0) return;
+    const fileInput = document.getElementById('fileImport'); if(!fileInput || fileInput.files.length === 0) return;
     const reader = new FileReader();
     reader.onload = function(e) {
         try {
@@ -1433,7 +1625,9 @@ function restaurerSauvegarde() {
 function changerOnglet(idPage, element) {
     document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById(idPage).classList.add('active'); if(element) element.classList.add('active');
+    let targetPage = document.getElementById(idPage);
+    if(targetPage) targetPage.classList.add('active'); 
+    if(element) element.classList.add('active');
     
     if(idPage === 'pageEtiquettes') { initNiveaux(); afficherChoixEtiquettes(); }
     if(idPage === 'pageImpression') { if(idEleveCourant) { idEleveImpressionCourant = idEleveCourant; } majListeEleves(); rafraichirFicheImpression(); } 
@@ -1447,8 +1641,11 @@ function changerOnglet(idPage, element) {
 
 function rafraichirFicheImpression() {
     try {
-        idEleveImpressionCourant = document.getElementById('selectEleveImpression').value; 
+        let selImp = document.getElementById('selectEleveImpression');
+        if(!selImp) return;
+        idEleveImpressionCourant = selImp.value; 
         const container = document.getElementById('containerFichesImpression');
+        if(!container) return;
         if(!idEleveImpressionCourant) { container.innerHTML = '<div style="text-align: center; padding: 40px; color: #7f8c8d;" class="no-print"><h2>Veuillez sélectionner un élève ou l\'option "Tous les élèves" ci-dessus.</h2></div>'; return; }
         
         if(idEleveImpressionCourant === 'TOUS_ELEVES') {
@@ -1462,14 +1659,18 @@ function rafraichirFicheImpression() {
         }
     } catch(error) {
         console.error("Erreur lors de la génération de la fiche :", error);
-        document.getElementById('containerFichesImpression').innerHTML = '<div style="text-align: center; padding: 40px; color: #e74c3c;"><h2>Une erreur est survenue lors de l\'affichage.</h2></div>';
+        let containerErr = document.getElementById('containerFichesImpression');
+        if(containerErr) containerErr.innerHTML = '<div style="text-align: center; padding: 40px; color: #e74c3c;"><h2>Une erreur est survenue lors de l\'affichage.</h2></div>';
     }
 }
 
 function genererHtmlFicheEleve(eleve, estUnique) {
     if(!eleve.planHebdo || !Array.isArray(eleve.planHebdo)) return "";
 
-    let dateDebut = document.getElementById('pdtDateDebut').value.trim(); let dateFin = document.getElementById('pdtDateFin').value.trim();
+    let dateDebutElem = document.getElementById('pdtDateDebut');
+    let dateFinElem = document.getElementById('pdtDateFin');
+    let dateDebut = dateDebutElem ? dateDebutElem.value.trim() : ''; 
+    let dateFin = dateFinElem ? dateFinElem.value.trim() : '';
     let infoDates = (dateDebut && dateFin) ? ` (du ${escHTML(dateDebut)} au ${escHTML(dateFin)})` : (dateDebut ? ` (à partir du ${escHTML(dateDebut)})` : "");
     
     let planObjects = getListeTrie(eleve.planHebdo, eleve.priorites || []);
@@ -1534,22 +1735,40 @@ function genererHtmlFicheEleve(eleve, estUnique) {
     </div>`;
 }
 
-// --- DELEGATION D'EVENEMENTS TACTILES ---
+// --- INITIALISATION AU CHARGEMENT ---
 document.addEventListener("DOMContentLoaded", function() {
     document.addEventListener('click', function(e) {
         const navBtn = e.target.closest('.nav-btn');
-        if (navBtn) { e.preventDefault(); const pageId = navBtn.getAttribute('onclick').match(/'(.*?)'/)[1]; if (pageId) changerOnglet(pageId, navBtn); }
+        if (navBtn) { 
+            e.preventDefault(); 
+            let onclickAttr = navBtn.getAttribute('onclick');
+            if (onclickAttr) {
+                let match = onclickAttr.match(/'(.*?)'/);
+                if (match && match[1]) changerOnglet(match[1], navBtn);
+            }
+        }
     });
 
     document.querySelectorAll('.nav-btn').forEach(btn => {
         btn.addEventListener('touchstart', function(e) {
             e.preventDefault();
             let onclickAttr = this.getAttribute('onclick');
-            if (onclickAttr) eval(onclickAttr);
+            if (onclickAttr) {
+                let match = onclickAttr.match(/'(.*?)'/);
+                if (match && match[1]) changerOnglet(match[1], this);
+            }
         }, { passive: false });
     });
     
-    eliminerDoublonsHistoriques(); majListeTypesSelect(); initialiserSelectsFormulaire(); trierBaseDonnees(); 
-    majListeEleves(); afficherBase(); initNiveaux(); afficherChoixEtiquettes(); majSelectCouleursRapides();
-    tenterConnexionAuto(); calculTailleStockage();
+    eliminerDoublonsHistoriques(); 
+    majListeTypesSelect(); 
+    initialiserSelectsFormulaire(); 
+    trierBaseDonnees(); 
+    majListeEleves(); 
+    afficherBase(); 
+    initNiveaux(); 
+    afficherChoixEtiquettes(); 
+    majSelectCouleursRapides();
+    tenterConnexionAuto(); 
+    calculTailleStockage();
 });
