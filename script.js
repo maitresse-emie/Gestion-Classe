@@ -294,12 +294,9 @@ function telechargerDepuisDrive(fileId) {
     .then(res => { 
         if(res.status === 401) throw new Error("TOKEN_EXPIRED"); 
         if (!res.ok) throw new Error("API_ERROR"); 
-        return res.text(); 
+        return res.json(); 
     })
-    .then(text => {
-        if (!text || text.trim() === "") { sauvegarderVersDriveFichierUnique(); return; }
-        let data; try { data = JSON.parse(text); } catch(err) { sauvegarderVersDriveFichierUnique(); return; }
-        
+    .then(data => {
         if(data && data.base && data.eleves) {
             baseDonnees = Array.isArray(data.base) ? data.base : []; 
             eleves = data.eleves; 
@@ -318,11 +315,17 @@ function telechargerDepuisDrive(fileId) {
             
             postEditGlobal(); majListeEleves(); initialiserSelectsFormulaire(); afficherChoixEtiquettes(); majSelectCouleursRapides(); rafraichirDashboard();
             statut.innerText = "✅ Synchronisé depuis le Drive !"; statut.style.color = "#27ae60"; calculTailleStockage();
-        } else { sauvegarderVersDriveFichierUnique(); }
+        } else { 
+            statut.innerText = "⚠️ Fichier Drive vide ou corrompu."; 
+        }
     })
     .catch(e => { 
         if (e.message === "TOKEN_EXPIRED") formaterErreurExpiration(); 
-        else { statut.innerText = "❌ Erreur de téléchargement."; statut.style.color = "#e74c3c"; } 
+        else { 
+            console.error("Erreur Drive:", e);
+            statut.innerText = "❌ Erreur de téléchargement du fichier."; 
+            statut.style.color = "#e74c3c"; 
+        } 
     });
 }
 
@@ -621,7 +624,7 @@ function afficherHistorique() {
     
     [...eleve.historique].reverse().forEach(hist => {
         const a = baseDonnees.find(b => b.id === hist.idActivite);
-        if(a) tbodyHist.innerHTML += `<tr><td><strong>${hist.date}</strong></td><td>${escHTML(a.niveau)}</td><td>${escHTML(a.matiere)}<br><span style="font-size:11px">${escHTML(a.sequence)}</span></td><td>${escHTML(a.competence)}</td><td>${escHTML(a.ressource)}</td><td style="text-align: center;"><button type="button" onclick="desarchiverActivite('${a.id}')" style="background:none; border:none; cursor:pointer;">↩️ Restaurer</button></td></tr>`;
+        if(a) tbodyHist.innerHTML += `<tr><td><strong>${hist.date}</strong></td><td>${escHTML(a.niveau)}</td><td>${escHTML(a.matiere)}<br><span style="font-size:11px">${escHTML(a.sequence)}</span></td><td>${escHTML(a.competence)}</td><td>${escHTML(a.ressource)}</td><td style="text-align: center;"><button type="button" onclick="desarchiverActivite('${a.id}')" style="background:none; border:none; cursor:pointer;">↩️️ Restaurer</button></td></tr>`;
     });
     if(eleve.historique.length === 0) tbodyHist.innerHTML = '<tr><td colspan="6" style="text-align:center;">Aucun historique.</td></tr>';
 
@@ -1182,7 +1185,7 @@ function editerActiviteBase(idActivite) {
     const box = document.getElementById('boxFormulaireManuel'); 
     if(box) box.classList.add('edit-mode');
     let titreForm = document.getElementById('titreFormulaireManuel');
-    if(titreForm) { titreForm.innerHTML = "✏️ Modifier l'activité"; titreForm.style.color = "#d35400"; }
+    if(titreForm) { titreForm.innerHTML = "✏️️ Modifier l'activité"; titreForm.style.color = "#d35400"; }
     const btnValider = document.getElementById('btnValiderForm'); 
     if(btnValider) { btnValider.innerHTML = "💾 Enregistrer"; btnValider.style.backgroundColor = "#d35400"; }
     let btnAnnuler = document.getElementById('btnAnnulerForm');
