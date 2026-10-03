@@ -157,7 +157,7 @@ function calculTailleStockage() {
 // ==========================================
 // 3. SYNCHRONISATION GOOGLE DRIVE
 // ==========================================
-const CLIENT_ID = '133293729951-pv43qv8a9758rbm4atpiiq3rv0g79vnd.apps.googleusercontent.com';
+const CLIENT_ID = '231878278735-mld3k1s4cub6toulursis1eat0hnfbmv.apps.googleusercontent.com';
 const API_KEY = ''; 
 const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
 let driveAccessToken = null; let driveFileId = null; let intervalVerificationSession = null; let timerAutoSave;
