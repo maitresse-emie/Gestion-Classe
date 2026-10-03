@@ -1,45 +1,54 @@
+/* ==========================================
+   STYLE GÉNÉRAL DE L'APPLICATION
+   ========================================== */
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    margin: 0;
-    padding: 0;
     background-color: #f4f6f7;
-    color: #333;
+    color: #2c3e50;
+    margin: 0;
+    padding: 0 0 40px 0;
 }
 
+/* Navbar supérieure */
 .navbar {
-    display: flex;
     background-color: #2c3e50;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
     padding: 10px;
-    gap: 10px;
-    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
     box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    flex-wrap: wrap;
 }
 
 .nav-btn {
     background-color: #34495e;
     color: white;
     border: none;
-    padding: 10px 15px;
+    padding: 8px 14px;
+    border-radius: 4px;
     cursor: pointer;
-    border-radius: 5px;
-    font-size: 14px;
     font-weight: bold;
+    font-size: 13px;
     transition: background 0.2s;
 }
 
 .nav-btn:hover {
-    background-color: #4e6d8d;
+    background-color: #515a5a;
 }
 
 .nav-btn.active {
     background-color: #2980b9;
 }
 
+/* Pages / Contenu */
 .page {
     display: none;
     padding: 20px;
-    max-width: 1400px;
-    margin: auto;
+    max-width: 1200px;
+    margin: 0 auto;
 }
 
 .page.active {
@@ -50,53 +59,76 @@ body {
     background: white;
     padding: 20px;
     border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     margin-bottom: 20px;
 }
 
+/* Barre de sélection d'élève */
+.student-bar {
+    background: #eaeded;
+    padding: 12px 20px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.student-bar select, .student-bar input {
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #bdc3c7;
+    font-size: 14px;
+}
+
+.student-bar button {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+/* Tableaux généraux */
 table {
     width: 100%;
     border-collapse: collapse;
     margin-top: 10px;
+    margin-bottom: 15px;
+    background: white;
 }
 
 th, td {
-    border: 1px solid #d5dbdb;
-    padding: 8px 12px;
+    border: 1px solid #ecf0f1;
+    padding: 8px 10px;
     text-align: left;
     font-size: 13px;
 }
 
 th {
-    background-color: #eaeded;
+    background-color: #f8f9f9;
     color: #2c3e50;
+    font-weight: bold;
 }
 
-.student-bar {
-    display: flex;
-    align-items: center;
-    background: white;
-    padding: 15px;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    margin-bottom: 20px;
-    gap: 15px;
-    flex-wrap: wrap;
+tr.row-eval {
+    background-color: #fdedec;
 }
 
-.student-bar select {
-    padding: 8px;
-    font-size: 14px;
-    border-radius: 5px;
-    border: 1px solid #ccc;
+tr.row-valide {
+    background-color: #e8f8f5;
 }
 
+/* Formulaires & Cascades */
 .cascade-box {
     display: flex;
     gap: 15px;
-    background: #eaf2f8;
+    background: #f8f9f9;
     padding: 15px;
     border-radius: 8px;
+    border: 1px solid #d5dbdb;
     margin-bottom: 15px;
     flex-wrap: wrap;
 }
@@ -106,53 +138,20 @@ th {
     min-width: 200px;
     display: flex;
     flex-direction: column;
+    gap: 5px;
 }
 
 .cascade-item label {
-    font-size: 12px;
     font-weight: bold;
-    color: #2980b9;
-    margin-bottom: 5px;
+    font-size: 12px;
+    color: #7f8c8d;
+    text-transform: uppercase;
 }
 
 .cascade-item select {
     padding: 8px;
-    border-radius: 5px;
-    border: 1px solid #bdc3c7;
-}
-
-.list-ressources {
-    background: white;
-    border: 1px solid #a9cce3;
-    padding: 15px;
-    border-radius: 8px;
-    margin-top: 15px;
-}
-
-button {
-    cursor: pointer;
-    padding: 6px 12px;
     border-radius: 4px;
-    border: none;
-    font-weight: bold;
-}
-
-.btn-add { background-color: #27ae60; color: white; }
-.btn-valid { background-color: #2980b9; color: white; }
-.btn-hide { background-color: #7f8c8d; color: white; }
-.btn-remove { background-color: #c0392b; color: white; }
-
-.manual-add-box {
-    background: #fdfefe;
-    border: 2px dashed #a6acaf;
-    padding: 20px;
-    border-radius: 8px;
-    margin-bottom: 25px;
-}
-
-.manual-add-box.edit-mode {
-    border: 2px solid #d35400;
-    background: #fef9e7;
+    border: 1px solid #bdc3c7;
 }
 
 .form-row {
@@ -164,76 +163,104 @@ button {
 
 .form-row input, .form-row select {
     padding: 8px;
+    border-radius: 4px;
     border: 1px solid #bdc3c7;
-    border-radius: 4px;
-    font-size: 13px;
 }
 
-.badge-eval {
-    background-color: #e74c3c;
-    color: white;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: bold;
-}
-
-.row-eval {
-    background-color: #fdedec !important;
-}
-
-.row-valide {
-    background-color: #e8f8f5 !important;
-}
-
-.col-num {
-    width: 40px;
-    text-align: center;
-    font-weight: bold;
-}
-
-.col-center {
-    text-align: center;
-}
-
-.history-box {
-    margin-top: 30px;
-    background: #f8f9f9;
+.manual-add-box {
+    background: #f2f4f4;
     padding: 15px;
     border-radius: 8px;
-    border: 1px solid #d5dbdb;
+    border: 1px solid #bdc3c7;
+    margin-bottom: 20px;
 }
 
+.manual-add-box.edit-mode {
+    background: #fef5e7;
+    border-color: #f39c12;
+}
+
+/* Boutons d'action */
+.btn-action {
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.btn-action:hover {
+    background-color: #219653;
+}
+
+.btn-valid {
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.btn-remove {
+    background-color: #e74c3c;
+    color: white;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.btn-hide {
+    background-color: #7f8c8d;
+    color: white;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.btn-add {
+    background-color: #2980b9;
+    color: white;
+    border: none;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+/* Filtres de la base de données */
 .filter-btn {
     background: #ecf0f1;
-    color: #2c3e50;
     border: 1px solid #bdc3c7;
     padding: 6px 12px;
-    border-radius: 20px;
+    border-radius: 15px;
     cursor: pointer;
     font-size: 12px;
     font-weight: bold;
+    color: #34495e;
 }
 
 .filter-btn.active {
     background: #2980b9;
     color: white;
-    border-color: #2980b9;
+    border-color: #1b4f72;
 }
 
-.filter-btn-matiere.active {
-    background: #8e44ad;
-    color: white;
-    border-color: #8e44ad;
-}
-
+/* Jauges et progress bars */
 .jauge-container {
-    width: 100%;
     background-color: #ecf0f1;
-    border-radius: 10px;
-    height: 12px;
+    border-radius: 4px;
     overflow: hidden;
-    margin-top: 5px;
+    height: 12px;
+    width: 100%;
+    margin-top: 4px;
 }
 
 .jauge-fill {
@@ -247,27 +274,7 @@ button {
     margin-top: 2px;
 }
 
-.dashboard-eval-btn {
-    padding: 4px 8px;
-    font-size: 11px;
-    border-radius: 4px;
-    border: none;
-    cursor: pointer;
-    font-weight: bold;
-    margin-right: 3px;
-}
-
-.matrice-table th {
-    background-color: #2c3e50;
-    color: white;
-    text-align: center;
-}
-
-.matrice-table td {
-    text-align: center;
-    vertical-align: middle;
-}
-
+/* Modals */
 .modal-overlay {
     position: fixed;
     top: 0; left: 0; width: 100%; height: 100%;
@@ -275,18 +282,21 @@ button {
     display: none;
     justify-content: center;
     align-items: center;
-    z-index: 1000;
+    z-index: 2000;
 }
 
 .modal-content {
     background: white;
-    padding: 25px;
+    padding: 20px;
     border-radius: 8px;
     width: 90%;
     max-width: 500px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    max-height: 80vh;
+    overflow-y: auto;
 }
 
+/* Toasts de notification */
 #toast-container {
     position: fixed;
     bottom: 20px;
@@ -298,11 +308,11 @@ button {
 }
 
 .toast {
-    background: #2ecc71;
+    background: #27ae60;
     color: white;
     padding: 12px 20px;
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-radius: 5px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
     font-weight: bold;
     font-size: 14px;
     animation: fadeInOut 3s forwards;
@@ -319,102 +329,129 @@ button {
     100% { opacity: 0; transform: translateY(-20px); }
 }
 
-.btn-tablet-toggle {
+/* Bouton retour en haut */
+#btnScrollTop {
+    display: none;
     position: fixed;
     bottom: 20px;
     left: 20px;
     z-index: 999;
+    background: #2c3e50;
+    color: white;
+    border: none;
+    padding: 10px 14px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 16px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+
+/* Mode classe (Tablette / Grand écran) */
+body.mode-classe {
+    font-size: 16px;
+}
+
+body.mode-classe td, body.mode-classe th {
+    padding: 12px 14px;
+    font-size: 15px;
+}
+
+.btn-tablet-toggle {
+    position: fixed;
+    top: 15px;
+    right: 15px;
+    z-index: 1001;
     background: #8e44ad;
     color: white;
     border: none;
-    padding: 10px 15px;
-    border-radius: 30px;
+    padding: 8px 12px;
+    border-radius: 20px;
+    cursor: pointer;
     font-weight: bold;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }
 
-#btnScrollTop {
-    display: none;
-    position: fixed;
-    bottom: 70px;
-    left: 20px;
-    z-index: 999;
-    background: #34495e;
-    color: white;
-    border: none;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
+/* Matrice des compétences */
+.matrice-table th {
+    text-align: center;
+    vertical-align: bottom;
+    padding: 5px;
+    font-size: 11px;
+}
+
+.matrice-table td {
+    text-align: center;
+    font-size: 12px;
+}
+
+/* Planning journalier des fiches d'élèves */
+.planning-table th, .planning-table td {
+    height: 35px;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.planning-cell-box {
+    display: inline-block;
+    width: 25px;
+    height: 25px;
+    border: 1px dashed #bdc3c7;
+    border-radius: 3px;
+}
+
+.sequence-separator-row td {
+    background-color: #eaeded !important;
     font-weight: bold;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    color: #2c3e50;
+    font-size: 12px;
 }
 
-body.mode-classe .navbar {
-    display: none !important;
+/* Style des étiquettes (Onglet 4) */
+.etiquette-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    text-align: center;
+    overflow: hidden;
+    border-radius: 4px;
 }
 
-body.mode-classe .page {
-    display: none !important;
-}
-
-body.mode-classe .page.active {
-    display: block !important;
-}
-
-body.mode-classe {
-    zoom: 1.1;
-}
-
+/* ==========================================
+   RÈGLES D'IMPRESSION (CORRECTION ONGLET 2)
+   ========================================== */
 @media print {
-    .no-print, .navbar, .student-bar, .manual-add-box, button, input, select {
+    /* Masquer tous les éléments superflus de l'application lors de l'impression */
+    body * {
+        visibility: hidden;
+    }
+    
+    /* Rendre visible uniquement le conteneur des fiches d'impression et son contenu */
+    #containerFichesImpression, #containerFichesImpression * {
+        visibility: visible;
+    }
+    
+    /* Positionner proprement la zone d'impression en haut de la page */
+    #containerFichesImpression {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+    }
+
+    /* Masquer explicitement la barre de navigation, les boutons et les menus de sélection */
+    .navbar, .no-print, .student-bar, .modal-overlay, .btn-tablet-toggle, #btnScrollTop {
         display: none !important;
     }
-    body {
-        background: white;
-        zoom: 0.95;
-    }
-    .page {
-        display: block !important;
-        padding: 0 !important;
-        margin: 0 !important;
-    }
-    .panel {
-        box-shadow: none !important;
-        border: none !important;
-        padding: 0 !important;
-    }
+
+    /* Sauts de page propres pour chaque fiche élève */
     .plan-eleve-page {
         page-break-after: always;
         break-after: page;
-        min-height: 95vh;
-        display: flex;
-        flex-direction: column;
-        justify-content: space-between;
-    }
-}
-
-.etiquette-box {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    box-sizing: border-box;
-    overflow: hidden;
-    font-weight: bold;
-    page-break-inside: avoid;
-    break-inside: avoid;
-}
-
-@media print {
-    body.print-mode-etiquettes .no-print, body.print-mode-etiquettes .navbar, body.print-mode-etiquettes .panel {
-        display: none !important;
-    }
-    body.print-mode-etiquettes #printEtiquettesContainer {
-        display: flex !important;
-        position: absolute;
-        top: 0; left: 0; width: 100%;
-        background: white;
-        border: none !important;
-        margin: 0; padding: 0;
     }
 }
