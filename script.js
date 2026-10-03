@@ -285,16 +285,30 @@ function rechercherFichierSauvegarde(forcerTelechargement = false) {
 }
 
 function telechargerDepuisDrive(fileId) {
-    fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers: { 'Authorization': 'Bearer ' + driveAccessToken } })
-    .then(res => { if(res.status === 401) throw new Error("TOKEN_EXPIRED"); if (!res.ok) throw new Error("API_ERROR"); return res.text(); })
+    const statut = document.getElementById('statutDrive');
+    statut.innerText = "⏳ Téléchargement depuis le Drive...";
+    
+    fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { 
+        headers: { 'Authorization': 'Bearer ' + driveAccessToken } 
+    })
+    .then(res => { 
+        if(res.status === 401) throw new Error("TOKEN_EXPIRED"); 
+        if (!res.ok) throw new Error("API_ERROR"); 
+        return res.text(); 
+    })
     .then(text => {
         if (!text || text.trim() === "") { sauvegarderVersDriveFichierUnique(); return; }
         let data; try { data = JSON.parse(text); } catch(err) { sauvegarderVersDriveFichierUnique(); return; }
+        
         if(data && data.base && data.eleves) {
-            baseDonnees = Array.isArray(data.base) ? data.base : []; eleves = data.eleves; if(data.images) imagesParType = data.images;
+            baseDonnees = Array.isArray(data.base) ? data.base : []; 
+            eleves = data.eleves; 
+            if(data.images) imagesParType = data.images;
             if(data.archives) { dashboardArchives = data.archives; localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); }
             
-            localStorage.setItem(KEY_ATELIERS, JSON.stringify(baseDonnees)); localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves)); localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
+            localStorage.setItem(KEY_ATELIERS, JSON.stringify(baseDonnees)); 
+            localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves)); 
+            localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
             
             Object.values(eleves).forEach(e => { 
                 if(!e.maxAteliers) e.maxAteliers = 15; if(!e.suivi) e.suivi = {}; if(!e.valides) e.valides = {};
@@ -303,9 +317,13 @@ function telechargerDepuisDrive(fileId) {
             localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves));
             
             postEditGlobal(); majListeEleves(); initialiserSelectsFormulaire(); afficherChoixEtiquettes(); majSelectCouleursRapides(); rafraichirDashboard();
-            document.getElementById('statutDrive').innerText = "✅ Synchronisé depuis le Drive !"; document.getElementById('statutDrive').style.color = "#27ae60"; calculTailleStockage();
+            statut.innerText = "✅ Synchronisé depuis le Drive !"; statut.style.color = "#27ae60"; calculTailleStockage();
         } else { sauvegarderVersDriveFichierUnique(); }
-    }).catch(e => { if (e.message === "TOKEN_EXPIRED") formaterErreurExpiration(); else { document.getElementById('statutDrive').innerText = "❌ Erreur de téléchargement."; document.getElementById('statutDrive').style.color = "#e74c3c"; } });
+    })
+    .catch(e => { 
+        if (e.message === "TOKEN_EXPIRED") formaterErreurExpiration(); 
+        else { statut.innerText = "❌ Erreur de téléchargement."; statut.style.color = "#e74c3c"; } 
+    });
 }
 
 function sauvegarderVersDriveFichierUnique() {
