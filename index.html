@@ -23,12 +23,13 @@
     <div class="navbar no-print">
         <button class="nav-btn active" onclick="changerOnglet('pageSuivi', this)">🧑‍🎓 1. Plan & Suivi</button>
         <button class="nav-btn" onclick="changerOnglet('pageImpression', this)">🖨️ 2. Fiche Élève</button>
-        <button class="nav-btn" onclick="changerOnglet('pageBase', this)">📁 3. Base de données</button>
-        <button class="nav-btn" onclick="changerOnglet('pageEtiquettes', this)" style="background:#8e44ad;">🏷️️ 4. Étiquettes</button>
-        <button class="nav-btn" onclick="changerOnglet('pageDashboard', this)" style="background:#f39c12;">📊 5. Tableau de bord</button>
-        <button class="nav-btn" onclick="changerOnglet('pageMatrice', this)" style="background:#16a085;">🧮 6. Matrice Compétences</button>
-        <button class="nav-btn" onclick="changerOnglet('pageBilan', this)" style="background:#9b59b6;">📝 7. Bilans</button>
-        <button class="nav-btn" onclick="changerOnglet('pageSave', this)" style="background:#e67e22;">💾 8. Sauvegarde</button>
+        <button class="nav-btn" onclick="changerOnglet('pageProg', this)" style="background:#d35400;">📅 3. Programmation</button>
+        <button class="nav-btn" onclick="changerOnglet('pageBase', this)">📁 4. Base de données</button>
+        <button class="nav-btn" onclick="changerOnglet('pageEtiquettes', this)" style="background:#8e44ad;">🏷️ 5. Étiquettes</button>
+        <button class="nav-btn" onclick="changerOnglet('pageDashboard', this)" style="background:#f39c12;">📊 6. Tableau de bord</button>
+        <button class="nav-btn" onclick="changerOnglet('pageMatrice', this)" style="background:#16a085;">🧮 7. Matrice Compétences</button>
+        <button class="nav-btn" onclick="changerOnglet('pageBilan', this)" style="background:#9b59b6;">📝 8. Bilans</button>
+        <button class="nav-btn" onclick="changerOnglet('pageSave', this)" style="background:#e67e22;">💾 9. Sauvegarde</button>
     </div>
 
     <!-- MODALS GESTION & ASSIGNATION -->
@@ -87,8 +88,9 @@
             <h3>Ajouter au plan de la semaine</h3>
             <div class="cascade-box">
                 <div class="cascade-item"><label>1. Niveau</label><select id="selectNiveau" onchange="majCascadeMatiere()"><option value="">-- Choix --</option></select></div>
-                <div class="cascade-item"><label>2. Matière</label><select id="selectMatiere" onchange="majCascadeSequence()" disabled><option value="">-- --</option></select></div>
-                <div class="cascade-item" style="flex-grow: 2;"><label>3. Séquence</label><select id="selectSequence" onchange="afficherRessourcesDisponibles()" disabled><option value="">-- --</option></select></div>
+                <div class="cascade-item"><label>2. Période</label><select id="selectPeriode" onchange="majCascadeMatiere()"><option value="">-- Toutes les périodes --</option><option value="P1">Période 1</option><option value="P2">Période 2</option><option value="P3">Période 3</option><option value="P4">Période 4</option><option value="P5">Période 5</option></select></div>
+                <div class="cascade-item"><label>3. Matière</label><select id="selectMatiere" onchange="majCascadeSequence()" disabled><option value="">-- --</option></select></div>
+                <div class="cascade-item" style="flex-grow: 2;"><label>4. Séquence</label><select id="selectSequence" onchange="afficherRessourcesDisponibles()" disabled><option value="">-- --</option></select></div>
             </div>
             <div id="zoneRessources" class="list-ressources" style="display: none;">
                 <h4 style="margin-top: 0; color: #2980b9;">Activité(s) disponible(s) :</h4>
@@ -150,7 +152,38 @@
         <div id="containerFichesImpression"><div style="text-align: center; padding: 40px; color: #7f8c8d;" class="no-print"><h2>Veuillez sélectionner un élève ou l'option "Tous les élèves" ci-dessus.</h2></div></div>
     </div>
 
-    <!-- 3. BASE DE DONNÉES -->
+    <!-- 3. PROGRAMMATION ANNUELLE -->
+    <div id="pageProg" class="page">
+        <div class="panel">
+            <h2 style="color: #d35400; margin-top:0;">📅 Programmation Annuelle</h2>
+            <p style="font-size: 14px; color: #7f8c8d; margin-bottom: 20px;">
+                Associez vos compétences aux périodes de l'année. Les ateliers s'afficheront automatiquement au bon moment dans le plan de travail. Les compétences non cochées resteront disponibles via l'option "Toutes les périodes".
+            </p>
+            <div class="form-row" style="background: #fdfefe; padding: 15px; border-radius: 8px; border: 1px solid #d5dbdb; margin-bottom: 15px;">
+                <label style="font-weight: bold; margin-top: 8px;">Filtres d'affichage :</label>
+                <select id="progNiveau" onchange="afficherProgrammation()" style="flex: 1;"><option value="">-- Tous les niveaux --</option></select>
+                <select id="progMatiere" onchange="afficherProgrammation()" style="flex: 1;"><option value="">-- Toutes les matières --</option></select>
+            </div>
+            <div style="overflow-x: auto; max-height: 60vh;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead style="position: sticky; top: 0; background: #34495e; color: white;">
+                        <tr>
+                            <th style="padding: 10px;">Séquence</th>
+                            <th style="padding: 10px;">Compétence</th>
+                            <th style="width: 50px; text-align: center;">P1</th>
+                            <th style="width: 50px; text-align: center;">P2</th>
+                            <th style="width: 50px; text-align: center;">P3</th>
+                            <th style="width: 50px; text-align: center;">P4</th>
+                            <th style="width: 50px; text-align: center;">P5</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableProg"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. BASE DE DONNÉES -->
     <div id="pageBase" class="page">
         <div class="panel">
             <h2>📁 Inventaire (Base de données)</h2>
@@ -202,7 +235,7 @@
                     <div style="display: flex; gap: 20px; flex-wrap: wrap; font-size: 16px;">
                         <label><input type="checkbox" class="cb-pers-form" value="👤"> 👤 Seul</label>
                         <label><input type="checkbox" class="cb-pers-form" value="👥"> 👥 Binôme/Petit groupe</label>
-                        <label><input type="checkbox" class="cb-pers-form" value="👨‍👩‍👧"> 👨‍👩‍👧 Collectif</label>
+                        <label><input type="checkbox" class="cb-pers-form" value="👨‍👩‍👧"> 👨‍‍👩‍👧 Collectif</label>
                     </div>
                 </div>
                 <div class="form-row" style="background: white; padding: 10px; border-radius: 5px; align-items: center;">
@@ -243,7 +276,7 @@
         </div>
     </div>
 
-    <!-- 4. ETIQUETTES -->
+    <!-- 5. ETIQUETTES -->
     <div id="pageEtiquettes" class="page">
         <div class="panel no-print">
             <h2 style="color: #8e44ad;">🏷️ Studio d'impression d'Étiquettes</h2>
@@ -284,13 +317,13 @@
         <div id="printEtiquettesContainer" style="display: flex; flex-wrap: wrap; align-content: flex-start; background: white; border: 1px dashed #bdc3c7; min-height: 200px;"></div>
     </div>
 
-    <!-- 5. TABLEAU DE BORD VISUEL & EVALUATION RAPIDE -->
+    <!-- 6. TABLEAU DE BORD VISUEL & EVALUATION RAPIDE -->
     <div id="pageDashboard" class="page">
         <div class="panel">
             <h2 style="color: #f39c12; margin-top:0;">📊 Tableau de bord & Évaluation rapide</h2>
             
             <div id="memoDashboardContainer" style="margin-bottom: 20px;">
-                <h3 style="color:#2c3e50; border-bottom: 2px solid #bdc3c7; padding-bottom:5px;">📝 Choses à faire / Remédiation (Automatique)</h3>
+                <h3 style="color:#2c3e50; border-bottom: 2px solid #bdc3c7; padding-bottom:5px;">🧑‍🏫 Groupes de besoins & Ateliers dirigés (Automatique)</h3>
                 <div id="memoListContent"></div>
 
                 <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;" class="no-print">
@@ -320,7 +353,7 @@
         </div>
     </div>
 
-    <!-- 6. MATRICE COMPÉTENCES -->
+    <!-- 7. MATRICE COMPÉTENCES -->
     <div id="pageMatrice" class="page">
         <div class="panel">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -334,7 +367,7 @@
         </div>
     </div>
 
-    <!-- 7. BILANS ELEVES -->
+    <!-- 8. BILANS ELEVES -->
     <div id="pageBilan" class="page">
         <div class="panel no-print" style="margin-bottom: 20px;">
             <h2 style="margin:0 0 15px 0; color: #9b59b6;">📝 Éditer un Bilan d'Élève (Évaluations & Positions A / PA / NA)</h2>
@@ -348,7 +381,7 @@
         </div>
     </div>
 
-    <!-- 8. SAUVEGARDE & DRIVE -->
+    <!-- 9. SAUVEGARDE & DRIVE -->
     <div id="pageSave" class="page">
         <div class="panel">
             <h2>💾 Sécurité & Sauvegarde</h2>
