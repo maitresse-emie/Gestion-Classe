@@ -16,12 +16,18 @@ let afficherArchivesMode = false;
 let imagesParType = JSON.parse(localStorage.getItem(KEY_IMAGES));
 if (!imagesParType) {
     imagesParType = {
-        "atelier": { img: "", remplacerNum: false, appliquerCouleur: true },
-        "jeu": { img: "", remplacerNum: false, appliquerCouleur: true },
-        "vidéo": { img: "", remplacerNum: false, appliquerCouleur: false },
-        "Anton": { img: "", remplacerNum: true, appliquerCouleur: false },
-        "Scratch": { img: "", remplacerNum: true, appliquerCouleur: false }
+        "Atelier": { img: "", remplacerNum: false, appliquerCouleur: true, isTablette: false },
+        "Jeu": { img: "", remplacerNum: false, appliquerCouleur: true, isTablette: false },
+        "Vidéo": { img: "", remplacerNum: false, appliquerCouleur: false, isTablette: false },
+        "Anton": { img: "", remplacerNum: true, appliquerCouleur: false, isTablette: true },
+        "Scratch": { img: "", remplacerNum: true, appliquerCouleur: false, isTablette: true }
     };
+} else {
+    Object.keys(imagesParType).forEach(k => {
+        if (typeof imagesParType[k] === 'object' && imagesParType[k].isTablette === undefined) {
+            imagesParType[k].isTablette = (k.toLowerCase() === 'anton');
+        }
+    });
 }
 
 let baseDonnees = JSON.parse(localStorage.getItem(KEY_ATELIERS));
@@ -93,6 +99,8 @@ function majSelectCouleursRapides(valeurForcee) {
 
 Object.values(eleves).forEach(e => { 
     if(!e.maxAteliers) e.maxAteliers = 15; 
+    if(e.maxTablettes === undefined) e.maxTablettes = 2;
+    if(!e.niveau) e.niveau = "CP";
     if(!e.suivi) e.suivi = {}; 
     if(!e.valides) e.valides = {};
     if(!e.planHebdo || !Array.isArray(e.planHebdo)) e.planHebdo = [];
@@ -100,12 +108,18 @@ Object.values(eleves).forEach(e => {
     if(!e.historique || !Array.isArray(e.historique)) e.historique = [];
     if(!e.masquees || !Array.isArray(e.masquees)) e.masquees = [];
     if(!e.priorites) e.priorites = [];
+    if(!e.bilanEvaluations) e.bilanEvaluations = {};
 });
 localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves));
 
 let idEleveCourant = null; let idEleveImpressionCourant = null;
 let filtreCourantDB = 'Tous'; let filtreCourantMatiere = 'Toutes'; let filtreCourantTypeDB = 'Tous';
 let idEnCoursEdition = null; let couleurManuelleModifiee = false; let isFormLoading = false;
+
+let dernierNiveauForm = [];
+let derniereMatiereForm = "";
+let derniereSequenceForm = "";
+let derniereCompForm = "";
 
 function nettoyerNomPourTri(str) {
     if (!str) return "";
@@ -131,6 +145,16 @@ function getListeTrie(idsArray, priosArray = []) {
         return (a.estEvaluation ? 1 : 0) - (b.estEvaluation ? 1 : 0);
     });
     return planObjects;
+}
+
+function getElevesTries() {
+    const ordreNiv = { "CP": 1, "CE1": 2, "CE2": 3, "CM1": 4, "CM2": 5 };
+    return Object.values(eleves).sort((a, b) => {
+        let nivA = ordreNiv[(a.niveau || "CP").toUpperCase()] || 99;
+        let nivB = ordreNiv[(b.niveau || "CP").toUpperCase()] || 99;
+        if (nivA !== nivB) return nivA - nivB;
+        return (a.nom || "").localeCompare(b.nom || "", 'fr', { sensitivity: 'base' });
+    });
 }
 
 // ==========================================
@@ -206,16 +230,19 @@ function calculTailleStockage() {
     }
     let megaBytes = (_lsTotal / (1024 * 1024)).toFixed(2);
     let pct = Math.min(100, (megaBytes / 5) * 100);
-    document.getElementById('texteStockage').innerText = `${megaBytes} Mo utilisés sur environ 5.00 Mo`;
+    let texteSto = document.getElementById('texteStockage');
+    if(texteSto) texteSto.innerText = `${megaBytes} Mo utilisés sur environ 5.00 Mo`;
     let jauge = document.getElementById('jaugeStockageFill');
-    jauge.style.width = pct + "%";
-    if (pct > 80) jauge.style.backgroundColor = "#e74c3c";
-    else if (pct > 50) jauge.style.backgroundColor = "#f39c12";
-    else jauge.style.backgroundColor = "#27ae60";
+    if(jauge) {
+        jauge.style.width = pct + "%";
+        if (pct > 80) jauge.style.backgroundColor = "#e74c3c";
+        else if (pct > 50) jauge.style.backgroundColor = "#f39c12";
+        else jauge.style.backgroundColor = "#27ae60";
+    }
 }
 
 // ==========================================
-// 3. SYNCHRONISATION GOOGLE DRIVE
+// 3. SYNCHRONISATION GOOGLE DRIVE (JSON uniquement)
 // ==========================================
 const CLIENT_ID = '133293729951-pv43qv8a9758rbm4atpiiq3rv0g79vnd.apps.googleusercontent.com';
 const API_KEY = ''; 
@@ -226,14 +253,15 @@ function declencherAutoSaveDrive() {
     if (!driveFileId || !driveAccessToken) return;
     clearTimeout(timerAutoSave);
     timerAutoSave = setTimeout(() => { 
-        document.getElementById('statutDrive').innerText = "⏳ Sauvegarde auto..."; 
+        let statut = document.getElementById('statutDrive');
+        if(statut) statut.innerText = "⏳ Sauvegarde auto..."; 
         sauvegarderVersDriveFichierUnique(); 
         calculTailleStockage();
     }, 3000);
 }
 
 function initialiserDrive() {
-    const statut = document.getElementById('statutDrive'); statut.innerText = "⏳ Connexion à Google...";
+    const statut = document.getElementById('statutDrive'); if(statut) statut.innerText = "⏳ Connexion à Google...";
     gapi.load('client', () => {
         gapi.client.init({ apiKey: API_KEY, discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"] })
         .then(() => {
@@ -244,14 +272,15 @@ function initialiserDrive() {
                         driveAccessToken = tokenResponse.access_token;
                         let expirationTime = Date.now() + 55 * 60 * 1000;
                         localStorage.setItem('drive_token_cache_final', JSON.stringify({ token: driveAccessToken, expiresAt: expirationTime }));
-                        document.getElementById('btnConnectDrive').innerText = "✅ Connecté";
+                        let btnConn = document.getElementById('btnConnectDrive');
+                        if(btnConn) btnConn.innerText = "✅ Connecté";
                         rechercherFichierSauvegarde();
                         lancerSurveillanceExpirationSession(expirationTime);
                     }
                 },
             });
             tokenClient.requestAccessToken({prompt: ''});
-        }).catch(err => { statut.innerText = "⚠️ Erreur d'initialisation Google."; });
+        }).catch(err => { if(statut) statut.innerText = "⚠️ Erreur d'initialisation Google."; });
     });
 }
 
@@ -268,25 +297,25 @@ function lancerSurveillanceExpirationSession(expiresAt) {
 
 function rechercherFichierSauvegarde(forcerTelechargement = false) {
     if(!driveAccessToken) { initialiserDrive(); return; }
-    const statut = document.getElementById('statutDrive'); statut.innerText = "🔍 Recherche du fichier JSON...";
+    const statut = document.getElementById('statutDrive'); if(statut) statut.innerText = "🔍 Recherche du fichier JSON...";
     fetch('https://www.googleapis.com/drive/v3/files?q=name="Sauvegarde_Classe.json" and trashed=false', { headers: { 'Authorization': 'Bearer ' + driveAccessToken } })
     .then(res => { if(res.status === 401) throw new Error("TOKEN_EXPIRED"); return res.json(); })
     .then(data => {
         if(data.files && data.files.length > 0) {
             driveFileId = data.files[0].id; 
-            if (forcerTelechargement || baseDonnees.length === 0) { statut.innerText = "✅ Fichier trouvé. Téléchargement..."; telechargerDepuisDrive(driveFileId); } 
-            else { statut.innerText = "✅ Fichier lié (Prêt pour la synchro)."; statut.style.color = "#27ae60"; }
+            if (forcerTelechargement || baseDonnees.length === 0) { if(statut) statut.innerText = "✅ Fichier trouvé. Téléchargement..."; telechargerDepuisDrive(driveFileId); } 
+            else { if(statut) { statut.innerText = "✅ Fichier lié (Prêt pour la synchro)."; statut.style.color = "#27ae60"; } }
         } else {
-            statut.innerText = "ℹ️ Aucun fichier. Création de la sauvegarde...";
+            if(statut) statut.innerText = "ℹ️ Aucun fichier. Création de la sauvegarde...";
             sauvegarderVersDriveFichierUnique();
         }
     })
-    .catch(e => { if (e.message === "TOKEN_EXPIRED") formaterErreurExpiration(); else statut.innerText = "❌ Erreur de recherche Drive."; });
+    .catch(e => { if (e.message === "TOKEN_EXPIRED") formaterErreurExpiration(); else if(statut) statut.innerText = "❌ Erreur de recherche Drive."; });
 }
 
 function telechargerDepuisDrive(fileId) {
     const statut = document.getElementById('statutDrive');
-    statut.innerText = "⏳ Téléchargement depuis le Drive...";
+    if(statut) statut.innerText = "⏳ Téléchargement depuis le Drive...";
     
     fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { 
         headers: { 'Authorization': 'Bearer ' + driveAccessToken } 
@@ -308,23 +337,26 @@ function telechargerDepuisDrive(fileId) {
             localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
             
             Object.values(eleves).forEach(e => { 
-                if(!e.maxAteliers) e.maxAteliers = 15; if(!e.suivi) e.suivi = {}; if(!e.valides) e.valides = {};
+                if(!e.maxAteliers) e.maxAteliers = 15; 
+                if(e.maxTablettes === undefined) e.maxTablettes = 2;
+                if(!e.niveau) e.niveau = "CP";
+                if(!e.suivi) e.suivi = {}; if(!e.valides) e.valides = {};
                 if(!e.planHebdo) e.planHebdo = []; if(!e.enAttente) e.enAttente = []; if(!e.historique) e.historique = []; if(!e.masquees) e.masquees = []; if(!e.priorites) e.priorites = [];
+                if(!e.bilanEvaluations) e.bilanEvaluations = {};
             });
             localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves));
             
             postEditGlobal(); majListeEleves(); initialiserSelectsFormulaire(); afficherChoixEtiquettes(); majSelectCouleursRapides(); rafraichirDashboard();
-            statut.innerText = "✅ Synchronisé depuis le Drive !"; statut.style.color = "#27ae60"; calculTailleStockage();
+            if(statut) { statut.innerText = "✅ Synchronisé depuis le Drive !"; statut.style.color = "#27ae60"; } 
+            calculTailleStockage();
         } else { 
-            statut.innerText = "⚠️ Fichier Drive vide ou corrompu."; 
+            if(statut) statut.innerText = "⚠️ Fichier Drive vide ou corrompu."; 
         }
     })
     .catch(e => { 
         if (e.message === "TOKEN_EXPIRED") formaterErreurExpiration(); 
         else { 
-            console.error("Erreur Drive:", e);
-            statut.innerText = "❌ Erreur de téléchargement du fichier."; 
-            statut.style.color = "#e74c3c"; 
+            if(statut) { statut.innerText = "❌ Erreur de téléchargement du fichier."; statut.style.color = "#e74c3c"; } 
         } 
     });
 }
@@ -344,26 +376,33 @@ function sauvegarderVersDriveFichierUnique() {
         if(val.id) {
             if(!driveFileId) driveFileId = val.id;
             let statut = document.getElementById('statutDrive');
-            statut.innerText = "✅ Sauvegardé à " + new Date().toLocaleTimeString(); statut.style.color = "#27ae60";
+            if(statut) { statut.innerText = "✅ Sauvegardé à " + new Date().toLocaleTimeString(); statut.style.color = "#27ae60"; }
         }
-    }).catch(e => { if (e.message === "TOKEN_EXPIRED") formaterErreurExpiration(); else document.getElementById('statutDrive').innerText = "❌ Erreur de synchro Drive."; });
+    }).catch(e => { if (e.message === "TOKEN_EXPIRED") formaterErreurExpiration(); else { let statut = document.getElementById('statutDrive'); if(statut) statut.innerText = "❌ Erreur de synchro Drive."; } });
 }
 
 function formaterErreurExpiration() {
     driveAccessToken = null; localStorage.removeItem('drive_token_cache_final');
     if (intervalVerificationSession) clearInterval(intervalVerificationSession);
-    document.getElementById('statutDrive').innerText = "⚠️ Session expirée. Veuillez vous reconnecter."; document.getElementById('statutDrive').style.color = "#e74c3c"; document.getElementById('btnConnectDrive').innerText = "☁️ Reconnecter Google Drive";
+    let statut = document.getElementById('statutDrive');
+    let btnConn = document.getElementById('btnConnectDrive');
+    if(statut) { statut.innerText = "⚠️ Session expirée. Veuillez vous reconnecter."; statut.style.color = "#e74c3c"; }
+    if(btnConn) btnConn.innerText = "☁️ Reconnecter Google Drive";
 }
 
 function tenterConnexionAuto() {
     const cache = JSON.parse(localStorage.getItem('drive_token_cache_final'));
     if(cache && cache.token && cache.expiresAt > Date.now()) {
-        document.getElementById('statutDrive').innerText = "⏳ Reconnexion automatique...";
+        let statut = document.getElementById('statutDrive');
+        if(statut) statut.innerText = "⏳ Reconnexion automatique...";
         gapi.load('client', () => {
             gapi.client.init({ apiKey: API_KEY, discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"] })
             .then(() => {
-                driveAccessToken = cache.token; document.getElementById('btnConnectDrive').innerText = "✅ Connecté (Auto)";
-                rechercherFichierSauvegarde(false); lancerSurveillanceExpirationSession(cache.expiresAt);
+                driveAccessToken = cache.token; 
+                let btnConn = document.getElementById('btnConnectDrive');
+                if(btnConn) btnConn.innerText = "✅ Connecté (Auto)";
+                rechercherFichierSauvegarde(false); 
+                lancerSurveillanceExpirationSession(cache.expiresAt);
             });
         });
     }
@@ -374,22 +413,32 @@ function tenterConnexionAuto() {
 // ==========================================
 function majListeEleves() {
     const select = document.getElementById('selectEleveProfile'); const selectImp = document.getElementById('selectEleveImpression'); const selectBilan = document.getElementById('selectEleveBilan');
-    let optHtml = '<option value="">-- Sélectionner un élève --</option>'; let optImp = '<option value="">-- Choisir un élève --</option><option value="TOUS_ELEVES">-- 📚 TOUS les élèves --</option>';
+    let optHtml = '<option value="">-- Sélectionner un élève --</option>'; 
+    let optImp = '<option value="">-- Choisir un élève --</option><option value="TOUS_ELEVES">-- 📚 TOUS les élèves --</option>';
     
-    Object.values(eleves).sort((a,b) => (a.nom || "").localeCompare(b.nom || "")).forEach(e => { 
-        optHtml += `<option value="${e.id}">${escHTML(e.nom)}</option>`; optImp += `<option value="${e.id}">${escHTML(e.nom)}</option>`; 
+    let elevesTries = getElevesTries();
+    elevesTries.forEach(e => { 
+        let labelNiv = `[${e.niveau || "CP"}] ${e.nom}`;
+        optHtml += `<option value="${e.id}">${escHTML(labelNiv)}</option>`; 
+        optImp += `<option value="${e.id}">${escHTML(labelNiv)}</option>`; 
     });
     
     if (select) select.innerHTML = optHtml; 
     if (selectImp) selectImp.innerHTML = optImp; 
     if (selectBilan) selectBilan.innerHTML = optImp;
     
+    let btnEdit = document.getElementById('btnEditEleve');
     if(idEleveCourant && eleves[idEleveCourant]) { 
         if (select) select.value = idEleveCourant; 
+        if (btnEdit) btnEdit.style.display = "inline-block";
         let inputMax = document.getElementById('inputMaxAteliersEleve');
+        let inputMaxTab = document.getElementById('inputMaxTablettesEleve');
         let maxAff = document.getElementById('maxAteliersAffiche');
         if (inputMax) inputMax.value = eleves[idEleveCourant].maxAteliers || 15; 
+        if (inputMaxTab) inputMaxTab.value = eleves[idEleveCourant].maxTablettes ?? 2;
         if (maxAff) maxAff.innerText = eleves[idEleveCourant].maxAteliers || 15; 
+    } else {
+        if (btnEdit) btnEdit.style.display = "none";
     }
     if(idEleveCourant && !idEleveImpressionCourant) { idEleveImpressionCourant = idEleveCourant; }
     if(idEleveImpressionCourant) { 
@@ -398,29 +447,120 @@ function majListeEleves() {
     }
 }
 
-function modifierMaxAteliersEleve() { if(!idEleveCourant) return; let val = parseInt(document.getElementById('inputMaxAteliersEleve').value); if(isNaN(val) || val < 1) val = 1; if(val > 25) val = 25; eleves[idEleveCourant].maxAteliers = val; sauvegarderEleves(); document.getElementById('maxAteliersAffiche').innerText = val; }
-function creerEleve() { const nom = document.getElementById('nouvelEleveNom').value.trim(); if(!nom) return; const id = 'eleve_' + Date.now(); eleves[id] = { id: id, nom: nom, planHebdo: [], enAttente: [], historique: [], masquees: [], priorites: [], maxAteliers: 15, suivi: {}, valides: {} }; sauvegarderEleves(); document.getElementById('nouvelEleveNom').value = ''; majListeEleves(); document.getElementById('selectEleveProfile').value = id; chargerEleve(); rafraichirDashboard(); }
-function supprimerEleve() { if(!idEleveCourant) return; if(confirm("Supprimer définitivement cet élève ?")) { delete eleves[idEleveCourant]; idEleveCourant = null; idEleveImpressionCourant = null; sauvegarderEleves(); majListeEleves(); chargerEleve(); rafraichirDashboard(); } }
+function modifierMaxAteliersEleve() { 
+    if(!idEleveCourant) return; 
+    let val = parseInt(document.getElementById('inputMaxAteliersEleve').value); 
+    if(isNaN(val) || val < 1) val = 1; if(val > 25) val = 25; 
+    eleves[idEleveCourant].maxAteliers = val; 
+    sauvegarderEleves(); 
+    let maxAff = document.getElementById('maxAteliersAffiche');
+    if(maxAff) maxAff.innerText = val; 
+}
+
+function modifierMaxTablettesEleve() {
+    if(!idEleveCourant) return;
+    let val = parseInt(document.getElementById('inputMaxTablettesEleve').value);
+    if(isNaN(val) || val < 0) val = 0; if(val > 10) val = 10;
+    eleves[idEleveCourant].maxTablettes = val;
+    sauvegarderEleves();
+    if(idEleveCourant) afficherPlanHebdo();
+}
+
+function creerEleve() { 
+    const nomInput = document.getElementById('nouvelEleveNom');
+    const nivSelect = document.getElementById('nouvelEleveNiveau');
+    if(!nomInput) return;
+    const nom = nomInput.value.trim(); 
+    if(!nom) return; 
+    const niveau = nivSelect ? nivSelect.value : "CP";
+    const id = 'eleve_' + Date.now(); 
+    eleves[id] = { id: id, nom: nom, niveau: niveau, planHebdo: [], enAttente: [], historique: [], masquees: [], priorites: [], maxAteliers: 15, maxTablettes: 2, suivi: {}, valides: {}, bilanEvaluations: {} }; 
+    sauvegarderEleves(); 
+    nomInput.value = ''; 
+    majListeInstantanéeEleve(id);
+    rafraichirDashboard(); 
+}
+
+function majListeInstantanéeEleve(newId) {
+    majListeEleves();
+    let sel = document.getElementById('selectEleveProfile');
+    if(sel) sel.value = newId;
+    chargerEleve();
+}
+
+function ouvrirModalEditionEleve() {
+    if(!idEleveCourant || !eleves[idEleveCourant]) return;
+    let e = eleves[idEleveCourant];
+    document.getElementById('editEleveNomInput').value = e.nom;
+    document.getElementById('editEleveNiveauSelect').value = e.niveau || "CP";
+    ouvrirModal('modalEditEleve');
+}
+
+function validerEditionEleve() {
+    if(!idEleveCourant || !eleves[idEleveCourant]) return;
+    let nouveauNom = document.getElementById('editEleveNomInput').value.trim();
+    let nouveauNiveau = document.getElementById('editEleveNiveauSelect').value;
+    if(!nouveauNom) { showToast("Le prénom ne peut pas être vide.", "error"); return; }
+    
+    eleves[idEleveCourant].nom = nouveauNom;
+    eleves[idEleveCourant].niveau = nouveauNiveau;
+    sauvegarderEleves();
+    fermerModal('modalEditEleve');
+    majListeEleves();
+    chargerEleve();
+    rafraichirDashboard();
+    showToast("Élève mis à jour !", "success");
+}
+
+function supprimerEleve() { 
+    if(!idEleveCourant) return; 
+    if(confirm("Supprimer définitivement cet élève ?")) { 
+        delete eleves[idEleveCourant]; 
+        idEleveCourant = null; 
+        idEleveImpressionCourant = null; 
+        sauvegarderEleves(); 
+        majListeEleves(); 
+        chargerEleve(); 
+        rafraichirDashboard(); 
+    } 
+}
 
 function chargerEleve() {
     const sel = document.getElementById('selectEleveProfile');
     if (!sel) return;
     idEleveCourant = sel.value;
-    const zoneTravail = document.getElementById('zoneTravail'); const message = document.getElementById('messageSelectEleve');
-    if(!idEleveCourant) { if(zoneTravail) zoneTravail.style.display = 'none'; if(message) message.style.display = 'block'; return; }
-    if(zoneTravail) zoneTravail.style.display = 'block'; if(message) message.style.display = 'none';
+    const zoneTravail = document.getElementById('zoneTravail'); 
+    const message = document.getElementById('messageSelectEleve');
+    const btnEdit = document.getElementById('btnEditEleve');
+    
+    if(!idEleveCourant) { 
+        if(zoneTravail) zoneTravail.style.display = 'none'; 
+        if(message) message.style.display = 'block'; 
+        if(btnEdit) btnEdit.style.display = 'none';
+        return; 
+    }
+    if(zoneTravail) zoneTravail.style.display = 'block'; 
+    if(message) message.style.display = 'none';
+    if(btnEdit) btnEdit.style.display = 'inline-block';
+    
     document.querySelectorAll('.nomEleveAffiche').forEach(el => el.innerText = eleves[idEleveCourant].nom);
     let inputMax = document.getElementById('inputMaxAteliersEleve');
+    let inputMaxTab = document.getElementById('inputMaxTablettesEleve');
     let maxAff = document.getElementById('maxAteliersAffiche');
     if(inputMax) inputMax.value = eleves[idEleveCourant].maxAteliers || 15;
+    if(inputMaxTab) inputMaxTab.value = eleves[idEleveCourant].maxTablettes ?? 2;
     if(maxAff) maxAff.innerText = eleves[idEleveCourant].maxAteliers || 15;
-    afficherPlanHebdo(); afficherHistorique(); if(document.getElementById('selectSequence') && document.getElementById('selectSequence').value) afficherRessourcesDisponibles();
+    
+    afficherPlanHebdo(); 
+    afficherHistorique(); 
+    if(document.getElementById('selectSequence') && document.getElementById('selectSequence').value) afficherRessourcesDisponibles();
 }
 
 function ouvrirModalDuplication() {
     if(!idEleveCourant || eleves[idEleveCourant].planHebdo.length === 0) { showToast("Le plan de l'élève est vide.", "error"); return; }
     document.getElementById('nomEleveSourceDupli').innerText = eleves[idEleveCourant].nom; let html = '';
-    Object.values(eleves).sort((a,b) => (a.nom||"").localeCompare(b.nom||"")).forEach(e => { if(e.id !== idEleveCourant) { html += `<label style="cursor:pointer; font-size:14px;"><input type="checkbox" class="cb-dupli-eleve" value="${e.id}"> ${escHTML(e.nom)}</label>`; } });
+    let elevesTries = getElevesTries();
+    elevesTries.forEach(e => { if(e.id !== idEleveCourant) { html += `<label style="cursor:pointer; font-size:14px;"><input type="checkbox" class="cb-dupli-eleve" value="${e.id}"> [${e.niveau}] ${escHTML(e.nom)}</label>`; } });
     document.getElementById('listeElevesDupli').innerHTML = html; document.getElementById('modalDupliquer').style.display = 'flex';
 }
 
@@ -441,10 +581,11 @@ function assignerActivite(idActivite) {
     let act = baseDonnees.find(a => a.id === idActivite); if (!act) return;
     document.getElementById('nomActiviteAssign').innerText = act.ressource;
     let html = '';
-    Object.values(eleves).sort((a,b) => (a.nom||"").localeCompare(b.nom||"")).forEach(e => {
+    let elevesTries = getElevesTries();
+    elevesTries.forEach(e => {
         let disabled = (e.planHebdo.includes(idActivite) || e.historique.some(h => h.idActivite === idActivite)) ? "disabled checked" : "";
         let color = disabled ? "color: #95a5a6; text-decoration: line-through;" : "";
-        html += `<label style="cursor:pointer; font-size:14px; ${color}"><input type="checkbox" class="cb-assign-eleve" value="${e.id}" ${disabled}> ${escHTML(e.nom)}</label>`;
+        html += `<label style="cursor:pointer; font-size:14px; ${color}"><input type="checkbox" class="cb-assign-eleve" value="${e.id}" ${disabled}> [${e.niveau}] ${escHTML(e.nom)}</label>`;
     });
     document.getElementById('listeElevesAssign').innerHTML = html; document.getElementById('modalAssigner').style.display = 'flex';
 }
@@ -492,6 +633,18 @@ function validerSelectionPlan() {
     sauvegarderEleves(); afficherPlanHebdo(); afficherHistorique(); afficherRessourcesDisponibles(); rafraichirDashboard(); showToast("Sélection validée !", "success");
 }
 
+function estActiviteTablette(act) {
+    if (!act || !act.typeRes) return false;
+    let tName = act.typeRes.trim().toLowerCase();
+    for (let k in imagesParType) {
+        if (k.trim().toLowerCase() === tName) {
+            let cfg = imagesParType[k];
+            return (typeof cfg === 'object' && cfg.isTablette === true);
+        }
+    }
+    return false;
+}
+
 function marquerCommeValideSansRafraichir(idActivite, eleve) {
     const act = baseDonnees.find(b => b.id === idActivite); if(!act) return;
     const dateValid = new Date().toLocaleDateString('fr-FR');
@@ -535,11 +688,14 @@ function demasquerActivite(idActivite) { if(!idEleveCourant) return; eleves[idEl
 function ajouterAuPlan(idActivite) {
     const eleve = eleves[idEleveCourant]; const max = eleve.maxAteliers || 15;
     if (eleve.planHebdo.length >= max) { showToast(`⚠️ Limite maximale atteinte.`, "error"); return; }
+    
     const actAjoutee = baseDonnees.find(b => b.id === idActivite);
-    if (actAjoutee && actAjoutee.typeRes && actAjoutee.typeRes.toLowerCase() === 'anton') {
-        let nbAntonActuels = eleve.planHebdo.map(id => baseDonnees.find(b => b.id === id)).filter(b => b && b.typeRes && b.typeRes.toLowerCase() === 'anton').length;
-        if (nbAntonActuels >= 4) { showToast("🚫 Limite atteinte : 4 ateliers Anton max.", "error"); return; } 
+    if (actAjoutee && estActiviteTablette(actAjoutee)) {
+        let maxTab = eleve.maxTablettes ?? 2;
+        let nbTabActuels = eleve.planHebdo.map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length;
+        if (nbTabActuels >= maxTab) { showToast(`🚫 Limite atteinte : ${maxTab} atelier(s) tablette(s) max pour cet élève.`, "error"); return; } 
     }
+    
     eleve.planHebdo.push(idActivite); sauvegarderEleves(); afficherRessourcesDisponibles(); afficherPlanHebdo(); rafraichirDashboard(); showToast("Ajouté au plan !");
 }
 
@@ -562,6 +718,10 @@ function afficherPlanHebdo() {
     const eleve = eleves[idEleveCourant]; const tbodyApercu = document.getElementById('tableApercuPlan'); if(!tbodyApercu) return; tbodyApercu.innerHTML = '';
     document.getElementById('compteurAteliersEleve').innerText = eleve.planHebdo.length;
     document.getElementById('maxAteliersAffiche').innerText = eleve.maxAteliers || 15;
+    
+    let nbTabCount = eleve.planHebdo.map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length;
+    let compteurTabElem = document.getElementById('compteurTablettesEleve');
+    if(compteurTabElem) compteurTabElem.innerText = `${nbTabCount}/${eleve.maxTablettes ?? 2}`;
 
     let planObjects = getListeTrie(eleve.planHebdo, eleve.priorites || []);
 
@@ -606,7 +766,7 @@ function afficherPlanHebdo() {
                 if (s.statut === 'a_revoir') suiviHtml = `<br><span style="color:#c0392b; font-size:12px; font-weight:bold;">⚠️ À revoir avec maitresse</span>${infoCommentaire}`;
                 if (s.statut === 'a_refaire') suiviHtml = `<br><span style="color:#d35400; font-size:12px; font-weight:bold;">🔄 À refaire seul</span>${infoCommentaire}`;
             }
-            let actionHtml = `<button type="button" class="btn-hide" style="width: 100%;" onclick="annulerAttente('${a.id}')">↩️ Remettre au plan actuel</button>`;
+            let actionHtml = `<button type="button" class="btn-hide" style="width: 100%;" onclick="annulerAttente('${a.id}')">↩ Remettre au plan actuel</button>`;
             tbodyApercu.innerHTML += `<tr style="background:#fef5e7;">
                 <td style="text-align:center;">⏸️</td><td style="text-align:center;">-</td><td class="col-num">-</td>
                 <td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td><td>${a.lecon ? '<em>'+escHTML(a.lecon)+'</em> - ' : ''}${escHTML(a.competence)}</td>
@@ -624,7 +784,7 @@ function afficherHistorique() {
     
     [...eleve.historique].reverse().forEach(hist => {
         const a = baseDonnees.find(b => b.id === hist.idActivite);
-        if(a) tbodyHist.innerHTML += `<tr><td><strong>${hist.date}</strong></td><td>${escHTML(a.niveau)}</td><td>${escHTML(a.matiere)}<br><span style="font-size:11px">${escHTML(a.sequence)}</span></td><td>${escHTML(a.competence)}</td><td>${escHTML(a.ressource)}</td><td style="text-align: center;"><button type="button" onclick="desarchiverActivite('${a.id}')" style="background:none; border:none; cursor:pointer;">↩️️ Restaurer</button></td></tr>`;
+        if(a) tbodyHist.innerHTML += `<tr><td><strong>${hist.date}</strong></td><td>${escHTML(a.niveau)}</td><td>${escHTML(a.matiere)}<br><span style="font-size:11px">${escHTML(a.sequence)}</span></td><td>${escHTML(a.competence)}</td><td>${escHTML(a.ressource)}</td><td style="text-align: center;"><button type="button" onclick="desarchiverActivite('${a.id}')" style="background:none; border:none; cursor:pointer;">↩️ Restaurer</button></td></tr>`;
     });
     if(eleve.historique.length === 0) tbodyHist.innerHTML = '<tr><td colspan="6" style="text-align:center;">Aucun historique.</td></tr>';
 
@@ -723,18 +883,18 @@ function toggleAfficherArchives() {
 }
 
 function rafraichirDashboard() {
-    let groupes = {}; let antonGroupes = {}; 
+    let groupes = {}; let tabletteGroupes = {}; 
     Object.values(eleves).forEach(e => {
         if(!e.suivi) e.suivi = {}; if(!e.enAttente) e.enAttente = [];
         let allActiveActivities = [...e.planHebdo, ...e.enAttente];
 
         allActiveActivities.forEach(idAct => {
             let act = baseDonnees.find(b => b.id === idAct);
-            if (act && act.typeRes && act.typeRes.trim().toLowerCase() === 'anton') {
-                let cleAntonArchive = `anton_${idAct}`;
-                if (!dashboardArchives.includes(cleAntonArchive)) {
-                    if (!antonGroupes[idAct]) antonGroupes[idAct] = { act: act, eleves: [] };
-                    if (!antonGroupes[idAct].eleves.includes(e.nom)) antonGroupes[idAct].eleves.push(e.nom);
+            if (act && estActiviteTablette(act)) {
+                let cleTabArchive = `tablette_${idAct}`;
+                if (!dashboardArchives.includes(cleTabArchive)) {
+                    if (!tabletteGroupes[idAct]) tabletteGroupes[idAct] = { act: act, eleves: [] };
+                    if (!tabletteGroupes[idAct].eleves.includes(e.nom)) tabletteGroupes[idAct].eleves.push(e.nom);
                 }
             }
             let s = e.suivi[idAct];
@@ -769,22 +929,25 @@ function rafraichirDashboard() {
     let memoDiv = document.getElementById('memoListContent');
     if(memoDiv) memoDiv.innerHTML = memoHtml || '<p style="color:#7f8c8d; font-style:italic;">Aucune remédiation en attente.</p>';
 
-    let antonHtml = '';
-    for (let idAct in antonGroupes) {
-        let item = antonGroupes[idAct]; let cleAnton = `anton_${idAct}`;
-        antonHtml += `<div style="background:#eaf2f8; border-left:4px solid #2980b9; padding:8px 10px; margin-bottom:6px; font-size:14px; display:flex; justify-content:space-between;">
+    let tabletteHtml = '';
+    for (let idAct in tabletteGroupes) {
+        let item = tabletteGroupes[idAct]; let cleTab = `tablette_${idAct}`;
+        tabletteHtml += `<div style="background:#eaf2f8; border-left:4px solid #2980b9; padding:8px 10px; margin-bottom:6px; font-size:14px; display:flex; justify-content:space-between;">
             <div>💻 <strong>${escHTML(item.act.niveau)} ${escHTML(item.act.matiere)}</strong> - ${escHTML(item.act.competence)} (<em>${escHTML(item.act.ressource)}</em>)<br>
             <span style="font-size:13px;">👥 <strong>${item.eleves.length} élève(s) :</strong> ${escHTML(item.eleves.sort().join(', '))}</span></div>
-            <label style="cursor:pointer; font-size:12px; font-weight:bold; color:#2980b9;"><input type="checkbox" onchange="archiverItem('${cleAnton}')"> Archiver</label></div>`;
+            <label style="cursor:pointer; font-size:12px; font-weight:bold; color:#2980b9;"><input type="checkbox" onchange="archiverItem('${cleTab}')"> Archiver</label></div>`;
     }
-    let antonDiv = document.getElementById('antonListContent');
-    if(antonDiv) antonDiv.innerHTML = antonHtml || '<p style="color:#7f8c8d; font-style:italic;">Aucun atelier Anton en cours.</p>';
+    let tabDiv = document.getElementById('tabletteListContent');
+    if(tabDiv) tabDiv.innerHTML = tabletteHtml || '<p style="color:#7f8c8d; font-style:italic;">Aucun atelier tablette en cours.</p>';
 
     let archiveHtml = '';
     dashboardArchives.forEach(cle => {
-        if (cle.startsWith('anton_')) {
+        if (cle.startsWith('tablette_')) {
+            let act = baseDonnees.find(a => a.id === cle.replace('tablette_', ''));
+            if (act) archiveHtml += `<div style="display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid #eee;"><span>💻 Tablette - <strong>${escHTML(act.matiere)}</strong> (${escHTML(act.ressource)})</span><button onclick="restaurerArchive('${cle}')" style="background:#27ae60; color:white; border:none; border-radius:3px;">↩️</button></div>`;
+        } else if (cle.startsWith('anton_')) {
             let act = baseDonnees.find(a => a.id === cle.replace('anton_', ''));
-            if (act) archiveHtml += `<div style="display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid #eee;"><span>💻 Anton - <strong>${escHTML(act.matiere)}</strong> (${escHTML(act.ressource)})</span><button onclick="restaurerArchive('${cle}')" style="background:#27ae60; color:white; border:none; border-radius:3px;">↩️</button></div>`;
+            if (act) archiveHtml += `<div style="display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid #eee;"><span>💻 Tablette - <strong>${escHTML(act.matiere)}</strong> (${escHTML(act.ressource)})</span><button onclick="restaurerArchive('${cle}')" style="background:#27ae60; color:white; border:none; border-radius:3px;">↩️</button></div>`;
         } else {
             let parts = cle.split('_'); let e = eleves[parts[0]]; let act = baseDonnees.find(a => a.id === parts[1]);
             if (e && act) archiveHtml += `<div style="display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px solid #eee;"><span>${parts[2] === 'a_revoir' ? '👩‍🏫 Revoir' : '🔄 Refaire'} - <strong>${escHTML(e.nom)}</strong> : ${escHTML(act.matiere)} (${escHTML(act.ressource)})</span><button onclick="restaurerArchive('${cle}')" style="background:#27ae60; color:white; border:none; border-radius:3px;">↩️</button></div>`;
@@ -798,7 +961,7 @@ function rafraichirDashboard() {
     const tbody = document.getElementById('tableDashboard'); 
     if(!tbody) return;
     let html = '';
-    let listeEleves = Object.values(eleves).sort((a,b) => (a.nom||"").localeCompare(b.nom||""));
+    let listeEleves = getElevesTries();
     if(listeEleves.length === 0) { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">Aucun élève enregistré.</td></tr>'; return; }
 
     listeEleves.forEach(e => {
@@ -831,7 +994,7 @@ function rafraichirDashboard() {
         planMiniHtml += '</table>';
 
         html += `<tr style="border-top: 2px solid #ecf0f1;">
-            <td style="font-size:16px;"><strong>${escHTML(e.nom)}</strong></td>
+            <td style="font-size:16px;"><strong>[${e.niveau}] ${escHTML(e.nom)}</strong></td>
             <td><div class="jauge-container"><div class="jauge-fill" style="width: ${pct}%; background-color: ${colorBar};"></div></div><div class="jauge-text">${currentPlanLen} ateliers en cours sur ${max} max</div></td>
             <td style="text-align: center;">${btnExpand}</td>
         </tr>
@@ -844,7 +1007,7 @@ function rafraichirDashboard() {
 function genererMatriceCompetences() {
     const table = document.getElementById('tableMatrice');
     if (!table) return;
-    let listeEleves = Object.values(eleves).sort((a,b) => (a.nom||"").localeCompare(b.nom||""));
+    let listeEleves = getElevesTries();
     if (listeEleves.length === 0 || baseDonnees.length === 0) { table.innerHTML = "<tr><td>Aucune donnée pour la matrice.</td></tr>"; return; }
 
     let compsSet = new Set();
@@ -856,7 +1019,7 @@ function genererMatriceCompetences() {
     html += `</tr></thead><tbody>`;
 
     listeEleves.forEach(e => {
-        html += `<tr><td>${escHTML(e.nom)}</td>`;
+        html += `<tr><td>[${e.niveau}] ${escHTML(e.nom)}</td>`;
         competences.forEach(c => {
             let actValidee = e.historique.find(h => { let act = baseDonnees.find(b => b.id === h.idActivite); return act && act.competence === c; });
             if (actValidee) {
@@ -871,44 +1034,76 @@ function genererMatriceCompetences() {
     table.innerHTML = html;
 }
 
+function changerBilanEval(idEleve, idAct, valeur) {
+    let eleve = eleves[idEleve];
+    if(!eleve) return;
+    if(!eleve.bilanEvaluations) eleve.bilanEvaluations = {};
+    eleve.bilanEvaluations[idAct] = valeur;
+    sauvegarderEleves();
+}
+
 function genererBilanEleve() {
     let selectBilan = document.getElementById('selectEleveBilan');
     let zone = document.getElementById('zoneBilanPrint');
     if (!selectBilan || !zone) return;
     let idEleve = selectBilan.value;
-    if (!idEleve || idEleve === "TOUS_ELEVES") { zone.innerHTML = '<h3 style="text-align: center; color: #7f8c8d; margin-top: 50px;">Sélectionnez un seul élève pour voir son bilan.</h3>'; return; }
+    if (!idEleve || idEleve === "TOUS_ELEVES") { zone.innerHTML = '<h3 style="text-align: center; color: #7f8c8d; margin-top: 50px;">Sélectionnez un seul élève pour voir son bilan des évaluations.</h3>'; return; }
     
     let eleve = eleves[idEleve];
-    if (eleve.historique.length === 0) { zone.innerHTML = `<h3 style="color:#2c3e50;">Bilan de réussites - ${escHTML(eleve.nom)}</h3><p>Aucune compétence validée pour le moment.</p>`; return; }
+    
+    let evalActs = [];
+    if(eleve.historique && Array.isArray(eleve.historique)) {
+        eleve.historique.forEach(h => {
+            let act = baseDonnees.find(b => b.id === h.idActivite);
+            if(act && act.estEvaluation) {
+                evalActs.push({ act: act, date: h.date });
+            }
+        });
+    }
 
-    let html = `<div style="border-bottom: 2px solid #2980b9; padding-bottom: 10px; margin-bottom: 20px;">
-                    <h2 style="margin:0; color:#2c3e50;">Bilan de réussites : ${escHTML(eleve.nom)}</h2>
+    if (evalActs.length === 0) { zone.innerHTML = `<h3 style="color:#2c3e50;">Bilan des évaluations - [${eleve.niveau}] ${escHTML(eleve.nom)}</h3><p>Aucune évaluation validée pour le moment.</p>`; return; }
+
+    let html = `<div style="border-bottom: 2px solid #9b59b6; padding-bottom: 10px; margin-bottom: 20px;">
+                    <h2 style="margin:0; color:#2c3e50;">Bilan des Évaluations : [${eleve.niveau}] ${escHTML(eleve.nom)}</h2>
                     <p style="margin:5px 0 0 0; color:#7f8c8d; font-size:14px;">Généré le ${new Date().toLocaleDateString('fr-FR')}</p>
                 </div>`;
     
     let groupes = {};
-    eleve.historique.forEach(h => {
-        let act = baseDonnees.find(b => b.id === h.idActivite);
-        if (act) {
-            let mat = act.matiere || "Autre";
-            if (!groupes[mat]) groupes[mat] = [];
-            groupes[mat].push({ comp: act.competence, date: h.date, eval: act.estEvaluation });
-        }
+    evalActs.forEach(item => {
+        let mat = item.act.matiere || "Autre";
+        if (!groupes[mat]) groupes[mat] = [];
+        groupes[mat].push(item);
     });
 
     Object.keys(groupes).sort().forEach(mat => {
-        html += `<h3 style="color:#2980b9; margin-top:20px; border-bottom:1px solid #bdc3c7;">${escHTML(mat)}</h3><ul style="list-style-type: none; padding: 0;">`;
+        html += `<h3 style="color:#9b59b6; margin-top:20px; border-bottom:1px solid #bdc3c7;">${escHTML(mat)}</h3><table style="width:100%; font-size:13px; margin-bottom:15px;">
+            <thead><tr><th>Compétence / Évaluation</th><th style="width:100px; text-align:center;">Date</th><th style="width:140px; text-align:center;">Position (A / PA / NA)</th></tr></thead><tbody>`;
+        
         groupes[mat].forEach(item => {
-            let badge = item.eval ? `<span style="font-size:10px; background:#e74c3c; color:white; padding:2px 5px; border-radius:3px; margin-left:5px;">Évaluation</span>` : '';
-            html += `<li style="padding: 6px; border-bottom: 1px dashed #ecf0f1; font-size: 14px;">
-                <span style="color:#27ae60; font-weight:bold;">✓</span> ${escHTML(item.comp)} <span style="font-size:11px; color:#95a5a6;">(le ${item.date})</span> ${badge}
-            </li>`;
+            let actId = item.act.id;
+            let currentVal = (eleve.bilanEvaluations && eleve.bilanEvaluations[actId]) ? eleve.bilanEvaluations[actId] : "";
+            
+            let btnA = `background: ${currentVal === 'A' ? '#27ae60' : '#ecf0f1'}; color: ${currentVal === 'A' ? 'white' : '#333'};`;
+            let btnPA = `background: ${currentVal === 'PA' ? '#f39c12' : '#ecf0f1'}; color: ${currentVal === 'PA' ? 'white' : '#333'};`;
+            let btnNA = `background: ${currentVal === 'NA' ? '#e74c3c' : '#ecf0f1'}; color: ${currentVal === 'NA' ? 'white' : '#333'};`;
+
+            html += `<tr>
+                <td><strong>${escHTML(item.act.competence)}</strong><br><span style="font-size:11px; color:#7f8c8d;">${escHTML(item.act.ressource)}</span></td>
+                <td style="text-align:center; font-size:11px;">${item.date}</td>
+                <td style="text-align:center; white-space:nowrap;" class="no-print-eval">
+                    <button type="button" style="${btnA} border:1px solid #bdc3c7; border-radius:3px; padding:4px 8px; font-weight:bold; cursor:pointer;" onclick="changerBilanEval('${eleve.id}', '${actId}', 'A'); genererBilanEleve();" title="Acquis">A</button>
+                    <button type="button" style="${btnPA} border:1px solid #bdc3c7; border-radius:3px; padding:4px 8px; font-weight:bold; cursor:pointer;" onclick="changerBilanEval('${eleve.id}', '${actId}', 'PA'); genererBilanEleve();" title="Partiellement Acquis">PA</button>
+                    <button type="button" style="${btnNA} border:1px solid #bdc3c7; border-radius:3px; padding:4px 8px; font-weight:bold; cursor:pointer;" onclick="changerBilanEval('${eleve.id}', '${actId}', 'NA'); genererBilanEleve();" title="Non Acquis">NA</button>
+                </td>
+                <td style="text-align:center; font-weight:bold; display:none;" class="print-eval-text">${currentVal || '-'}</td>
+            </tr>`;
         });
-        html += `</ul>`;
+        html += `</tbody></table>`;
     });
 
     html += `<div style="margin-top: 40px; border: 1px solid #bdc3c7; border-radius: 8px; padding: 15px; height: 100px;">
-        <p style="margin:0; font-weight:bold; color:#34495e;">Commentaires de l'enseignant :</p>
+        <p style="margin:0; font-weight:bold; color:#34495e;">Légende : <strong>A</strong> (Acquis) | <strong>PA</strong> (Partiellement Acquis) | <strong>NA</strong> (Non Acquis)</p>
+        <p style="margin:10px 0 0 0; font-weight:bold; color:#34495e;">Commentaires de l'enseignant :</p>
     </div>`;
 
     zone.innerHTML = html;
@@ -1103,21 +1298,37 @@ function afficherListeCompetencesModal() {
 function sauvegarderToutesCompetences() { document.querySelectorAll('.input-edit-competence').forEach(input => { let ancienne = input.getAttribute('data-ancienne'); let nouvelle = input.value.trim(); if(nouvelle && ancienne !== nouvelle) { baseDonnees.forEach(a => { if(a.competence === ancienne) a.competence = nouvelle; }); } }); postEditGlobal(); fermerModal('modalCompetences'); showToast("Compétences mises à jour !"); }
 
 function afficherListeTypesModal() {
-    let html = '<table style="width:100%; font-size:11px;"><thead><tr><th>Type</th><th>Lien image Drive</th><th title="Remplacer n°">N°?</th><th title="Couleur auto">Coul?</th><th>Action</th></tr></thead><tbody>';
+    let html = '<table style="width:100%; font-size:11px;"><thead><tr><th>Type</th><th>Lien image Drive</th><th title="Remplacer n°">N°?</th><th title="Couleur auto">Coul?</th><th title="Appli Tablette">Tablette?</th><th>Action</th></tr></thead><tbody>';
     Object.keys(imagesParType).sort((a,b) => a.localeCompare(b)).forEach(t => {
-        let cfg = imagesParType[t]; let imgVal = (typeof cfg === 'object') ? (cfg.img || "") : (cfg || "");
-        let remplacerChecked = (typeof cfg === 'object' && cfg.remplacerNum) ? "checked" : ""; let couleurChecked = (typeof cfg === 'object' && cfg.appliquerCouleur !== false) ? "checked" : "";
-        html += `<tr><td><strong>${escHTML(t)}</strong></td><td><input type="text" class="input-type-img" data-nom="${escHTML(t)}" value="${escHTML(imgVal)}" style="width: 100%; padding: 4px;"></td><td style="text-align:center;"><input type="checkbox" class="input-type-remp" data-nom="${escHTML(t)}" ${remplacerChecked}></td><td style="text-align:center;"><input type="checkbox" class="input-type-coul" data-nom="${escHTML(t)}" ${couleurChecked}></td><td style="text-align:center;"><button type="button" onclick="supprimerType('${escJS(t)}')">🗑️</button></td></tr>`;
+        let cfg = imagesParType[t]; 
+        let imgVal = (typeof cfg === 'object') ? (cfg.img || "") : (cfg || "");
+        let remplacerChecked = (typeof cfg === 'object' && cfg.remplacerNum) ? "checked" : ""; 
+        let couleurChecked = (typeof cfg === 'object' && cfg.appliquerCouleur !== false) ? "checked" : "";
+        let tabletteChecked = (typeof cfg === 'object' && cfg.isTablette === true) ? "checked" : "";
+        
+        html += `<tr>
+            <td><strong>${escHTML(t)}</strong></td>
+            <td><input type="text" class="input-type-img" data-nom="${escHTML(t)}" value="${escHTML(imgVal)}" style="width: 100%; padding: 4px;"></td>
+            <td style="text-align:center;"><input type="checkbox" class="input-type-remp" data-nom="${escHTML(t)}" ${remplacerChecked}></td>
+            <td style="text-align:center;"><input type="checkbox" class="input-type-coul" data-nom="${escHTML(t)}" ${couleurChecked}></td>
+            <td style="text-align:center;"><input type="checkbox" class="input-type-tablette" data-nom="${escHTML(t)}" ${tabletteChecked}></td>
+            <td style="text-align:center;"><button type="button" onclick="supprimerType('${escJS(t)}')">🗑️</button></td>
+        </tr>`;
     });
     html += '</tbody></table><button type="button" onclick="sauvegarderTousLesTypes()" class="btn-valid" style="width:100%; margin-top:15px;">💾 Valider</button>'; 
     let box = document.getElementById('listeTypesModal'); if(box) box.innerHTML = html;
 }
+
 function sauvegarderTousLesTypes() {
     document.querySelectorAll('#listeTypesModal tbody tr').forEach(tr => {
         let imgInput = tr.querySelector('.input-type-img'); if(!imgInput) return;
         let nomType = imgInput.getAttribute('data-nom'); let imgVal = imgInput.value.trim();
-        let rempVal = tr.querySelector('.input-type-remp').checked; let coulVal = tr.querySelector('.input-type-coul').checked;
-        imagesParType[nomType] = { img: imgVal, remplacerNum: rempVal, appliquerCouleur: coulVal }; let lienFormate = formaterLienImage(imgVal);
+        let rempVal = tr.querySelector('.input-type-remp').checked; 
+        let coulVal = tr.querySelector('.input-type-coul').checked;
+        let tabVal = tr.querySelector('.input-type-tablette').checked;
+        
+        imagesParType[nomType] = { img: imgVal, remplacerNum: rempVal, appliquerCouleur: coulVal, isTablette: tabVal }; 
+        let lienFormate = formaterLienImage(imgVal);
         baseDonnees.forEach(a => {
             if (a.typeRes && a.typeRes.trim().toLowerCase() === nomType.trim().toLowerCase()) {
                 if (coulVal === false && a.visuel && a.visuel.startsWith('#')) { a.visuel = lienFormate || ""; } 
@@ -1185,7 +1396,7 @@ function editerActiviteBase(idActivite) {
     const box = document.getElementById('boxFormulaireManuel'); 
     if(box) box.classList.add('edit-mode');
     let titreForm = document.getElementById('titreFormulaireManuel');
-    if(titreForm) { titreForm.innerHTML = "✏️️ Modifier l'activité"; titreForm.style.color = "#d35400"; }
+    if(titreForm) { titreForm.innerHTML = "✏️ Modifier l'activité"; titreForm.style.color = "#d35400"; }
     const btnValider = document.getElementById('btnValiderForm'); 
     if(btnValider) { btnValider.innerHTML = "💾 Enregistrer"; btnValider.style.backgroundColor = "#d35400"; }
     let btnAnnuler = document.getElementById('btnAnnulerForm');
@@ -1214,7 +1425,7 @@ function annulerEdition() {
     
     const box = document.getElementById('boxFormulaireManuel'); if(box) box.classList.remove('edit-mode');
     let titreForm = document.getElementById('titreFormulaireManuel');
-    if(titreForm) { titreForm.innerHTML = "➕ Ajouter une activité manuellement"; titreForm.style.color = "#2980b9"; }
+    if(titreForm) { titreForm.innerHTML = "➕ Ajouter une ou plusieurs activités"; titreForm.style.color = "#2980b9"; }
     const btnValider = document.getElementById('btnValiderForm'); 
     if(btnValider) { btnValider.innerHTML = "➕ Ajouter l'activité"; btnValider.style.backgroundColor = "#27ae60"; } 
     let btnAnnuler = document.getElementById('btnAnnulerForm');
@@ -1254,7 +1465,7 @@ function sauvegarderFormulaire() {
     let typeFinal = selectTypeVal === 'AUTRE' && typeCustomElem ? typeCustomElem.value.trim() : selectTypeVal;
 
     if(!matiereFinal || !sequenceFinal || !competenceFinal || !ressource) { alert("Veuillez remplir Matière, Séquence, Compétence et Ressource."); return; }
-    if(typeFinal && !imagesParType.hasOwnProperty(typeFinal)) { imagesParType[typeFinal] = { img: "", remplacerNum: false, appliquerCouleur: true }; localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType)); majListeTypesSelect(); }
+    if(typeFinal && !imagesParType.hasOwnProperty(typeFinal)) { imagesParType[typeFinal] = { img: "", remplacerNum: false, appliquerCouleur: true, isTablette: false }; localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType)); majListeTypesSelect(); }
 
     let visuel = ""; 
     let imgElem = document.getElementById('addImage');
@@ -1287,14 +1498,38 @@ function sauvegarderFormulaire() {
         if(idx > -1) {
             baseDonnees[idx] = { id: idEnCoursEdition, niveau: niveauStr, matiere: matiereFinal, sequence: sequenceFinal, lecon: leconElem ? leconElem.value.trim() : '', competence: competenceFinal, ressource: ressource, typeRes: typeFinal, symbole: symbole, atelier: "", personnes: persStr, correction: "", visuel: visuel, estEvaluation: evalElem ? evalElem.checked : false };
         }
+        annulerEdition(); 
     } else {
         baseDonnees.push({ id: 'act_' + Date.now() + Math.random().toString(36).substr(2, 9), niveau: niveauStr, matiere: matiereFinal, sequence: sequenceFinal, lecon: leconElem ? leconElem.value.trim() : '', competence: competenceFinal, ressource: ressource, typeRes: typeFinal, symbole: symbole, atelier: "", personnes: persStr, correction: "", visuel: visuel, estEvaluation: evalElem ? evalElem.checked : false });
+        
+        dernierNiveauForm = [...niveauxCoches];
+        derniereMatiereForm = matiereFinal;
+        derniereSequenceForm = sequenceFinal;
+        derniereCompForm = competenceFinal;
+        
+        if(resElem) resElem.value = '';
+        if(symElem) symElem.value = '';
+        if(imgElem) imgElem.value = '';
+        if(evalElem) evalElem.checked = false;
+        showToast("Activité ajoutée ! Vous pouvez en ajouter une autre pour la même compétence.", "success");
     }
     
     trierBaseDonnees(); sauvegarderBase(); initNiveaux(); afficherBase(); initialiserSelectsFormulaire(); afficherChoixEtiquettes();
+    
+    if(!idEnCoursEdition) {
+        dernierNiveauForm.forEach(n => {
+            let cb = document.querySelector(`.cb-niveau-form[value="${n}"]`);
+            if(cb) cb.checked = true;
+        });
+        let selMat = document.getElementById('addMatiereSelect');
+        if(selMat) { selMat.value = derniereMatiereForm; surChangementMatiereForm(derniereMatiereForm); }
+        let selSeq = document.getElementById('addSequenceSelect');
+        if(selSeq) { selSeq.value = derniereSequenceForm; surChangementSequenceForm(derniereSequenceForm); }
+        let selComp = document.getElementById('addCompetenceSelect');
+        if(selComp) { selComp.value = derniereCompForm; surChangementCompetenceForm(derniereCompForm); }
+    }
+
     if(idEleveCourant) { afficherPlanHebdo(); afficherRessourcesDisponibles(); }
-    annulerEdition(); 
-    showToast("Activité enregistrée !", "success");
 }
 
 function changerCouleurDB(idActivite, nouvelleCouleur) { const idx = baseDonnees.findIndex(a => a.id === idActivite); if(idx > -1) { baseDonnees[idx].visuel = nouvelleCouleur; sauvegarderBase(); afficherBase(); afficherChoixEtiquettes(); if(idEleveCourant) afficherPlanHebdo(); } }
@@ -1311,6 +1546,7 @@ function supprimerActiviteBase(idActivite) {
             if (e.valides && e.valides[idActivite]) delete e.valides[idActivite];
             if (e.priorites) e.priorites = e.priorites.filter(id => id !== idActivite);
             if (e.enAttente) e.enAttente = e.enAttente.filter(id => id !== idActivite);
+            if (e.bilanEvaluations && e.bilanEvaluations[idActivite]) delete e.bilanEvaluations[idActivite];
         });
         sauvegarderEleves(); sauvegarderBase(); initNiveaux(); afficherBase(); initialiserSelectsFormulaire(); afficherChoixEtiquettes(); 
         if(idEleveCourant) { afficherPlanHebdo(); afficherRessourcesDisponibles(); } 
@@ -1322,7 +1558,7 @@ function supprimerActiviteBase(idActivite) {
 function viderBase() { 
     if(confirm("Vider la base ? Attention, cela retirera toutes les activités des plans des élèves.")) { 
         baseDonnees = []; 
-        Object.values(eleves).forEach(e => { e.planHebdo = []; e.historique = []; e.masquees = []; e.suivi = {}; e.valides = {}; e.enAttente = []; e.priorites = []; });
+        Object.values(eleves).forEach(e => { e.planHebdo = []; e.historique = []; e.masquees = []; e.suivi = {}; e.valides = {}; e.enAttente = []; e.priorites = []; e.bilanEvaluations = {}; });
         sauvegarderEleves(); sauvegarderBase(); initNiveaux(); afficherBase(); initialiserSelectsFormulaire(); afficherChoixEtiquettes(); 
         if(idEleveCourant) { afficherPlanHebdo(); afficherRessourcesDisponibles(); }
         rafraichirDashboard();
@@ -1330,7 +1566,7 @@ function viderBase() {
     } 
 }
 
-// --- 8. IMPORTATION EXTERNE ---
+// --- 8. IMPORTATION EXTERNE (Texte) ---
 function importerDonnees(btnElement) {
     const btn = btnElement || document.getElementById('btnImport');
     const txtArea = document.getElementById('importText');
@@ -1349,9 +1585,9 @@ function importerDonnees(btnElement) {
                 if(col.length >= 6 && col[5].trim() !== "") {
                     let niveauxBruts = col[0] ? col[0].trim().toUpperCase() : "CP"; 
                     const typeBrut = col[6] ? col[6].trim() : "";
-                    let isAnton = typeBrut.toLowerCase() === 'anton';
+                    let isTab = typeBrut.toLowerCase() === 'anton' || typeBrut.toLowerCase() === 'scratch';
                     
-                    if(typeBrut && !imagesParType.hasOwnProperty(typeBrut)) { imagesParType[typeBrut] = { img: "", remplacerNum: isAnton, appliquerCouleur: !isAnton }; }
+                    if(typeBrut && !imagesParType.hasOwnProperty(typeBrut)) { imagesParType[typeBrut] = { img: "", remplacerNum: isTab, appliquerCouleur: !isTab, isTablette: isTab }; }
                     
                     const isEval = typeBrut.toLowerCase().includes('éval') || typeBrut.toLowerCase().includes('eval');
                     let visuelCol = col[9] ? col[9].trim() : "";
@@ -1390,82 +1626,6 @@ function importerDonnees(btnElement) {
             btn.innerText = "📥 Importer ce texte"; btn.style.backgroundColor = "#27ae60"; btn.style.cursor = "pointer"; 
         }
     }, 100); 
-}
-
-function importerDepuisSheets(btnElement) {
-    if (!driveAccessToken) { alert("Veuillez d'abord vous connecter à Google Drive (Onglet 8. Sauvegarde)."); return; }
-    
-    const btn = btnElement; const originalText = btn.innerText;
-    btn.innerText = "🔍 Recherche du fichier..."; btn.style.backgroundColor = "#e67e22"; btn.style.cursor = "wait";
-
-    fetch('https://www.googleapis.com/drive/v3/files?q=name="Base de données" and mimeType="application/vnd.google-apps.spreadsheet" and trashed=false', {
-        headers: { 'Authorization': 'Bearer ' + driveAccessToken }
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.error) throw new Error("Erreur Drive: " + data.error.message);
-        if (!data.files || data.files.length === 0) { throw new Error("Aucun fichier nommé 'Base de données' trouvé."); }
-        const fileId = data.files[0].id;
-        btn.innerText = "⏳ Lecture des cellules...";
-        return fetch(`https://sheets.googleapis.com/v4/spreadsheets/${fileId}/values/A:J`, { headers: { 'Authorization': 'Bearer ' + driveAccessToken } });
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.error) {
-            if(data.error.message.includes("API has not been used") || data.error.status === "PERMISSION_DENIED") {
-                throw new Error("L'API Google Sheets n'est pas activée sur votre Google Cloud.");
-            }
-            throw new Error("Erreur Sheets: " + data.error.message);
-        }
-        if (!data.values || data.values.length === 0) { throw new Error("Onglet principal vide."); }
-        
-        let ajouts = 0; let doublonsIgnores = 0; let nouvellesActivites = []; if (!Array.isArray(baseDonnees)) baseDonnees = [];
-
-        data.values.forEach((row, index) => {
-            if (index === 0 && row[5] && row[5].toLowerCase().includes('ressource')) return;
-            let col = [ row[0] || "", row[1] || "", row[2] || "", row[3] || "", row[4] || "", row[5] || "", row[6] || "", row[7] || "", row[8] || "", row[9] || "" ];
-
-            if(col[5].trim() !== "") {
-                let niveauxBruts = col[0] ? col[0].trim().toUpperCase() : "CP"; 
-                const typeBrut = col[6] ? col[6].trim() : "";
-                let isAnton = typeBrut.toLowerCase() === 'anton';
-                
-                if(typeBrut && !imagesParType.hasOwnProperty(typeBrut)) { imagesParType[typeBrut] = { img: "", remplacerNum: isAnton, appliquerCouleur: !isAnton }; }
-                
-                const isEval = typeBrut.toLowerCase().includes('éval') || typeBrut.toLowerCase().includes('eval');
-                let visuelCol = col[9] ? col[9].trim() : "";
-                if(!visuelCol) { visuelCol = calculerCouleurAutomatique(col[1] ? col[1].trim() : "", niveauxBruts, typeBrut); }
-
-                let matiereClean = col[1] ? col[1].trim() : "";
-                let sequenceClean = col[2] ? col[2].trim() : "";
-                let ressourceClean = col[5] ? col[5].trim() : "";
-
-                let isDoublon = baseDonnees.some(a => (a.ressource||"").toLowerCase() === ressourceClean.toLowerCase() && (a.matiere||"").toLowerCase() === matiereClean.toLowerCase() && (a.sequence||"").toLowerCase() === sequenceClean.toLowerCase()) || 
-                                nouvellesActivites.some(a => (a.ressource||"").toLowerCase() === ressourceClean.toLowerCase() && (a.matiere||"").toLowerCase() === matiereClean.toLowerCase() && (a.sequence||"").toLowerCase() === sequenceClean.toLowerCase());
-
-                if(!isDoublon) {
-                    nouvellesActivites.push({ id: 'act_' + Date.now() + Math.random().toString(36).substr(2, 9), niveau: niveauxBruts, matiere: matiereClean, sequence: sequenceClean, lecon: col[3] ? col[3].trim() : "", competence: col[4] ? col[4].trim() : "", ressource: ressourceClean, typeRes: typeBrut, symbole: col[7] ? col[7].trim() : "", atelier: "", personnes: col[8] ? col[8].trim() : "", correction: "", visuel: visuelCol, estEvaluation: isEval }); 
-                    ajouts++;
-                } else {
-                    doublonsIgnores++;
-                }
-            }
-        });
-
-        if(ajouts > 0) {
-            baseDonnees = baseDonnees.concat(nouvellesActivites); localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
-            majListeTypesSelect(); initialiserSelectsFormulaire(); trierBaseDonnees();
-            sauvegarderBase(); initNiveaux(); afficherBase(); afficherChoixEtiquettes(); 
-            let msg = `${ajouts} activités importées avec succès !`;
-            if(doublonsIgnores > 0) msg += `\n(${doublonsIgnores} doublons ignorés).`;
-            showToast(msg, 'success');
-        } else { 
-            if (doublonsIgnores > 0) alert(`Aucun ajout : ${doublonsIgnores} doublon(s) détecté(s).`);
-            else alert("Aucune donnée valide trouvée."); 
-        }
-    })
-    .catch(err => { alert(err.message); })
-    .finally(() => { btn.innerText = originalText; btn.style.backgroundColor = "#2980b9"; btn.style.cursor = "pointer"; });
 }
 
 // --- 9. AFFICHAGE DE LA BASE ET ETIQUETTES ---
@@ -1608,7 +1768,7 @@ function genererApercuEtiquettes() {
 }
 
 function lancerImpressionEtiquettes() {
-    if(document.querySelectorAll('.cb-etiquette:checked').length === 0) { alert("Veuillez cocher au moins une étiquette."); return; }
+    if(document.querySelectorAll('.cb-etiquette:checked').length === 0) { alert("Cochez au moins une étiquette."); return; }
     document.body.classList.add('print-mode-etiquettes'); window.print(); document.body.classList.remove('print-mode-etiquettes');
 }
 
@@ -1631,9 +1791,12 @@ function restaurerSauvegarde() {
                 if (data.archives) { dashboardArchives = data.archives; localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); }
                 Object.values(eleves).forEach(el => { 
                     if(!el.maxAteliers) el.maxAteliers = 15; 
+                    if(el.maxTablettes === undefined) el.maxTablettes = 2;
+                    if(!el.niveau) el.niveau = "CP";
                     if(!el.suivi) el.suivi = {}; 
                     if(!el.priorites) el.priorites = [];
                     if(!el.enAttente) el.enAttente = [];
+                    if(!el.bilanEvaluations) el.bilanEvaluations = {};
                 });
                 if(data.images) { imagesParType = data.images; localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType)); majListeTypesSelect(); }
                 trierBaseDonnees(); sauvegarderBase(); sauvegarderEleves(); initNiveaux(); majListeEleves(); initialiserSelectsFormulaire(); afficherBase(); afficherChoixEtiquettes(); majSelectCouleursRapides();
@@ -1670,7 +1833,7 @@ function rafraichirFicheImpression() {
         if(!idEleveImpressionCourant) { container.innerHTML = '<div style="text-align: center; padding: 40px; color: #7f8c8d;" class="no-print"><h2>Veuillez sélectionner un élève ou l\'option "Tous les élèves" ci-dessus.</h2></div>'; return; }
         
         if(idEleveImpressionCourant === 'TOUS_ELEVES') {
-            let listeEleves = Object.values(eleves).sort((a,b) => (a.nom||"").localeCompare(b.nom||""));
+            let listeEleves = getElevesTries();
             if(listeEleves.length === 0) { container.innerHTML = '<div style="text-align: center; padding: 40px; color: #7f8c8d;" class="no-print"><h2>Aucun élève enregistré dans la classe.</h2></div>'; return; }
             let htmlGlobal = ''; listeEleves.forEach(e => { htmlGlobal += genererHtmlFicheEleve(e, false); }); container.innerHTML = htmlGlobal;
         } else {
@@ -1739,7 +1902,7 @@ function genererHtmlFicheEleve(eleve, estUnique) {
 
     return `<div class="panel ${wrapperClass}" style="margin-top: 1px;">
         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2c3e50; padding-bottom: 1px; margin-bottom: 2px;">
-            <h2 style="margin:0; font-size: 11px;">Plan de travail - ${escHTML(eleve.nom)}</h2><span style="font-size: 9.5px; font-weight: bold; color: #2980b9;">📅 Période${infoDates}</span>
+            <h2 style="margin:0; font-size: 11px;">Plan de travail - [${eleve.niveau}] ${escHTML(eleve.nom)}</h2><span style="font-size: 9.5px; font-weight: bold; color: #2980b9;">📅 Période${infoDates}</span>
         </div>
         <p style="font-size: 8px; font-style: italic; color: #555; margin: 0 0 2px 0; background: #f8f9f9; padding: 1px 3px; border-radius: 2px; border-left: 2px solid #2980b9;">
             💡 <strong>Consigne :</strong> Entoure le n° de l'activité commencée et non terminée. Barre le numéro quand tu as terminé.
