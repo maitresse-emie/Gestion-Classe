@@ -16,19 +16,18 @@
 </head>
 <body>
 
-    <button class="btn-tablet-toggle no-print" onclick="basculerModeClasse()">📱 Mode Classe</button>
     <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" title="Remonter tout en haut">⬆</button>
     <div id="toast-container" class="no-print"></div>
 
     <div class="navbar no-print">
-        <button class="nav-btn active" onclick="changerOnglet('pageSuivi', this)">🧑‍🎓 1. Plan & Suivi</button>
-        <button class="nav-btn" onclick="changerOnglet('pageImpression', this)">🖨️ 2. Fiche Élève</button>
-        <button class="nav-btn" onclick="changerOnglet('pageProg', this)" style="background:#d35400;">📅 3. Programmation</button>
+        <button class="nav-btn active" onclick="changerOnglet('pageDashboard', this)" style="background:#f39c12;">📊 1. Tableau de bord</button>
+        <button class="nav-btn" onclick="changerOnglet('pageSuivi', this)">🧑‍🎓 2. Plan & Suivi</button>
+        <button class="nav-btn" onclick="changerOnglet('pageImpression', this)">🖨️ 3. Fiche Élève</button>
         <button class="nav-btn" onclick="changerOnglet('pageBase', this)">📁 4. Base de données</button>
-        <button class="nav-btn" onclick="changerOnglet('pageEtiquettes', this)" style="background:#8e44ad;">🏷️ 5. Étiquettes</button>
-        <button class="nav-btn" onclick="changerOnglet('pageDashboard', this)" style="background:#f39c12;">📊 6. Tableau de bord</button>
+        <button class="nav-btn" onclick="changerOnglet('pageProg', this)" style="background:#d35400;">📅 5. Programmation</button>
+        <button class="nav-btn" onclick="changerOnglet('pageBilan', this)" style="background:#9b59b6;">📝 6. Bilans</button>
         <button class="nav-btn" onclick="changerOnglet('pageMatrice', this)" style="background:#16a085;">🧮 7. Matrice Compétences</button>
-        <button class="nav-btn" onclick="changerOnglet('pageBilan', this)" style="background:#9b59b6;">📝 8. Bilans</button>
+        <button class="nav-btn" onclick="changerOnglet('pageEtiquettes', this)" style="background:#8e44ad;">🏷️ 8. Étiquettes</button>
         <button class="nav-btn" onclick="changerOnglet('pageSave', this)" style="background:#e67e22;">💾 9. Sauvegarde</button>
     </div>
 
@@ -62,8 +61,44 @@
     <div id="modalSequences" class="modal-overlay no-print"><div class="modal-content"><h3 style="margin-top:0;">📑 Gérer les Séquences</h3><div id="listeSequencesModal" style="margin-bottom: 20px;"></div><button onclick="fermerModal('modalSequences')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:5px; cursor:pointer;">Fermer</button></div></div>
     <div id="modalCompetences" class="modal-overlay no-print"><div class="modal-content"><h3 style="margin-top:0;">🎯 Gérer les Compétences</h3><div id="listeCompetencesModal" style="margin-bottom: 20px;"></div><button onclick="fermerModal('modalCompetences')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:5px; cursor:pointer;">Fermer</button></div></div>
 
-    <!-- 1. SUIVI ELEVES -->
-    <div id="pageSuivi" class="page active">
+    <!-- 1. TABLEAU DE BORD VISUEL & EVALUATION RAPIDE -->
+    <div id="pageDashboard" class="page active">
+        <div class="panel">
+            <h2 style="color: #f39c12; margin-top:0;">📊 Tableau de bord & Évaluation rapide</h2>
+            
+            <div id="memoDashboardContainer" style="margin-bottom: 20px;">
+                <h3 style="color:#2c3e50; border-bottom: 2px solid #bdc3c7; padding-bottom:5px;">🧑‍🏫 Groupes de besoins & Ateliers dirigés (Automatique)</h3>
+                <div id="memoListContent"></div>
+
+                <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;" class="no-print">
+                    <button type="button" onclick="toggleAfficherArchives()" id="btnToggleArchives" style="background: #7f8c8d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">📂 Voir les archives (0)</button>
+                    <button type="button" onclick="viderArchives()" style="background: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">🗑️ Supprimer définitivement les archives</button>
+                </div>
+                <div id="zoneArchivesDashboard" style="display: none; background: #f8f9f9; border: 1px solid #bdc3c7; padding: 10px; border-radius: 5px; margin-top: 10px;">
+                    <h4 style="margin: 0 0 8px 0; color: #2c3e50; font-size: 13px;">Actions archivées (cliquez sur "Restaurer" en cas d'erreur) :</h4>
+                    <div id="listeArchivesContent"></div>
+                </div>
+
+                <h3 style="color:#2980b9; border-bottom: 2px solid #bdc3c7; padding-bottom:5px; margin-top: 25px;">💻 Ateliers Tablettes à préparer (Cumulés pour la classe)</h3>
+                <div id="tabletteListContent"></div>
+            </div>
+
+            <h3 style="color:#2c3e50; border-bottom: 2px solid #bdc3c7; padding-bottom:5px;">📋 Liste des élèves et avancement</h3>
+            <table style="width: 100%;">
+                <thead>
+                    <tr>
+                        <th style="width: 25%;">Élève</th>
+                        <th style="width: 55%;">Progression du Plan Actuel</th>
+                        <th style="width: 20%; text-align: center;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="tableDashboard"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 2. SUIVI ELEVES -->
+    <div id="pageSuivi" class="page">
         <div class="student-bar no-print">
             <strong>🧑‍🎓 Élève en cours :</strong>
             <select id="selectEleveProfile" onchange="chargerEleve()"><option value="">-- Sélectionner un élève --</option></select>
@@ -104,13 +139,15 @@
                     <button type="button" onclick="validerSelectionPlan()" style="background: #27ae60; color: white; font-weight: bold; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">🏁 Marquer comme TERMINÉ</button>
                 </div>
             </div>
-            <p style="font-size: 13px; color: #7f8c8d; margin-top:0;"><strong>Les numéros restent fixes.</strong> Cochez les activités terminées. Cliquez sur l'étoile ⭐ pour rendre une activité prioritaire.</p>
+            <p style="font-size: 13px; color: #7f8c8d; margin-top:0;"><strong>Les numéros restent fixes.</strong> Vous pouvez assigner un jour (L M J V) qui s'inscrira sur la fiche de l'élève.</p>
             <table>
                 <thead>
                     <tr>
                         <th style="width:30px; text-align:center;"><input type="checkbox" onchange="cocherToutPlan(this)"></th>
                         <th style="width:30px; text-align:center;">Prio</th>
-                        <th class="col-num">N°</th><th>Séquence / Leçon</th><th>Compétence</th><th>Ressource & Suivi</th><th style="width: 140px;">Action ind.</th>
+                        <th class="col-num">N°</th><th>Séquence / Leçon</th><th>Compétence</th><th>Ressource & Suivi</th>
+                        <th style="width: 120px; text-align:center;">📅 Prévu le</th>
+                        <th style="width: 140px;">Action ind.</th>
                     </tr>
                 </thead>
                 <tbody id="tableApercuPlan"></tbody>
@@ -132,7 +169,7 @@
         <div id="messageSelectEleve" style="text-align: center; padding: 40px; color: #7f8c8d;"><h2>Veuillez sélectionner ou créer un élève.</h2></div>
     </div>
 
-    <!-- 2. IMPRESSION FICHE -->
+    <!-- 3. IMPRESSION FICHE -->
     <div id="pageImpression" class="page">
         <div class="panel no-print" style="background: #eaf2f8; border: 1px solid #a9cce3; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; padding: 15px;">
             <div>
@@ -150,37 +187,6 @@
             </div>
         </div>
         <div id="containerFichesImpression"><div style="text-align: center; padding: 40px; color: #7f8c8d;" class="no-print"><h2>Veuillez sélectionner un élève ou l'option "Tous les élèves" ci-dessus.</h2></div></div>
-    </div>
-
-    <!-- 3. PROGRAMMATION ANNUELLE -->
-    <div id="pageProg" class="page">
-        <div class="panel">
-            <h2 style="color: #d35400; margin-top:0;">📅 Programmation Annuelle</h2>
-            <p style="font-size: 14px; color: #7f8c8d; margin-bottom: 20px;">
-                Associez vos compétences aux périodes de l'année. Les ateliers s'afficheront automatiquement au bon moment dans le plan de travail. Les compétences non cochées resteront disponibles via l'option "Toutes les périodes".
-            </p>
-            <div class="form-row" style="background: #fdfefe; padding: 15px; border-radius: 8px; border: 1px solid #d5dbdb; margin-bottom: 15px;">
-                <label style="font-weight: bold; margin-top: 8px;">Filtres d'affichage :</label>
-                <select id="progNiveau" onchange="afficherProgrammation()" style="flex: 1;"><option value="">-- Tous les niveaux --</option></select>
-                <select id="progMatiere" onchange="afficherProgrammation()" style="flex: 1;"><option value="">-- Toutes les matières --</option></select>
-            </div>
-            <div style="overflow-x: auto; max-height: 60vh;">
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead style="position: sticky; top: 0; background: #34495e; color: white;">
-                        <tr>
-                            <th style="padding: 10px;">Séquence</th>
-                            <th style="padding: 10px;">Compétence</th>
-                            <th style="width: 50px; text-align: center;">P1</th>
-                            <th style="width: 50px; text-align: center;">P2</th>
-                            <th style="width: 50px; text-align: center;">P3</th>
-                            <th style="width: 50px; text-align: center;">P4</th>
-                            <th style="width: 50px; text-align: center;">P5</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableProg"></tbody>
-                </table>
-            </div>
-        </div>
     </div>
 
     <!-- 4. BASE DE DONNÉES -->
@@ -229,13 +235,21 @@
                     <div style="flex: 1; display: flex; flex-direction: column;">
                         <input type="text" id="addSymbole" placeholder="8. Numéro d'atelier" style="width: 100%;">
                     </div>
+                    <!-- NOUVEAU : Niveau de difficulté -->
+                    <div style="flex: 1; display: flex; flex-direction: column;">
+                        <select id="addDifficulte" style="padding: 8px; border-radius: 4px; border: 1px solid #bdc3c7; height: 100%;">
+                            <option value="1">⭐ (Faible)</option>
+                            <option value="2">⭐⭐ (Moyen)</option>
+                            <option value="3">⭐⭐⭐ (Fort)</option>
+                        </select>
+                    </div>
                 </div>
                 <div style="margin-bottom: 15px; background: white; padding: 10px; border-radius: 5px; border: 1px solid #ccc;">
                     <label style="font-size: 13px; font-weight: bold; color: #7f8c8d; text-transform: uppercase; display: block; margin-bottom: 5px;">9. Nombre de personne(s) :</label>
                     <div style="display: flex; gap: 20px; flex-wrap: wrap; font-size: 16px;">
                         <label><input type="checkbox" class="cb-pers-form" value="👤"> 👤 Seul</label>
                         <label><input type="checkbox" class="cb-pers-form" value="👥"> 👥 Binôme/Petit groupe</label>
-                        <label><input type="checkbox" class="cb-pers-form" value="👨‍👩‍👧"> 👨‍‍👩‍👧 Collectif</label>
+                        <label><input type="checkbox" class="cb-pers-form" value="👨‍👩‍👧"> 👨‍👩‍👧 Collectif</label>
                     </div>
                 </div>
                 <div class="form-row" style="background: white; padding: 10px; border-radius: 5px; align-items: center;">
@@ -276,7 +290,66 @@
         </div>
     </div>
 
-    <!-- 5. ETIQUETTES -->
+    <!-- 5. PROGRAMMATION ANNUELLE -->
+    <div id="pageProg" class="page">
+        <div class="panel">
+            <h2 style="color: #d35400; margin-top:0;">📅 Programmation Annuelle</h2>
+            <p style="font-size: 14px; color: #7f8c8d; margin-bottom: 20px;">
+                Associez vos compétences aux périodes de l'année. Les ateliers s'afficheront automatiquement au bon moment dans le plan de travail. Les compétences non cochées resteront disponibles via l'option "Toutes les périodes".
+            </p>
+            <div class="form-row" style="background: #fdfefe; padding: 15px; border-radius: 8px; border: 1px solid #d5dbdb; margin-bottom: 15px;">
+                <label style="font-weight: bold; margin-top: 8px;">Filtres d'affichage :</label>
+                <select id="progNiveau" onchange="afficherProgrammation()" style="flex: 1;"><option value="">-- Tous les niveaux --</option></select>
+                <select id="progMatiere" onchange="afficherProgrammation()" style="flex: 1;"><option value="">-- Toutes les matières --</option></select>
+            </div>
+            <div style="overflow-x: auto; max-height: 60vh;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead style="position: sticky; top: 0; background: #34495e; color: white;">
+                        <tr>
+                            <th style="padding: 10px;">Séquence</th>
+                            <th style="padding: 10px;">Compétence</th>
+                            <th style="width: 50px; text-align: center;">P1</th>
+                            <th style="width: 50px; text-align: center;">P2</th>
+                            <th style="width: 50px; text-align: center;">P3</th>
+                            <th style="width: 50px; text-align: center;">P4</th>
+                            <th style="width: 50px; text-align: center;">P5</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableProg"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 6. BILANS ELEVES -->
+    <div id="pageBilan" class="page">
+        <div class="panel no-print" style="margin-bottom: 20px;">
+            <h2 style="margin:0 0 15px 0; color: #9b59b6;">📝 Éditer un Bilan d'Élève (Évaluations & Positions A / PA / NA)</h2>
+            <div style="display:flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+                <select id="selectEleveBilan" onchange="genererBilanEleve()"><option value="">-- Choisir un élève --</option></select>
+                <button class="btn-print" onclick="window.print()" style="background: #9b59b6; padding: 10px;">🖨️ Imprimer le bilan</button>
+            </div>
+        </div>
+        <div id="zoneBilanPrint" style="background: white; padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 400px;">
+            <h3 style="text-align: center; color: #7f8c8d; margin-top: 50px;">Sélectionnez un élève pour générer son bilan des évaluations.</h3>
+        </div>
+    </div>
+
+    <!-- 7. MATRICE COMPÉTENCES -->
+    <div id="pageMatrice" class="page">
+        <div class="panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h2 style="margin:0; color: #16a085;">🧮 Matrice des Compétences</h2>
+                <button class="btn-print" onclick="window.print()" style="background: #16a085; padding: 10px;">🖨️ Imprimer la matrice</button>
+            </div>
+            <p style="font-size: 13px; color: #7f8c8d;">Vue croisée des élèves et des compétences validées dans l'historique.</p>
+            <div style="overflow-x: auto; max-height: 70vh;">
+                <table class="matrice-table" id="tableMatrice"></table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 8. ETIQUETTES -->
     <div id="pageEtiquettes" class="page">
         <div class="panel no-print">
             <h2 style="color: #8e44ad;">🏷️ Studio d'impression d'Étiquettes</h2>
@@ -315,70 +388,6 @@
             </div>
         </div>
         <div id="printEtiquettesContainer" style="display: flex; flex-wrap: wrap; align-content: flex-start; background: white; border: 1px dashed #bdc3c7; min-height: 200px;"></div>
-    </div>
-
-    <!-- 6. TABLEAU DE BORD VISUEL & EVALUATION RAPIDE -->
-    <div id="pageDashboard" class="page">
-        <div class="panel">
-            <h2 style="color: #f39c12; margin-top:0;">📊 Tableau de bord & Évaluation rapide</h2>
-            
-            <div id="memoDashboardContainer" style="margin-bottom: 20px;">
-                <h3 style="color:#2c3e50; border-bottom: 2px solid #bdc3c7; padding-bottom:5px;">🧑‍🏫 Groupes de besoins & Ateliers dirigés (Automatique)</h3>
-                <div id="memoListContent"></div>
-
-                <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;" class="no-print">
-                    <button type="button" onclick="toggleAfficherArchives()" id="btnToggleArchives" style="background: #7f8c8d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">📂 Voir les archives (0)</button>
-                    <button type="button" onclick="viderArchives()" style="background: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">🗑️ Supprimer définitivement les archives</button>
-                </div>
-                <div id="zoneArchivesDashboard" style="display: none; background: #f8f9f9; border: 1px solid #bdc3c7; padding: 10px; border-radius: 5px; margin-top: 10px;">
-                    <h4 style="margin: 0 0 8px 0; color: #2c3e50; font-size: 13px;">Actions archivées (cliquez sur "Restaurer" en cas d'erreur) :</h4>
-                    <div id="listeArchivesContent"></div>
-                </div>
-
-                <h3 style="color:#2980b9; border-bottom: 2px solid #bdc3c7; padding-bottom:5px; margin-top: 25px;">💻 Ateliers Tablettes à préparer (Cumulés pour la classe)</h3>
-                <div id="tabletteListContent"></div>
-            </div>
-
-            <h3 style="color:#2c3e50; border-bottom: 2px solid #bdc3c7; padding-bottom:5px;">📋 Liste des élèves et avancement</h3>
-            <table style="width: 100%;">
-                <thead>
-                    <tr>
-                        <th style="width: 25%;">Élève</th>
-                        <th style="width: 55%;">Progression du Plan Actuel</th>
-                        <th style="width: 20%; text-align: center;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="tableDashboard"></tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- 7. MATRICE COMPÉTENCES -->
-    <div id="pageMatrice" class="page">
-        <div class="panel">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <h2 style="margin:0; color: #16a085;">🧮 Matrice des Compétences</h2>
-                <button class="btn-print" onclick="window.print()" style="background: #16a085; padding: 10px;">🖨️ Imprimer la matrice</button>
-            </div>
-            <p style="font-size: 13px; color: #7f8c8d;">Vue croisée des élèves et des compétences validées dans l'historique.</p>
-            <div style="overflow-x: auto; max-height: 70vh;">
-                <table class="matrice-table" id="tableMatrice"></table>
-            </div>
-        </div>
-    </div>
-
-    <!-- 8. BILANS ELEVES -->
-    <div id="pageBilan" class="page">
-        <div class="panel no-print" style="margin-bottom: 20px;">
-            <h2 style="margin:0 0 15px 0; color: #9b59b6;">📝 Éditer un Bilan d'Élève (Évaluations & Positions A / PA / NA)</h2>
-            <div style="display:flex; gap: 15px; align-items: center; flex-wrap: wrap;">
-                <select id="selectEleveBilan" onchange="genererBilanEleve()"><option value="">-- Choisir un élève --</option></select>
-                <button class="btn-print" onclick="window.print()" style="background: #9b59b6; padding: 10px;">🖨️ Imprimer le bilan</button>
-            </div>
-        </div>
-        <div id="zoneBilanPrint" style="background: white; padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 400px;">
-            <h3 style="text-align: center; color: #7f8c8d; margin-top: 50px;">Sélectionnez un élève pour générer son bilan des évaluations.</h3>
-        </div>
     </div>
 
     <!-- 9. SAUVEGARDE & DRIVE -->
