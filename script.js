@@ -1,5 +1,5 @@
 // ==========================================
-// 1. SETUP, CONSTANTES ET COULEURS MATIÈRES
+// SCRIPT COMPLET & SÉCURISÉ - GESTION DE CLASSE
 // ==========================================
 function escJS(str) { return (str || "").toString().replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
 function escHTML(str) { return (str || "").toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); }
@@ -428,7 +428,6 @@ function tenterConnexionAuto() {
         gapi.load('client', () => { gapi.client.init({ apiKey: API_KEY, discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/drive/v3/rest"] }).then(() => { driveAccessToken = cache.token; let btnConn = document.getElementById('btnConnectDrive'); if(btnConn) btnConn.innerText = "✅ Connecté (Auto)"; rechercherFichierSauvegarde(false); lancerSurveillanceExpirationSession(cache.expiresAt); }); });
     }
 }
-
 // ==========================================
 // GESTION DES ELEVES & SEMAINES
 // ==========================================
