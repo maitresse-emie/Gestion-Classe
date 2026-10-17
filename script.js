@@ -1,5 +1,5 @@
 // ==========================================
-// 1. SETUP, CONSTANTES ET UTILITAIRES DE BASE
+// 1. SETUP, CONSTANTES ET COULEURS MATIÈRES
 // ==========================================
 function escJS(str) { return (str || "").toString().replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
 function escHTML(str) { return (str || "").toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); }
@@ -9,11 +9,17 @@ const KEY_ELEVES = 'mesEleves_Finale';
 const KEY_IMAGES = 'mesImagesTypes_Finale';
 const KEY_ARCHIVES_TODO = 'dashboardArchives_Finale';
 const KEY_PROG = 'mesProgrammations_Finale';
+const KEY_THEME = 'monThemeVisuel_Finale';
 
 let dashboardExpanded = new Set(); 
 let dashboardArchives = JSON.parse(localStorage.getItem(KEY_ARCHIVES_TODO)) || [];
 let afficherArchivesMode = false;
 let programmations = JSON.parse(localStorage.getItem(KEY_PROG)) || {};
+
+let dateGlobaleDebutISO = "";
+let dateGlobaleDebutFR = "";
+let dateGlobaleFinFR = "";
+let filtreEtoilesDispo = 0; // 0 = Toutes, 1 = ⭐, 2 = ⭐⭐, 3 = ⭐⭐⭐
 
 let imagesParType = JSON.parse(localStorage.getItem(KEY_IMAGES));
 if (!imagesParType) {
@@ -38,7 +44,135 @@ if (!baseDonnees || !Array.isArray(baseDonnees)) { baseDonnees = []; }
 let eleves = JSON.parse(localStorage.getItem(KEY_ELEVES));
 if (!eleves) { eleves = {}; }
 
-function sauvegarderEleves() { localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves)); declencherAutoSaveDrive(); }
+// Code couleur strict par matière pour les titres et bandeaux de séquences
+function getCouleurMatiereBandeau(matiere) {
+    let m = (matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (m.includes("francais") || m.includes("lecture") || m.includes("grammaire") || m.includes("orthographe") || m.includes("conjugaison") || m.includes("lexique") || m.includes("ecriture")) {
+        return { bg: "#1b4f72", text: "#ffffff", border: "#154360" }; // Bleu foncé (Français)
+    }
+    if (m.includes("math") || m.includes("numeration") || m.includes("calcul") || m.includes("geometrie") || m.includes("mesure")) {
+        return { bg: "#c0392b", text: "#ffffff", border: "#922b21" }; // Rouge (Mathématiques)
+    }
+    if (m.includes("art") || m.includes("musique") || m.includes("chant") || m.includes("poesie")) {
+        return { bg: "#795548", text: "#ffffff", border: "#5d4037" }; // Marron (Arts)
+    }
+    if (m.includes("eps") || m.includes("sport") || m.includes("physique") || m.includes("motricite")) {
+        return { bg: "#e67e22", text: "#ffffff", border: "#d35400" }; // Orange (EPS)
+    }
+    if (m.includes("histoire") || m.includes("geographie") || m.includes("espace") || m.includes("temps")) {
+        return { bg: "#5dade2", text: "#ffffff", border: "#2e86c1" }; // Bleu clair (Histoire-Géo)
+    }
+    if (m.includes("science") || m.includes("techno") || m.includes("vivant") || m.includes("matiere") || m.includes("monde")) {
+        return { bg: "#27ae60", text: "#ffffff", border: "#1e8449" }; // Vert (Sciences et Technologie)
+    }
+    if (m.includes("anglais") || m.includes("langue") || m.includes("allemand") || m.includes("espagnol")) {
+        return { bg: "#e84393", text: "#ffffff", border: "#c2185b" }; // Rose (Langues étrangères)
+    }
+    if (m.includes("emc") || m.includes("moral") || m.includes("civique") || m.includes("citoyen")) {
+        return { bg: "#8e44ad", text: "#ffffff", border: "#6c3483" }; // Violet (EMC)
+    }
+    return { bg: "#eaeded", text: "#2c3e50", border: "#bdc3c7" }; // Neutre par défaut
+}
+
+function calculerVendrediDepuisISO(dateISO) {
+    if (!dateISO) return { debutFR: "", finFR: "", finISO: "", lundiSuivantISO: "" };
+    const parts = dateISO.split('-').map(Number);
+    if (parts.length !== 3) return { debutFR: "", finFR: "", finISO: "", lundiSuivantISO: "" };
+    const dtDebut = new Date(parts[0], parts[1] - 1, parts[2]);
+    const day = dtDebut.getDay();
+    let diffVendredi = (5 - day + 7) % 7;
+    if (diffVendredi === 0) diffVendredi = 7;
+    const dtFin = new Date(dtDebut);
+    dtFin.setDate(dtDebut.getDate() + diffVendredi);
+
+    let diffLundiSuivant = (8 - day) % 7;
+    if (diffLundiSuivant === 0) diffLundiSuivant = 7;
+    const dtLundiSuiv = new Date(dtDebut);
+    dtLundiSuiv.setDate(dtDebut.getDate() + diffLundiSuivant);
+
+    const fmtFR = (d) => String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0');
+    const fmtISO = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    return { debutFR: fmtFR(dtDebut), finFR: fmtFR(dtFin), finISO: fmtISO(dtFin), lundiSuivantISO: fmtISO(dtLundiSuiv) };
+}
+
+function assurerStructureSemaines(e) {
+    if (!e) return;
+    if (!e.maxAteliers) e.maxAteliers = 15;
+    if (e.maxTablettes === undefined) e.maxTablettes = 2;
+    if (!e.niveau) e.niveau = "CP";
+    if (!e.suivi) e.suivi = {};
+    if (!e.valides) e.valides = {};
+    if (!e.planHebdo || !Array.isArray(e.planHebdo)) e.planHebdo = [];
+    if (!e.enAttente || !Array.isArray(e.enAttente)) e.enAttente = [];
+    if (!e.historique || !Array.isArray(e.historique)) e.historique = [];
+    if (!e.masquees || !Array.isArray(e.masquees)) e.masquees = [];
+    if (!e.priorites) e.priorites = [];
+    if (!e.bilanEvaluations) e.bilanEvaluations = {};
+    if (!e.joursAssignes) e.joursAssignes = {};
+    if (!e.dateDebutISO) e.dateDebutISO = "";
+    if (!e.dateDebut) e.dateDebut = "";
+    if (!e.dateFin) e.dateFin = "";
+
+    if (!e.semaines || !Array.isArray(e.semaines) || e.semaines.length === 0) {
+        e.semaines = [{
+            id: 'sem_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+            dateDebutISO: e.dateDebutISO || "",
+            dateDebut: e.dateDebut || "",
+            dateFin: e.dateFin || "",
+            planHebdo: [...e.planHebdo],
+            priorites: [...e.priorites],
+            joursAssignes: { ...e.joursAssignes },
+            valides: { ...e.valides },
+            suivi: JSON.parse(JSON.stringify(e.suivi || {}))
+        }];
+        e.semaineIndex = 0;
+    }
+    if (e.semaineIndex === undefined || e.semaineIndex < 0 || e.semaineIndex >= e.semaines.length) {
+        e.semaineIndex = 0;
+    }
+}
+
+function syncEleveVersSemaineActive(e) {
+    if (!e) return;
+    assurerStructureSemaines(e);
+    let idx = e.semaineIndex || 0;
+    if (!e.semaines[idx]) idx = 0;
+    e.semaines[idx].planHebdo = [...(e.planHebdo || [])];
+    e.semaines[idx].priorites = [...(e.priorites || [])];
+    e.semaines[idx].joursAssignes = { ...(e.joursAssignes || {}) };
+    e.semaines[idx].valides = { ...(e.valides || {}) };
+    e.semaines[idx].suivi = JSON.parse(JSON.stringify(e.suivi || {}));
+    e.semaines[idx].dateDebutISO = e.dateDebutISO || "";
+    e.semaines[idx].dateDebut = e.dateDebut || "";
+    e.semaines[idx].dateFin = e.dateFin || "";
+}
+
+function chargerSemaineDepuisIndex(e, nouvelIndex) {
+    if (!e) return;
+    syncEleveVersSemaineActive(e);
+    let idx = parseInt(nouvelIndex);
+    if (isNaN(idx) || idx < 0 || idx >= e.semaines.length) idx = 0;
+    e.semaineIndex = idx;
+    let s = e.semaines[idx];
+    e.planHebdo = [...(s.planHebdo || [])];
+    e.priorites = [...(s.priorites || [])];
+    e.joursAssignes = { ...(s.joursAssignes || {}) };
+    e.valides = { ...(s.valides || {}) };
+    // Fusionner le suivi pour ne jamais perdre le statut "à revoir / à refaire" d'une semaine sur l'autre
+    e.suivi = { ...(e.suivi || {}), ...(s.suivi || {}) };
+    e.dateDebutISO = s.dateDebutISO || "";
+    e.dateDebut = s.dateDebut || "";
+    e.dateFin = s.dateFin || "";
+}
+
+Object.values(eleves).forEach(e => assurerStructureSemaines(e));
+localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves));
+
+function sauvegarderEleves() {
+    Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
+    localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves));
+    declencherAutoSaveDrive();
+}
 function sauvegarderBase() { localStorage.setItem(KEY_ATELIERS, JSON.stringify(baseDonnees)); declencherAutoSaveDrive(); }
 function sauvegarderProgrammations() { localStorage.setItem(KEY_PROG, JSON.stringify(programmations)); declencherAutoSaveDrive(); }
 
@@ -93,26 +227,23 @@ function majSelectCouleursRapides(valeurForcee) {
     select.innerHTML = optionsHtml; if (valeurForcee) select.value = valeurForcee;
 }
 
-Object.values(eleves).forEach(e => { 
-    if(!e.maxAteliers) e.maxAteliers = 15; if(e.maxTablettes === undefined) e.maxTablettes = 2; if(!e.niveau) e.niveau = "CP";
-    if(!e.suivi) e.suivi = {}; if(!e.valides) e.valides = {}; if(!e.planHebdo || !Array.isArray(e.planHebdo)) e.planHebdo = [];
-    if(!e.enAttente || !Array.isArray(e.enAttente)) e.enAttente = []; if(!e.historique || !Array.isArray(e.historique)) e.historique = [];
-    if(!e.masquees || !Array.isArray(e.masquees)) e.masquees = []; if(!e.priorites) e.priorites = [];
-    if(!e.bilanEvaluations) e.bilanEvaluations = {}; if(!e.joursAssignes) e.joursAssignes = {};
-});
-localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves));
-
 let idEleveCourant = null; let idEleveImpressionCourant = null;
 let filtreCourantDB = 'Tous'; let filtreCourantMatiere = 'Toutes'; let filtreCourantTypeDB = 'Tous';
 let idEnCoursEdition = null; let couleurManuelleModifiee = false; let isFormLoading = false;
 let dernierNiveauForm = []; let derniereMatiereForm = ""; let derniereSequenceForm = ""; let derniereCompForm = "";
 
-function getListeTrie(idsArray, priosArray = []) {
+// Tri du plan : place en priorité absolue les activités "à revoir / à refaire" et les étoiles ⭐
+function getListeTrie(idsArray, priosArray = [], suiviObj = {}) {
     if (!idsArray) return [];
     let planObjects = idsArray.map(id => baseDonnees.find(b => b.id === id)).filter(Boolean);
     planObjects.sort((a, b) => {
-        let prioA = priosArray.includes(a.id) ? 1 : 0; let prioB = priosArray.includes(b.id) ? 1 : 0;
+        let remA = (suiviObj && suiviObj[a.id] && (suiviObj[a.id].statut === 'a_revoir' || suiviObj[a.id].statut === 'a_refaire')) ? 1 : 0;
+        let remB = (suiviObj && suiviObj[b.id] && (suiviObj[b.id].statut === 'a_revoir' || suiviObj[b.id].statut === 'a_refaire')) ? 1 : 0;
+        let prioA = (priosArray.includes(a.id) || remA) ? 1 : 0;
+        let prioB = (priosArray.includes(b.id) || remB) ? 1 : 0;
         if (prioA !== prioB) return prioB - prioA;
+        if (remA !== remB) return remB - remA;
+
         let matA = nettoyerNomPourTri(a.matiere); let matB = nettoyerNomPourTri(b.matiere);
         if (matA !== matB) return matA.localeCompare(matB, 'fr');
         let sA = (a.sequence || "").trim(); let sB = (b.sequence || "").trim();
@@ -134,8 +265,19 @@ function getElevesTries() {
 }
 
 // ==========================================
-// 2. UI, TOASTS ET OUTILS VISUELS
+// 2. UI, THÈMES VISUELS ET OUTILS
 // ==========================================
+function appliquerThemeVisuel(nomTheme) {
+    document.body.classList.remove('theme-pastel', 'theme-doodles', 'theme-nature');
+    if (nomTheme === 'pastel') document.body.classList.add('theme-pastel');
+    if (nomTheme === 'doodles') document.body.classList.add('theme-doodles');
+    if (nomTheme === 'nature') document.body.classList.add('theme-nature');
+    localStorage.setItem(KEY_THEME, nomTheme || 'classique');
+    document.querySelectorAll('.theme-card').forEach(c => c.classList.remove('active-theme'));
+    let activeCard = document.getElementById('card_theme_' + (nomTheme || 'classique'));
+    if (activeCard) activeCard.classList.add('active-theme');
+}
+
 function showToast(message, type = 'success') {
     const container = document.getElementById('toast-container'); if(!container) return;
     const toast = document.createElement('div'); toast.className = `toast ${type}`; toast.innerText = message;
@@ -250,13 +392,10 @@ function telechargerDepuisDrive(fileId) {
             if(data.images) imagesParType = data.images;
             if(data.programmations) { programmations = data.programmations; localStorage.setItem(KEY_PROG, JSON.stringify(programmations)); }
             if(data.archives) { dashboardArchives = data.archives; localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); }
+            if(data.theme) { appliquerThemeVisuel(data.theme); }
             
-            localStorage.setItem(KEY_ATELIERS, JSON.stringify(baseDonnees)); localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves)); localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
-            
-            Object.values(eleves).forEach(e => { 
-                if(!e.maxAteliers) e.maxAteliers = 15; if(e.maxTablettes === undefined) e.maxTablettes = 2; if(!e.niveau) e.niveau = "CP";
-                if(!e.suivi) e.suivi = {}; if(!e.valides) e.valides = {}; if(!e.planHebdo) e.planHebdo = []; if(!e.enAttente) e.enAttente = []; if(!e.historique) e.historique = []; if(!e.masquees) e.masquees = []; if(!e.priorites) e.priorites = []; if(!e.bilanEvaluations) e.bilanEvaluations = {}; if(!e.joursAssignes) e.joursAssignes = {};
-            });
+            localStorage.setItem(KEY_ATELIERS, JSON.stringify(baseDonnees)); localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
+            Object.values(eleves).forEach(e => assurerStructureSemaines(e));
             localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves));
             
             postEditGlobal(); majListeEleves(); initialiserSelectsFormulaire(); afficherChoixEtiquettes(); majSelectCouleursRapides(); rafraichirDashboard();
@@ -267,7 +406,8 @@ function telechargerDepuisDrive(fileId) {
 
 function sauvegarderVersDriveFichierUnique() {
     if(!driveAccessToken) return;
-    const data = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations };
+    Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
+    const data = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, theme: localStorage.getItem(KEY_THEME) || 'pastel' };
     const fileBlob = new Blob([JSON.stringify(data)], { type: 'application/json' }); const metadata = { 'name': 'Sauvegarde_Classe.json', 'mimeType': 'application/json' }; const form = new FormData();
     form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' })); form.append('file', fileBlob);
     let url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart'; let method = 'POST';
@@ -293,14 +433,28 @@ function tenterConnexionAuto() {
 }
 
 // ==========================================
-// 4. GESTION DES ELEVES & ASSIGNATIONS
+// 4. GESTION DES ELEVES, SEMAINES & DATES
 // ==========================================
 function majListeEleves() {
     const select = document.getElementById('selectEleveProfile'); const selectImp = document.getElementById('selectEleveImpression'); const selectBilan = document.getElementById('selectEleveBilan');
-    let optHtml = '<option value="">-- Sélectionner un élève --</option>'; let optImp = '<option value="">-- Choisir un élève --</option><option value="TOUS_ELEVES">-- 📚 TOUS les élèves --</option>';
+    let optHtml = '<option value="">-- Sélectionner un élève --</option>'; 
+    let optImp = '<option value="">-- Choisir un élève ou un groupe --</option>' +
+        '<option value="TOUS_ELEVES">📚 TOUS les élèves de la classe</option>' +
+        '<option value="NIVEAU_CP">📘 Tous les CP</option>' +
+        '<option value="NIVEAU_CE1">📘 Tous les CE1</option>' +
+        '<option value="NIVEAU_CE2">📘 Tous les CE2</option>' +
+        '<option value="NIVEAU_CM1">📘 Tous les CM1</option>' +
+        '<option value="NIVEAU_CM2">📘 Tous les CM2</option>';
+    let optBilan = '<option value="">-- Choisir un élève --</option>';
+
     let elevesTries = getElevesTries();
-    elevesTries.forEach(e => { let labelNiv = `[${e.niveau || "CP"}] ${e.nom}`; optHtml += `<option value="${e.id}">${escHTML(labelNiv)}</option>`; optImp += `<option value="${e.id}">${escHTML(labelNiv)}</option>`; });
-    if (select) select.innerHTML = optHtml; if (selectImp) selectImp.innerHTML = optImp; if (selectBilan) selectBilan.innerHTML = optImp;
+    elevesTries.forEach(e => { 
+        let labelNiv = `[${e.niveau || "CP"}] ${e.nom}`;
+        optHtml += `<option value="${e.id}">${escHTML(labelNiv)}</option>`; 
+        optImp += `<option value="${e.id}">${escHTML(labelNiv)}</option>`; 
+        optBilan += `<option value="${e.id}">${escHTML(labelNiv)}</option>`; 
+    });
+    if (select) select.innerHTML = optHtml; if (selectImp) selectImp.innerHTML = optImp; if (selectBilan) selectBilan.innerHTML = optBilan;
     
     let btnEdit = document.getElementById('btnEditEleve');
     if(idEleveCourant && eleves[idEleveCourant]) { 
@@ -309,7 +463,7 @@ function majListeEleves() {
         if (inputMax) inputMax.value = eleves[idEleveCourant].maxAteliers || 15; if (inputMaxTab) inputMaxTab.value = eleves[idEleveCourant].maxTablettes ?? 2; if (maxAff) maxAff.innerText = eleves[idEleveCourant].maxAteliers || 15; 
     } else { if (btnEdit) btnEdit.style.display = "none"; }
     if(idEleveCourant && !idEleveImpressionCourant) { idEleveImpressionCourant = idEleveCourant; }
-    if(idEleveImpressionCourant) { if (selectImp) selectImp.value = idEleveImpressionCourant; if (selectBilan) selectBilan.value = idEleveImpressionCourant; }
+    if(idEleveImpressionCourant) { if (selectImp) selectImp.value = idEleveImpressionCourant; if (selectBilan && eleves[idEleveImpressionCourant]) selectBilan.value = idEleveImpressionCourant; }
 }
 
 function modifierMaxAteliersEleve() { if(!idEleveCourant) return; let val = parseInt(document.getElementById('inputMaxAteliersEleve').value); if(isNaN(val) || val < 1) val = 1; if(val > 25) val = 25; eleves[idEleveCourant].maxAteliers = val; sauvegarderEleves(); let maxAff = document.getElementById('maxAteliersAffiche'); if(maxAff) maxAff.innerText = val; }
@@ -318,7 +472,8 @@ function modifierMaxTablettesEleve() { if(!idEleveCourant) return; let val = par
 function creerEleve() { 
     const nomInput = document.getElementById('nouvelEleveNom'); const nivSelect = document.getElementById('nouvelEleveNiveau'); if(!nomInput) return;
     const nom = nomInput.value.trim(); if(!nom) return; const niveau = nivSelect ? nivSelect.value : "CP"; const id = 'eleve_' + Date.now(); 
-    eleves[id] = { id: id, nom: nom, niveau: niveau, planHebdo: [], enAttente: [], historique: [], masquees: [], priorites: [], maxAteliers: 15, maxTablettes: 2, suivi: {}, valides: {}, bilanEvaluations: {}, joursAssignes: {} }; 
+    eleves[id] = { id: id, nom: nom, niveau: niveau, planHebdo: [], enAttente: [], historique: [], masquees: [], priorites: [], maxAteliers: 15, maxTablettes: 2, suivi: {}, valides: {}, bilanEvaluations: {}, joursAssignes: {}, dateDebutISO: "", dateDebut: "", dateFin: "" }; 
+    assurerStructureSemaines(eleves[id]);
     sauvegarderEleves(); nomInput.value = ''; majListeInstantaneeEleve(id); rafraichirDashboard(); 
 }
 
@@ -338,14 +493,140 @@ function validerEditionEleve() {
 
 function supprimerEleve() { if(!idEleveCourant) return; if(confirm("Supprimer définitivement cet élève ?")) { delete eleves[idEleveCourant]; idEleveCourant = null; idEleveImpressionCourant = null; sauvegarderEleves(); majListeEleves(); chargerEleve(); rafraichirDashboard(); } }
 
+function majBarreSemainesUI() {
+    if (!idEleveCourant || !eleves[idEleveCourant]) return;
+    let e = eleves[idEleveCourant];
+    assurerStructureSemaines(e);
+    syncEleveVersSemaineActive(e);
+
+    const sel = document.getElementById('selectSemaineEleve');
+    if (sel) {
+        let html = '';
+        e.semaines.forEach((s, idx) => {
+            let datesTxt = (s.dateDebut && s.dateFin) ? ` (du ${s.dateDebut} au ${s.dateFin})` : '';
+            let tag = idx === 0 ? ' [En cours]' : ' [D\'avance]';
+            html += `<option value="${idx}">Semaine ${idx + 1}${datesTxt} — ${s.planHebdo.length} act.${tag}</option>`;
+        });
+        sel.innerHTML = html;
+        sel.value = e.semaineIndex;
+    }
+
+    const btnSuppr = document.getElementById('btnSupprimerSemaine');
+    if (btnSuppr) btnSuppr.style.display = e.semaines.length > 1 ? 'inline-block' : 'none';
+
+    const inputDate = document.getElementById('dateDebutSemaineInput');
+    const spanFin = document.getElementById('dateFinSemaineAffiche');
+    if (inputDate) inputDate.value = e.dateDebutISO || "";
+    if (spanFin) spanFin.innerText = e.dateFin ? `➔ au Vendredi ${e.dateFin}` : "➔ Vendredi : --/--";
+
+    const labelTitre = document.getElementById('labelSemaineTitre');
+    if (labelTitre) {
+        let infoD = (e.dateDebut && e.dateFin) ? ` du ${e.dateDebut} au ${e.dateFin}` : "";
+        labelTitre.innerText = `Semaine ${e.semaineIndex + 1}${infoD}`;
+    }
+}
+
+function appliquerDateDebutSemaine(dateISO) {
+    if (!idEleveCourant || !eleves[idEleveCourant]) return;
+    let e = eleves[idEleveCourant];
+    let res = calculerVendrediDepuisISO(dateISO);
+    e.dateDebutISO = dateISO || "";
+    e.dateDebut = res.debutFR;
+    e.dateFin = res.finFR;
+    dateGlobaleDebutISO = e.dateDebutISO;
+    dateGlobaleDebutFR = e.dateDebut;
+    dateGlobaleFinFR = e.dateFin;
+    sauvegarderEleves();
+    majBarreSemainesUI();
+}
+
+function changerSemaineActive(nouvelIndex) {
+    if (!idEleveCourant || !eleves[idEleveCourant]) return;
+    let e = eleves[idEleveCourant];
+    chargerSemaineDepuisIndex(e, nouvelIndex);
+    sauvegarderEleves();
+    majBarreSemainesUI();
+    afficherPlanHebdo();
+    if (document.getElementById('selectSequence') && document.getElementById('selectSequence').value) afficherRessourcesDisponibles();
+    rafraichirDashboard();
+}
+
+function ajouterSemaineAvance() {
+    if (!idEleveCourant || !eleves[idEleveCourant]) return;
+    let e = eleves[idEleveCourant];
+    syncEleveVersSemaineActive(e);
+    let derniereSem = e.semaines[e.semaines.length - 1];
+    let nouvDebutISO = ""; let nouvDebutFR = ""; let nouvFinFR = "";
+    if (derniereSem && derniereSem.dateDebutISO) {
+        let calcPrec = calculerVendrediDepuisISO(derniereSem.dateDebutISO);
+        if (calcPrec.lundiSuivantISO) {
+            nouvDebutISO = calcPrec.lundiSuivantISO;
+            let calcNouv = calculerVendrediDepuisISO(nouvDebutISO);
+            nouvDebutFR = calcNouv.debutFR;
+            nouvFinFR = calcNouv.finFR;
+        }
+    }
+    // Intégrer automatiquement en priorité les exercices en attente (à revoir / à refaire) dans la nouvelle semaine préparée
+    let planInitial = [...(e.enAttente || [])];
+    let priosInitiales = [...(e.enAttente || [])];
+    e.enAttente = [];
+
+    e.semaines.push({
+        id: 'sem_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        dateDebutISO: nouvDebutISO,
+        dateDebut: nouvDebutFR,
+        dateFin: nouvFinFR,
+        planHebdo: planInitial,
+        priorites: priosInitiales,
+        joursAssignes: {},
+        valides: {},
+        suivi: JSON.parse(JSON.stringify(e.suivi || {}))
+    });
+    chargerSemaineDepuisIndex(e, e.semaines.length - 1);
+    sauvegarderEleves();
+    majBarreSemainesUI();
+    afficherPlanHebdo();
+    if (document.getElementById('selectSequence') && document.getElementById('selectSequence').value) afficherRessourcesDisponibles();
+    showToast(`Semaine ${e.semaines.length} créée (avec ${planInitial.length} atelier(s) prioritaire(s) reporté(s)) !`, "success");
+}
+
+function supprimerSemaineActive() {
+    if (!idEleveCourant || !eleves[idEleveCourant]) return;
+    let e = eleves[idEleveCourant];
+    if (e.semaines.length <= 1) return;
+    if (confirm(`Supprimer la Semaine ${e.semaineIndex + 1} préparée pour ${e.nom} ?`)) {
+        e.semaines.splice(e.semaineIndex, 1);
+        let nouvIdx = Math.max(0, e.semaineIndex - 1);
+        let s = e.semaines[nouvIdx];
+        e.semaineIndex = nouvIdx;
+        e.planHebdo = [...(s.planHebdo || [])];
+        e.priorites = [...(s.priorites || [])];
+        e.joursAssignes = { ...(s.joursAssignes || {}) };
+        e.valides = { ...(s.valides || {}) };
+        e.suivi = { ...(e.suivi || {}), ...(s.suivi || {}) };
+        e.dateDebutISO = s.dateDebutISO || "";
+        e.dateDebut = s.dateDebut || "";
+        e.dateFin = s.dateFin || "";
+        sauvegarderEleves();
+        majBarreSemainesUI();
+        afficherPlanHebdo();
+        if (document.getElementById('selectSequence') && document.getElementById('selectSequence').value) afficherRessourcesDisponibles();
+        rafraichirDashboard();
+        showToast("Semaine supprimée.", "success");
+    }
+}
+
 function chargerEleve() {
     const sel = document.getElementById('selectEleveProfile'); if (!sel) return; idEleveCourant = sel.value;
     const zoneTravail = document.getElementById('zoneTravail'); const message = document.getElementById('messageSelectEleve'); const btnEdit = document.getElementById('btnEditEleve');
     if(!idEleveCourant) { if(zoneTravail) zoneTravail.style.display = 'none'; if(message) message.style.display = 'block'; if(btnEdit) btnEdit.style.display = 'none'; return; }
     if(zoneTravail) zoneTravail.style.display = 'block'; if(message) message.style.display = 'none'; if(btnEdit) btnEdit.style.display = 'inline-block';
-    document.querySelectorAll('.nomEleveAffiche').forEach(el => el.innerText = eleves[idEleveCourant].nom);
+    let e = eleves[idEleveCourant];
+    assurerStructureSemaines(e);
+    document.querySelectorAll('.nomEleveAffiche').forEach(el => el.innerText = e.nom);
     let inputMax = document.getElementById('inputMaxAteliersEleve'); let inputMaxTab = document.getElementById('inputMaxTablettesEleve'); let maxAff = document.getElementById('maxAteliersAffiche');
-    if(inputMax) inputMax.value = eleves[idEleveCourant].maxAteliers || 15; if(inputMaxTab) inputMaxTab.value = eleves[idEleveCourant].maxTablettes ?? 2; if(maxAff) maxAff.innerText = eleves[idEleveCourant].maxAteliers || 15;
+    if(inputMax) inputMax.value = e.maxAteliers || 15; if(inputMaxTab) inputMaxTab.value = e.maxTablettes ?? 2; if(maxAff) maxAff.innerText = e.maxAteliers || 15;
+    majBarreSemainesUI();
     afficherPlanHebdo(); afficherHistorique(); if(document.getElementById('selectSequence') && document.getElementById('selectSequence').value) afficherRessourcesDisponibles();
 }
 
@@ -357,9 +638,33 @@ function assignerJour(idActivite, jour) {
     sauvegarderEleves(); afficherPlanHebdo();
 }
 
+function cocherNiveauModal(classeCheckbox, niveauCible) {
+    document.querySelectorAll('.' + classeCheckbox + ':not(:disabled)').forEach(cb => {
+        let e = eleves[cb.value];
+        if (!niveauCible) cb.checked = false;
+        else if (niveauCible === 'TOUS') cb.checked = true;
+        else if (e && (e.niveau || 'CP').toUpperCase() === niveauCible.toUpperCase()) cb.checked = true;
+    });
+}
+
+function genererBarreSelectionNiveauxHtml(classeCheckbox) {
+    return `<div style="display:flex; gap:5px; flex-wrap:wrap; margin-bottom:8px; padding-bottom:8px; border-bottom:1px dashed #ccc;">
+        <span style="font-size:11px; font-weight:bold; color:#7f8c8d; width:100%;">Sélection rapide par niveau :</span>
+        <button type="button" class="filter-btn" onclick="cocherNiveauModal('${classeCheckbox}', 'TOUS')">✅ Tous</button>
+        <button type="button" class="filter-btn" onclick="cocherNiveauModal('${classeCheckbox}', '')">❌ Aucun</button>
+        <button type="button" class="filter-btn" onclick="cocherNiveauModal('${classeCheckbox}', 'CP')">📘 CP</button>
+        <button type="button" class="filter-btn" onclick="cocherNiveauModal('${classeCheckbox}', 'CE1')">📘 CE1</button>
+        <button type="button" class="filter-btn" onclick="cocherNiveauModal('${classeCheckbox}', 'CE2')">📘 CE2</button>
+        <button type="button" class="filter-btn" onclick="cocherNiveauModal('${classeCheckbox}', 'CM1')">📘 CM1</button>
+        <button type="button" class="filter-btn" onclick="cocherNiveauModal('${classeCheckbox}', 'CM2')">📘 CM2</button>
+    </div>`;
+}
+
 function ouvrirModalDuplication() {
     if(!idEleveCourant || eleves[idEleveCourant].planHebdo.length === 0) { showToast("Le plan de l'élève est vide.", "error"); return; }
-    document.getElementById('nomEleveSourceDupli').innerText = eleves[idEleveCourant].nom; let html = ''; let elevesTries = getElevesTries();
+    document.getElementById('nomEleveSourceDupli').innerText = eleves[idEleveCourant].nom;
+    let html = genererBarreSelectionNiveauxHtml('cb-dupli-eleve');
+    let elevesTries = getElevesTries();
     elevesTries.forEach(e => { if(e.id !== idEleveCourant) { html += `<label style="cursor:pointer; font-size:14px;"><input type="checkbox" class="cb-dupli-eleve" value="${e.id}"> [${e.niveau}] ${escHTML(e.nom)}</label>`; } });
     document.getElementById('listeElevesDupli').innerHTML = html; document.getElementById('modalDupliquer').style.display = 'flex';
 }
@@ -369,12 +674,13 @@ function validerDuplication() {
     let checks = document.querySelectorAll('.cb-dupli-eleve:checked');
     if(checks.length === 0) { showToast("Sélectionnez au moins un élève.", "error"); return; } let msgCount = 0;
     checks.forEach(cb => {
-        const target = eleves[cb.value]; if(!target.joursAssignes) target.joursAssignes = {};
+        const target = eleves[cb.value]; assurerStructureSemaines(target); if(!target.joursAssignes) target.joursAssignes = {};
         planSource.forEach(idAct => {
             if (!target.planHebdo.includes(idAct) && !target.historique.some(h=>h.idActivite === idAct) && target.planHebdo.length < (target.maxAteliers||15)) {
                 target.planHebdo.push(idAct); if(joursSource[idAct]) target.joursAssignes[idAct] = joursSource[idAct]; msgCount++;
             }
         });
+        syncEleveVersSemaineActive(target);
     });
     sauvegarderEleves(); document.getElementById('modalDupliquer').style.display = 'none'; rafraichirDashboard(); showToast(`${msgCount} activités ajoutées en tout.`, "success");
 }
@@ -382,24 +688,90 @@ function validerDuplication() {
 let activiteAssignationEnCours = null;
 function assignerActivite(idActivite) {
     activiteAssignationEnCours = idActivite; let act = baseDonnees.find(a => a.id === idActivite); if (!act) return;
-    document.getElementById('nomActiviteAssign').innerText = act.ressource; let html = ''; let elevesTries = getElevesTries();
-    elevesTries.forEach(e => { let disabled = (e.planHebdo.includes(idActivite) || e.historique.some(h => h.idActivite === idActivite)) ? "disabled checked" : ""; let color = disabled ? "color: #95a5a6; text-decoration: line-through;" : ""; html += `<label style="cursor:pointer; font-size:14px; ${color}"><input type="checkbox" class="cb-assign-eleve" value="${e.id}" ${disabled}> [${e.niveau}] ${escHTML(e.nom)}</label>`; });
+    document.getElementById('nomActiviteAssign').innerText = act.ressource;
+    let selJour = document.getElementById('selectJourAssignMultiple'); if (selJour) selJour.value = "";
+    let html = genererBarreSelectionNiveauxHtml('cb-assign-eleve');
+    let elevesTries = getElevesTries();
+    elevesTries.forEach(e => {
+        assurerStructureSemaines(e);
+        let dejaPrevu = e.semaines.some(s => s.planHebdo && s.planHebdo.includes(idActivite)) || e.historique.some(h => h.idActivite === idActivite);
+        let disabled = dejaPrevu ? "disabled checked" : ""; let color = disabled ? "color: #95a5a6; text-decoration: line-through;" : "";
+        html += `<label style="cursor:pointer; font-size:14px; ${color}"><input type="checkbox" class="cb-assign-eleve" value="${e.id}" ${disabled}> [${e.niveau}] ${escHTML(e.nom)} (Semaine ${e.semaineIndex + 1})</label>`;
+    });
     document.getElementById('listeElevesAssign').innerHTML = html; document.getElementById('modalAssigner').style.display = 'flex';
 }
 
 function validerAssignationMultiple() {
     if (!activiteAssignationEnCours) return; let checks = document.querySelectorAll('.cb-assign-eleve:checked:not(:disabled)');
-    if (checks.length === 0) { document.getElementById('modalAssigner').style.display = 'none'; return; } let count = 0;
-    checks.forEach(cb => { let e = eleves[cb.value]; if (e.planHebdo.length < (e.maxAteliers || 15)) { e.planHebdo.push(activiteAssignationEnCours); count++; } });
+    if (checks.length === 0) { document.getElementById('modalAssigner').style.display = 'none'; return; }
+    let selJour = document.getElementById('selectJourAssignMultiple');
+    let jourChoisi = selJour ? selJour.value : "";
+    let count = 0;
+    checks.forEach(cb => {
+        let e = eleves[cb.value]; assurerStructureSemaines(e);
+        if (e.planHebdo.length < (e.maxAteliers || 15)) {
+            e.planHebdo.push(activiteAssignationEnCours);
+            if (jourChoisi) { if (!e.joursAssignes) e.joursAssignes = {}; e.joursAssignes[activiteAssignationEnCours] = jourChoisi; }
+            syncEleveVersSemaineActive(e);
+            count++;
+        }
+    });
     sauvegarderEleves(); document.getElementById('modalAssigner').style.display = 'none'; rafraichirDashboard(); if(idEleveCourant) afficherPlanHebdo(); showToast(`Activité assignée à ${count} élève(s).`, "success");
 }
 
 function commencerNouvelleSemaine() {
     if(!idEleveCourant) return; let eleve = eleves[idEleveCourant];
-    if(confirm(`Voulez-vous commencer une nouvelle semaine pour ${eleve.nom} ?\n\nCela va vider le plan actuel et transférer automatiquement les activités en attente dans le nouveau plan.`)) {
-        eleve.planHebdo = [...(eleve.enAttente || [])]; eleve.enAttente = []; eleve.valides = {}; eleve.priorites = []; eleve.joursAssignes = {};
+    assurerStructureSemaines(eleve); syncEleveVersSemaineActive(eleve);
+    let msg = eleve.semaines.length > 1
+        ? `Voulez-vous clôturer la Semaine ${eleve.semaineIndex + 1} de ${eleve.nom} et passer automatiquement à la semaine préparée suivante ?\n\nLes activités notées "à revoir / à refaire" y seront placées EN PRIORITÉ.`
+        : `Voulez-vous clôturer cette semaine pour ${eleve.nom} et initialiser une nouvelle semaine ?\n\nLes activités notées "à revoir / à refaire" seront placées EN PRIORITÉ dans le nouveau plan.`;
+    if(confirm(msg)) {
+        // Récupérer à la fois les activités en attente ET les activités non validées du plan actuel qui ont un statut a_revoir ou a_refaire
+        let aTransferer = [...(eleve.enAttente || [])];
+        (eleve.planHebdo || []).forEach(idAct => {
+            if (eleve.suivi && eleve.suivi[idAct] && (eleve.suivi[idAct].statut === 'a_revoir' || eleve.suivi[idAct].statut === 'a_refaire')) {
+                if (!aTransferer.includes(idAct)) aTransferer.push(idAct);
+            }
+        });
+        eleve.enAttente = [];
+
+        if (eleve.semaines.length > 1) {
+            eleve.semaines.splice(eleve.semaineIndex, 1);
+            let nextIdx = Math.min(eleve.semaineIndex, eleve.semaines.length - 1);
+            eleve.semaineIndex = nextIdx;
+            let s = eleve.semaines[nextIdx];
+            if (!s.priorites) s.priorites = [];
+            aTransferer.forEach(idAct => {
+                if (!s.planHebdo.includes(idAct)) s.planHebdo.unshift(idAct);
+                if (!s.priorites.includes(idAct)) s.priorites.push(idAct);
+            });
+            eleve.planHebdo = [...s.planHebdo];
+            eleve.priorites = [...s.priorites];
+            eleve.joursAssignes = { ...(s.joursAssignes || {}) };
+            eleve.valides = { ...(s.valides || {}) };
+            eleve.suivi = { ...(eleve.suivi || {}), ...(s.suivi || {}) };
+            eleve.dateDebutISO = s.dateDebutISO || "";
+            eleve.dateDebut = s.dateDebut || "";
+            eleve.dateFin = s.dateFin || "";
+        } else {
+            let nextISO = ""; let nextDeb = ""; let nextFin = "";
+            if (eleve.dateDebutISO) {
+                let c = calculerVendrediDepuisISO(eleve.dateDebutISO);
+                if (c.lundiSuivantISO) {
+                    nextISO = c.lundiSuivantISO;
+                    let c2 = calculerVendrediDepuisISO(nextISO);
+                    nextDeb = c2.debutFR; nextFin = c2.finFR;
+                }
+            }
+            eleve.planHebdo = [...aTransferer];
+            eleve.valides = {};
+            eleve.priorites = [...aTransferer]; // Toutes les activités à refaire/revoir passent en priorité !
+            eleve.joursAssignes = {};
+            eleve.dateDebutISO = nextISO; eleve.dateDebut = nextDeb; eleve.dateFin = nextFin;
+            eleve.semaines[0] = { id: 'sem_' + Date.now(), dateDebutISO: nextISO, dateDebut: nextDeb, dateFin: nextFin, planHebdo: [...eleve.planHebdo], priorites: [...eleve.priorites], joursAssignes: {}, valides: {}, suivi: JSON.parse(JSON.stringify(eleve.suivi || {})) };
+        }
         dashboardArchives = dashboardArchives.filter(cle => !cle.startsWith(eleve.id + '_')); localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
-        sauvegarderEleves(); chargerEleve(); rafraichirDashboard(); showToast("✅ Nouvelle semaine initialisée !", "success");
+        sauvegarderEleves(); chargerEleve(); rafraichirDashboard(); showToast("✅ Semaine suivante activée avec report prioritaire !", "success");
     }
 }
 
@@ -410,7 +782,7 @@ function basculerPriorite(idActivite) {
 }
 
 // ==========================================
-// 5. VALIDATIONS ET AFFICHAGE DU PLAN HEBDO
+// 5. VALIDATIONS, LOGO 👩‍🏫 & PLAN HEBDO
 // ==========================================
 function cocherToutPlan(source) { document.querySelectorAll('.cb-plan-valider:not(:disabled)').forEach(cb => cb.checked = source.checked); }
 
@@ -455,7 +827,13 @@ function annulerValidationPlan(idActivite) {
 
 function annulerAttente(idActivite) {
     if(!idEleveCourant) return; let e = eleves[idEleveCourant]; let idx = e.enAttente.indexOf(idActivite);
-    if(idx > -1) { e.enAttente.splice(idx, 1); e.planHebdo.push(idActivite); if (e.suivi && e.suivi[idActivite]) { e.suivi[idActivite].statut = ''; e.suivi[idActivite].commentaire = ''; } sauvegarderEleves(); afficherPlanHebdo(); rafraichirDashboard(); }
+    if(idx > -1) {
+        e.enAttente.splice(idx, 1);
+        if (!e.planHebdo.includes(idActivite)) e.planHebdo.unshift(idActivite);
+        if (!e.priorites) e.priorites = [];
+        if (!e.priorites.includes(idActivite)) e.priorites.push(idActivite);
+        sauvegarderEleves(); majBarreSemainesUI(); afficherPlanHebdo(); rafraichirDashboard();
+    }
 }
 
 function validerDirectement(idActivite) { if(!idEleveCourant) return; marquerCommeValideSansRafraichir(idActivite, eleves[idEleveCourant]); sauvegarderEleves(); afficherRessourcesDisponibles(); afficherHistorique(); afficherPlanHebdo(); rafraichirDashboard(); showToast("Activité validée !", "success"); }
@@ -467,7 +845,16 @@ function ajouterAuPlan(idActivite) {
     if (eleve.planHebdo.length >= max) { showToast(`⚠️ Limite maximale atteinte.`, "error"); return; }
     const actAjoutee = baseDonnees.find(b => b.id === idActivite);
     if (actAjoutee && estActiviteTablette(actAjoutee)) { let maxTab = eleve.maxTablettes ?? 2; let nbTabActuels = eleve.planHebdo.map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length; if (nbTabActuels >= maxTab) { showToast(`🚫 Limite atteinte : ${maxTab} atelier(s) tablette(s) max pour cet élève.`, "error"); return; } }
-    eleve.planHebdo.push(idActivite); sauvegarderEleves(); afficherRessourcesDisponibles(); afficherPlanHebdo(); rafraichirDashboard(); showToast("Ajouté au plan !");
+    
+    let selectJourElem = document.getElementById('jour_dispo_' + idActivite);
+    let jourChoisi = selectJourElem ? selectJourElem.value : "";
+
+    eleve.planHebdo.push(idActivite);
+    if (!eleve.joursAssignes) eleve.joursAssignes = {};
+    if (jourChoisi) { eleve.joursAssignes[idActivite] = jourChoisi; }
+
+    sauvegarderEleves(); majBarreSemainesUI(); afficherRessourcesDisponibles(); afficherPlanHebdo(); rafraichirDashboard();
+    showToast(jourChoisi ? `Ajouté au plan (${jourChoisi}) !` : "Ajouté au plan (Libre) !");
 }
 
 function retirerDuPlan(idActivite) { 
@@ -475,7 +862,7 @@ function retirerDuPlan(idActivite) {
     if(idx > -1) { e.planHebdo.splice(idx, 1); } else { idx = e.enAttente.indexOf(idActivite); if (idx > -1) e.enAttente.splice(idx, 1); }
     if (e.suivi && e.suivi[idActivite]) delete e.suivi[idActivite]; if (e.valides && e.valides[idActivite]) delete e.valides[idActivite];
     if (e.joursAssignes && e.joursAssignes[idActivite]) delete e.joursAssignes[idActivite];
-    sauvegarderEleves(); afficherRessourcesDisponibles(); afficherPlanHebdo(); rafraichirDashboard(); showToast("Retiré du plan.");
+    sauvegarderEleves(); majBarreSemainesUI(); afficherRessourcesDisponibles(); afficherPlanHebdo(); rafraichirDashboard(); showToast("Retiré du plan.");
 }
 
 function desarchiverActivite(idActivite) {
@@ -484,23 +871,28 @@ function desarchiverActivite(idActivite) {
 }
 
 function afficherPlanHebdo() {
-    const eleve = eleves[idEleveCourant]; const tbodyApercu = document.getElementById('tableApercuPlan'); if(!tbodyApercu) return; tbodyApercu.innerHTML = '';
+    const eleve = eleves[idEleveCourant]; const tbodyApercu = document.getElementById('tableApercuPlan'); if(!tbodyApercu || !eleve) return; tbodyApercu.innerHTML = '';
     document.getElementById('compteurAteliersEleve').innerText = eleve.planHebdo.length; document.getElementById('maxAteliersAffiche').innerText = eleve.maxAteliers || 15;
     let nbTabCount = eleve.planHebdo.map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length; let compteurTabElem = document.getElementById('compteurTablettesEleve'); if(compteurTabElem) compteurTabElem.innerText = `${nbTabCount}/${eleve.maxTablettes ?? 2}`;
 
-    let planObjects = getListeTrie(eleve.planHebdo, eleve.priorites || []);
+    let planObjects = getListeTrie(eleve.planHebdo, eleve.priorites || [], eleve.suivi || {});
 
     planObjects.forEach((a, index) => {
         const num = index + 1; let badge = a.estEvaluation ? `<span class="badge-eval">🎯</span>` : ''; let estValide = eleve.valides && eleve.valides[a.id];
-        let rowClass = a.estEvaluation ? 'row-eval' : (estValide ? 'row-valide' : ''); let isPrio = (eleve.priorites && eleve.priorites.includes(a.id));
+        let rowClass = a.estEvaluation ? 'row-eval' : (estValide ? 'row-valide' : '');
+        let statutSuivi = (eleve.suivi && eleve.suivi[a.id]) ? eleve.suivi[a.id].statut : "";
+        let isPrio = (eleve.priorites && eleve.priorites.includes(a.id)) || statutSuivi === 'a_revoir' || statutSuivi === 'a_refaire';
         let prioStar = isPrio ? "⭐" : "☆"; let prioStyle = isPrio ? "color: #f1c40f;" : "color: #bdc3c7;";
         let etoilesHtml = formaterEtoiles(a.difficulte);
         
+        // Logo de la maîtresse au début de la ligne si "à revoir avec la maitresse"
+        let logoDebutLigne = statutSuivi === 'a_revoir' ? `<span style="font-size:16px; margin-right:3px;" title="À faire avec la maîtresse">👩‍🏫</span>` : (statutSuivi === 'a_refaire' ? `<span style="font-size:14px; margin-right:3px;" title="À refaire seul">🔄</span>` : "");
+
         let suiviHtml = '';
         if (eleve.suivi && eleve.suivi[a.id]) {
             let s = eleve.suivi[a.id]; let infoCommentaire = s.commentaire ? `<br><span style="color:#7f8c8d; font-size:11px; font-style:italic;">💬 ${escHTML(s.commentaire)}</span>` : '';
-            if (s.statut === 'a_revoir') suiviHtml = `<br><span style="color:#c0392b; font-size:12px; font-weight:bold;">⚠️ À revoir avec maitresse</span>${infoCommentaire}`;
-            if (s.statut === 'a_refaire') suiviHtml = `<br><span style="color:#d35400; font-size:12px; font-weight:bold;">🔄 À refaire seul</span>${infoCommentaire}`;
+            if (s.statut === 'a_revoir') suiviHtml = `<br><span style="color:#c0392b; font-size:12px; font-weight:bold;">👩‍🏫 À revoir avec maîtresse (Prioritaire)</span>${infoCommentaire}`;
+            if (s.statut === 'a_refaire') suiviHtml = `<br><span style="color:#d35400; font-size:12px; font-weight:bold;">🔄 À refaire seul (Prioritaire)</span>${infoCommentaire}`;
         }
 
         let jourActuel = (eleve.joursAssignes && eleve.joursAssignes[a.id]) ? eleve.joursAssignes[a.id] : "";
@@ -517,32 +909,37 @@ function afficherPlanHebdo() {
 
         let actionHtml = estValide ? `<span style="color:#27ae60; font-weight:bold; font-size:12px;">✅ Fini</span><br><button type="button" class="btn-remove" style="width: 100%; margin-top:3px;" onclick="annulerValidationPlan('${a.id}')">↩️ Défaire</button>` : `<button type="button" class="btn-valid" style="width: 100%; margin-bottom: 5px;" onclick="validerDirectement('${a.id}')">🏁 Fini</button><button type="button" class="btn-remove" style="width: 100%;" onclick="retirerDuPlan('${a.id}')">❌ Retirer</button>`;
 
+        let coulMat = getCouleurMatiereBandeau(a.matiere);
+        let pastilleMat = `<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${coulMat.bg}; margin-right:4px;"></span>`;
+
         tbodyApercu.innerHTML += `<tr class="${rowClass}">
             <td style="text-align:center;"><input type="checkbox" class="cb-plan-valider" value="${a.id}" ${estValide ? 'checked disabled' : ''} style="transform: scale(1.3); cursor:pointer;"></td>
             <td style="text-align:center; cursor:pointer;" class="badge-prio" onclick="basculerPriorite('${a.id}')" style="${prioStyle}">${prioStar}</td>
-            <td class="${numClass}" title="${jourActuel ? 'Imposé le ' + jourActuel : ''}">${num}</td>
-            <td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td>
+            <td class="${numClass}" title="${jourActuel ? 'Imposé le ' + jourActuel : ''}">${logoDebutLigne}${num}</td>
+            <td>${pastilleMat}<strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td>
             <td>${a.lecon ? '<em>'+escHTML(a.lecon)+'</em> - ' : ''}${escHTML(a.competence)}</td>
-            <td>${etoilesHtml}<strong style="${styleRessource}">${escHTML(a.ressource)}</strong> ${badge} ${suiviHtml}</td>
+            <td>${logoDebutLigne}${etoilesHtml}<strong style="${styleRessource}">${escHTML(a.ressource)}</strong> ${badge} ${suiviHtml}</td>
             <td style="text-align:center;">${selectJourHtml}</td>
             <td>${actionHtml}</td>
         </tr>`;
     });
-    if(eleve.planHebdo.length === 0) tbodyApercu.innerHTML = '<tr><td colspan="8" style="text-align:center;">Le plan est vide.</td></tr>';
+    if(eleve.planHebdo.length === 0) tbodyApercu.innerHTML = '<tr><td colspan="8" style="text-align:center;">Le plan de cette semaine est vide.</td></tr>';
 
     if (eleve.enAttente && eleve.enAttente.length > 0) {
-        tbodyApercu.innerHTML += `<tr><td colspan="8" style="background:#f39c12; color:white; font-weight:bold; text-align:center; padding:10px; font-size:14px;">⏳ LISTE D'ATTENTE (À revoir / À refaire)</td></tr>`;
-        let attenteObjects = getListeTrie(eleve.enAttente);
+        tbodyApercu.innerHTML += `<tr><td colspan="8" style="background:#f39c12; color:white; font-weight:bold; text-align:center; padding:10px; font-size:14px;">⏳ EN ATTENTE POUR LA SEMAINE SUIVANTE (Seront placés en priorité ⭐)</td></tr>`;
+        let attenteObjects = getListeTrie(eleve.enAttente, eleve.priorites || [], eleve.suivi || {});
         attenteObjects.forEach((a) => {
             let badge = a.estEvaluation ? `<span class="badge-eval">🎯</span>` : ''; let suiviHtml = '';
             let etoilesHtml = formaterEtoiles(a.difficulte);
+            let statutS = (eleve.suivi && eleve.suivi[a.id]) ? eleve.suivi[a.id].statut : "";
+            let logoDeb = statutS === 'a_revoir' ? "👩‍🏫 " : "🔄 ";
             if (eleve.suivi && eleve.suivi[a.id]) {
                 let s = eleve.suivi[a.id]; let infoCommentaire = s.commentaire ? `<br><span style="color:#7f8c8d; font-size:11px; font-style:italic;">💬 ${escHTML(s.commentaire)}</span>` : '';
-                if (s.statut === 'a_revoir') suiviHtml = `<br><span style="color:#c0392b; font-size:12px; font-weight:bold;">⚠️ À revoir avec maitresse</span>${infoCommentaire}`;
+                if (s.statut === 'a_revoir') suiviHtml = `<br><span style="color:#c0392b; font-size:12px; font-weight:bold;">👩‍🏫 À revoir avec maîtresse</span>${infoCommentaire}`;
                 if (s.statut === 'a_refaire') suiviHtml = `<br><span style="color:#d35400; font-size:12px; font-weight:bold;">🔄 À refaire seul</span>${infoCommentaire}`;
             }
-            let actionHtml = `<button type="button" class="btn-hide" style="width: 100%;" onclick="annulerAttente('${a.id}')">↩ Remettre au plan actuel</button>`;
-            tbodyApercu.innerHTML += `<tr style="background:#fef5e7;"><td style="text-align:center;">⏸️</td><td style="text-align:center;">-</td><td class="col-num">-</td><td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td><td>${a.lecon ? '<em>'+escHTML(a.lecon)+'</em> - ' : ''}${escHTML(a.competence)}</td><td>${etoilesHtml}<strong>${escHTML(a.ressource)}</strong> ${badge} ${suiviHtml}</td><td style="text-align:center;">-</td><td>${actionHtml}</td></tr>`;
+            let actionHtml = `<button type="button" class="btn-hide" style="width: 100%;" onclick="annulerAttente('${a.id}')">↩ Remettre dans la semaine affichée</button>`;
+            tbodyApercu.innerHTML += `<tr style="background:#fef5e7;"><td style="text-align:center;">⏸️</td><td style="text-align:center;">⭐</td><td class="col-num">${logoDeb}</td><td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td><td>${a.lecon ? '<em>'+escHTML(a.lecon)+'</em> - ' : ''}${escHTML(a.competence)}</td><td>${logoDeb}${etoilesHtml}<strong>${escHTML(a.ressource)}</strong> ${badge} ${suiviHtml}</td><td style="text-align:center;">-</td><td>${actionHtml}</td></tr>`;
         });
     }
 }
@@ -555,23 +952,70 @@ function afficherHistorique() {
     if(eleve.masquees.length === 0) tbodyMasq.innerHTML = '<tr><td colspan="5" style="text-align:center;">Aucune activité masquée.</td></tr>';
 }
 
+function filtrerParEtoilesDispo(nbEtoiles) {
+    filtreEtoilesDispo = nbEtoiles;
+    document.querySelectorAll('.btn-filtre-etoile-dispo').forEach(b => b.classList.remove('active'));
+    let btnActif = document.getElementById('btn_etoile_dispo_' + nbEtoiles);
+    if (btnActif) btnActif.classList.add('active');
+    afficherRessourcesDisponibles();
+}
+
 function afficherRessourcesDisponibles() {
     const niveau = document.getElementById('selectNiveau').value; const periode = document.getElementById('selectPeriode').value; const matiere = document.getElementById('selectMatiere').value;
     const sequence = document.getElementById('selectSequence').value; const zoneRessources = document.getElementById('zoneRessources'); const tbody = document.getElementById('tableRessourcesDispo');
     if(!sequence || !idEleveCourant) { if(zoneRessources) zoneRessources.style.display = 'none'; return; }
     if(zoneRessources) zoneRessources.style.display = 'block'; if(tbody) tbody.innerHTML = '';
+
+    // Injection dynamique de la barre de filtre par étoiles si elle n'existe pas encore
+    if (zoneRessources && !document.getElementById('barreFiltreEtoilesDispo')) {
+        let divStars = document.createElement('div');
+        divStars.id = 'barreFiltreEtoilesDispo';
+        divStars.style.cssText = 'display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap;';
+        divStars.innerHTML = `<span style="font-size:12px; font-weight:bold; color:#7f8c8d;">Filtrer par difficulté :</span>
+            <button type="button" id="btn_etoile_dispo_0" class="filter-btn btn-filtre-etoile-dispo active" onclick="filtrerParEtoilesDispo(0)">Toutes</button>
+            <button type="button" id="btn_etoile_dispo_1" class="filter-btn btn-filtre-etoile-dispo" onclick="filtrerParEtoilesDispo(1)">⭐ Niveau 1</button>
+            <button type="button" id="btn_etoile_dispo_2" class="filter-btn btn-filtre-etoile-dispo" onclick="filtrerParEtoilesDispo(2)">⭐⭐ Niveau 2</button>
+            <button type="button" id="btn_etoile_dispo_3" class="filter-btn btn-filtre-etoile-dispo" onclick="filtrerParEtoilesDispo(3)">⭐⭐⭐ Niveau 3</button>`;
+        zoneRessources.insertBefore(divStars, tbody);
+    }
     
     const eleve = eleves[idEleveCourant];
+    assurerStructureSemaines(eleve); syncEleveVersSemaineActive(eleve);
+
     let activites = baseDonnees.filter(a => a.niveau && a.niveau.toUpperCase().includes(niveau.toUpperCase()) && a.matiere === matiere && a.sequence === sequence);
     if(periode) { activites = activites.filter(a => { let key = a.matiere + "|" + a.competence; return programmations[key] && programmations[key].includes(periode); }); }
+    if(filtreEtoilesDispo > 0) { activites = activites.filter(a => (parseInt(a.difficulte) || 0) === filtreEtoilesDispo); }
     
-    const idsHistorique = eleve.historique.map(h => h.idActivite); let nbAffichees = 0;
+    const idsHistorique = eleve.historique.map(h => h.idActivite);
+    const idsToutesSemaines = new Set();
+    eleve.semaines.forEach(s => { if (s.planHebdo) s.planHebdo.forEach(id => idsToutesSemaines.add(id)); });
+
+    let nbAffichees = 0;
     activites.forEach(a => {
-        if(idsHistorique.includes(a.id)) return; if(eleve.masquees && eleve.masquees.includes(a.id)) return; if(eleve.planHebdo.includes(a.id)) return; if(eleve.enAttente && eleve.enAttente.includes(a.id)) return;
+        if(idsHistorique.includes(a.id)) return;
+        if(eleve.masquees && eleve.masquees.includes(a.id)) return;
+        if(idsToutesSemaines.has(a.id)) return;
+        if(eleve.enAttente && eleve.enAttente.includes(a.id)) return;
+
         nbAffichees++; let badge = a.estEvaluation ? `<span class="badge-eval">🎯 Évaluation</span>` : ''; let rowClass = a.estEvaluation ? 'row-eval' : '';
-        tbody.innerHTML += `<tr class="${rowClass}"><td>${a.lecon ? '<em>'+escHTML(a.lecon)+'</em> - ' : ''}${escHTML(a.competence)}</td><td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> <br><span style="font-size:11px; color:#7f8c8d;">(${escHTML(a.typeRes)} Atelier: ${escHTML(a.symbole)})</span> ${badge}</td><td style="text-align: right; width: 260px;"><button type="button" class="btn-add" onclick="ajouterAuPlan('${a.id}')">➕ Plan</button> <button type="button" class="btn-valid" onclick="validerDirectement('${a.id}')">🏁 Fini</button> <button type="button" class="btn-hide" onclick="masquerActivite('${a.id}')">🚫 Masq</button></td></tr>`;
+        tbody.innerHTML += `<tr class="${rowClass}">
+            <td>${a.lecon ? '<em>'+escHTML(a.lecon)+'</em> - ' : ''}${escHTML(a.competence)}</td>
+            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> <br><span style="font-size:11px; color:#7f8c8d;">(${escHTML(a.typeRes)} Atelier: ${escHTML(a.symbole)})</span> ${badge}</td>
+            <td style="text-align: right; width: 340px; white-space: nowrap;">
+                <select id="jour_dispo_${a.id}" style="padding:5px; font-size:12px; border-radius:4px; border:1px solid #2980b9; margin-right:4px;" title="Choisir un jour imposé ou laisser libre">
+                    <option value="">📅 Libre (Au choix)</option>
+                    <option value="Lundi">Lundi</option>
+                    <option value="Mardi">Mardi</option>
+                    <option value="Jeudi">Jeudi</option>
+                    <option value="Vendredi">Vendredi</option>
+                </select>
+                <button type="button" class="btn-add" onclick="ajouterAuPlan('${a.id}')">➕ Plan</button>
+                <button type="button" class="btn-valid" onclick="validerDirectement('${a.id}')">🏁 Fini</button>
+                <button type="button" class="btn-hide" onclick="masquerActivite('${a.id}')">🚫 Masq</button>
+            </td>
+        </tr>`;
     });
-    if(nbAffichees === 0) tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#7f8c8d;">Toutes les activités ont été faites ou sont dans le plan.</td></tr>';
+    if(nbAffichees === 0) tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#7f8c8d;">Aucune activité disponible pour ces critères (ou toutes sont déjà planifiées).</td></tr>';
 }
 
 // ==========================================
@@ -616,7 +1060,8 @@ function afficherProgrammation() {
     let html = ''; let derniereMat = null;
     listeItems.forEach(item => {
         if(item.matiere !== derniereMat) {
-            html += `<tr style="background:#eaeded;"><td colspan="7" style="font-size:14px; padding:10px;"><strong>📚 ${escHTML(item.matiere || 'Sans matière')}</strong></td></tr>`;
+            let coul = getCouleurMatiereBandeau(item.matiere);
+            html += `<tr><td colspan="7" style="background:${coul.bg}; color:${coul.text}; font-size:14px; padding:10px;"><strong>📚 ${escHTML(item.matiere || 'Sans matière')}</strong></td></tr>`;
             derniereMat = item.matiere;
         }
         let progKey = item.matiere + "|" + item.competence; let progs = programmations[progKey] || [];
@@ -645,18 +1090,68 @@ function toggleProg(matiere, competence, periode, isChecked) {
 function toggleExpandDashboard(idEleve) { if(dashboardExpanded.has(idEleve)) dashboardExpanded.delete(idEleve); else dashboardExpanded.add(idEleve); rafraichirDashboard(); }
 
 function setSuivi(idEleve, idAct, statut) {
-    let e = eleves[idEleve]; if(!e.suivi) e.suivi = {}; if(!e.enAttente) e.enAttente = []; if(!e.suivi[idAct]) e.suivi[idAct] = { statut: '', commentaire: '' };
+    let e = eleves[idEleve]; assurerStructureSemaines(e); syncEleveVersSemaineActive(e);
+    if(!e.suivi) e.suivi = {}; if(!e.enAttente) e.enAttente = []; if(!e.priorites) e.priorites = [];
+    if(!e.suivi[idAct]) e.suivi[idAct] = { statut: '', commentaire: '' };
+
     if(e.suivi[idAct].statut === statut) {
-        if(confirm("Voulez-vous retirer ce statut et remettre l'activité dans le plan actuel ?")) { e.suivi[idAct].statut = ''; e.suivi[idAct].commentaire = ''; let idx = e.enAttente.indexOf(idAct); if (idx > -1) { e.enAttente.splice(idx, 1); e.planHebdo.push(idAct); } } 
-        else { let result = prompt("Modifier le commentaire ou la note :", e.suivi[idAct].commentaire || ''); if(result !== null) e.suivi[idAct].commentaire = result.trim(); }
+        if(confirm("Voulez-vous retirer ce statut et remettre l'activité normalement dans le plan actuel ?")) {
+            e.suivi[idAct].statut = ''; e.suivi[idAct].commentaire = '';
+            let idx = e.enAttente.indexOf(idAct);
+            if (idx > -1) { e.enAttente.splice(idx, 1); if (!e.planHebdo.includes(idAct)) e.planHebdo.push(idAct); }
+            let nextSem = e.semaines[e.semaineIndex + 1];
+            if (nextSem && nextSem.planHebdo.includes(idAct)) {
+                nextSem.planHebdo = nextSem.planHebdo.filter(id => id !== idAct);
+                if (!e.planHebdo.includes(idAct)) e.planHebdo.push(idAct);
+            }
+        } else {
+            let result = prompt("Modifier le commentaire ou la note :", e.suivi[idAct].commentaire || '');
+            if(result !== null) e.suivi[idAct].commentaire = result.trim();
+        }
     } else {
-        let actionName = statut === 'a_revoir' ? "À revoir avec la maitresse" : "À refaire seul"; let result = prompt(`[${actionName}]\nL'activité sera retirée du plan et mise en attente.\nAjouter une note :`, e.suivi[idAct].commentaire || '');
-        if(result !== null) { e.suivi[idAct].statut = statut; e.suivi[idAct].commentaire = result.trim(); let idx = e.planHebdo.indexOf(idAct); if (idx > -1) { e.planHebdo.splice(idx, 1); if (!e.enAttente.includes(idAct)) e.enAttente.push(idAct); } }
+        let actionName = statut === 'a_revoir' ? "👩‍🏫 À revoir avec la maîtresse" : "🔄 À refaire seul";
+        let result = prompt(`[${actionName}]\nL'activité sera automatiquement placée EN PRIORITÉ dans la semaine suivante (avec le logo 👩‍🏫 si elle est à revoir avec vous).\nAjouter une note (facultatif) :`, e.suivi[idAct].commentaire || '');
+        if(result !== null) { 
+            e.suivi[idAct].statut = statut; e.suivi[idAct].commentaire = result.trim(); 
+            if (e.valides && e.valides[idAct]) { delete e.valides[idAct]; e.historique = e.historique.filter(h => h.idActivite !== idAct); }
+            if (!e.priorites.includes(idAct)) e.priorites.push(idAct);
+
+            let idx = e.planHebdo.indexOf(idAct);
+            if (idx > -1) e.planHebdo.splice(idx, 1);
+
+            // Si une semaine suivante est déjà préparée d'avance, on l'y injecte directement en priorité !
+            let nextSem = e.semaines[e.semaineIndex + 1];
+            if (nextSem) {
+                if (!nextSem.planHebdo.includes(idAct)) nextSem.planHebdo.unshift(idAct);
+                if (!nextSem.priorites) nextSem.priorites = [];
+                if (!nextSem.priorites.includes(idAct)) nextSem.priorites.push(idAct);
+                if (!nextSem.suivi) nextSem.suivi = {};
+                nextSem.suivi[idAct] = { ...e.suivi[idAct] };
+            } else {
+                if (!e.enAttente.includes(idAct)) e.enAttente.push(idAct);
+            }
+        }
     }
-    sauvegarderEleves(); rafraichirDashboard(); if (idEleveCourant === idEleve) afficherPlanHebdo();
+    sauvegarderEleves(); rafraichirDashboard(); if (idEleveCourant === idEleve) { majBarreSemainesUI(); afficherPlanHebdo(); afficherHistorique(); }
 }
 
-function validerDepuisDashboard(idEleve, idAct) { marquerCommeValideSansRafraichir(idAct, eleves[idEleve]); sauvegarderEleves(); rafraichirDashboard(); showToast("Validé !", "success"); if (idEleveCourant === idEleve) { afficherPlanHebdo(); afficherHistorique(); afficherRessourcesDisponibles(); } }
+function validerDepuisDashboard(idEleve, idAct) {
+    let eleve = eleves[idEleve];
+    if (!eleve) return;
+    if (eleve.valides && eleve.valides[idAct]) {
+        delete eleve.valides[idAct];
+        eleve.historique = eleve.historique.filter(h => h.idActivite !== idAct);
+        sauvegarderEleves(); rafraichirDashboard(); showToast("Validation annulée.", "error");
+    } else {
+        marquerCommeValideSansRafraichir(idAct, eleve);
+        if (eleve.enAttente && eleve.enAttente.includes(idAct)) {
+            eleve.enAttente = eleve.enAttente.filter(id => id !== idAct);
+            if (!eleve.planHebdo.includes(idAct)) eleve.planHebdo.push(idAct);
+        }
+        sauvegarderEleves(); rafraichirDashboard(); showToast("Validé !", "success");
+    }
+    if (idEleveCourant === idEleve) { majBarreSemainesUI(); afficherPlanHebdo(); afficherHistorique(); afficherRessourcesDisponibles(); }
+}
 
 function archiverItem(cle) { if (!dashboardArchives.includes(cle)) { dashboardArchives.push(cle); localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); declencherAutoSaveDrive(); rafraichirDashboard(); showToast("Archivé", "success"); } }
 function restaurerArchive(cle) { dashboardArchives = dashboardArchives.filter(k => k !== cle); localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); declencherAutoSaveDrive(); rafraichirDashboard(); showToast("Restauré", "success"); }
@@ -666,12 +1161,28 @@ function toggleAfficherArchives() { afficherArchivesMode = !afficherArchivesMode
 function rafraichirDashboard() {
     let groupes = {}; let tabletteGroupes = {}; 
     Object.values(eleves).forEach(e => {
-        if(!e.suivi) e.suivi = {}; if(!e.enAttente) e.enAttente = []; let allActiveActivities = [...e.planHebdo, ...e.enAttente];
-        allActiveActivities.forEach(idAct => {
+        assurerStructureSemaines(e);
+        if(!e.suivi) e.suivi = {}; if(!e.enAttente) e.enAttente = [];
+        let idsTousPlans = new Set([...e.planHebdo, ...e.enAttente]);
+        e.semaines.forEach(s => { if (s.planHebdo) s.planHebdo.forEach(id => idsTousPlans.add(id)); });
+
+        idsTousPlans.forEach(idAct => {
             let act = baseDonnees.find(b => b.id === idAct);
-            if (act && estActiviteTablette(act)) { let cleTabArchive = `tablette_${idAct}`; if (!dashboardArchives.includes(cleTabArchive)) { if (!tabletteGroupes[idAct]) tabletteGroupes[idAct] = { act: act, eleves: [] }; if (!tabletteGroupes[idAct].eleves.includes(e.nom)) tabletteGroupes[idAct].eleves.push(e.nom); } }
+            if (act && estActiviteTablette(act) && e.planHebdo.includes(idAct)) {
+                let cleTabArchive = `tablette_${idAct}`;
+                if (!dashboardArchives.includes(cleTabArchive)) {
+                    if (!tabletteGroupes[idAct]) tabletteGroupes[idAct] = { act: act, eleves: [] };
+                    if (!tabletteGroupes[idAct].eleves.includes(e.nom)) tabletteGroupes[idAct].eleves.push(e.nom);
+                }
+            }
             let s = e.suivi[idAct];
-            if (s && (s.statut === 'a_revoir' || s.statut === 'a_refaire')) { let cleArchive = `${e.id}_${idAct}_${s.statut}`; if (!dashboardArchives.includes(cleArchive)) { if (!groupes[idAct]) groupes[idAct] = { a_revoir: [], a_refaire: [] }; groupes[idAct][s.statut].push({ eleve: e, commentaire: s.commentaire }); } }
+            if (s && (s.statut === 'a_revoir' || s.statut === 'a_refaire')) {
+                let cleArchive = `${e.id}_${idAct}_${s.statut}`;
+                if (!dashboardArchives.includes(cleArchive)) {
+                    if (!groupes[idAct]) groupes[idAct] = { a_revoir: [], a_refaire: [] };
+                    groupes[idAct][s.statut].push({ eleve: e, commentaire: s.commentaire });
+                }
+            }
         });
     });
 
@@ -702,18 +1213,37 @@ function rafraichirDashboard() {
     if(listeEleves.length === 0) { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">Aucun élève enregistré.</td></tr>'; return; }
 
     listeEleves.forEach(e => {
+        assurerStructureSemaines(e);
         let currentPlanLen = e.planHebdo ? e.planHebdo.length : 0; let max = e.maxAteliers || 15; let pct = Math.min(100, Math.round((currentPlanLen / max) * 100)); let colorBar = pct >= 100 ? "#e74c3c" : (pct > 75 ? "#f39c12" : "#27ae60"); let btnExpand = `<button type="button" class="btn-action" style="padding:6px 12px;" onclick="toggleExpandDashboard('${e.id}')">Évaluer ⬇️</button>`;
-        let planObjectsTries = getListeTrie([...e.planHebdo, ...(e.enAttente || [])], e.priorites || []);
+        let planObjectsTries = getListeTrie([...e.planHebdo, ...(e.enAttente || [])], e.priorites || [], e.suivi || {});
         let planMiniHtml = '<table style="width:100%; font-size:12px; background:#fdfefe; margin-top:5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">';
         
         planObjectsTries.forEach((act, idx) => {
             let idAct = act.id; let s = e.suivi[idAct] || {}; let isAttente = (e.enAttente || []).includes(idAct);
-            let styleRefaire = s.statut === 'a_refaire' ? 'background:#f39c12; color:white;' : 'background:#ecf0f1; color:#333;'; let styleRevoir = s.statut === 'a_revoir' ? 'background:#e74c3c; color:white;' : 'background:#ecf0f1; color:#333;';
-            let infoC = s.commentaire ? `<br><span style="color:#7f8c8d; font-size:11px; font-style:italic;">💬 ${escHTML(s.commentaire)}</span>` : ''; let attenteTag = isAttente ? `<br><span style="color:#e67e22; font-size:11px; font-weight:bold;">⏳ En attente</span>` : '';
-            planMiniHtml += `<tr><td style="width:25px; font-weight:bold; text-align:center; color:#e74c3c;">#${idx+1}</td><td><strong>${escHTML(act.matiere)}</strong> - ${escHTML(act.competence)}<br>${formaterEtoiles(act.difficulte)}<span style="color:#7f8c8d;">${escHTML(act.ressource)}</span>${infoC}${attenteTag}</td><td style="text-align:right; white-space:nowrap;"><button class="dashboard-eval-btn" style="${styleRefaire}" onclick="setSuivi('${e.id}', '${idAct}', 'a_refaire')">🔄 À refaire</button> <button class="dashboard-eval-btn" style="${styleRevoir}" onclick="setSuivi('${e.id}', '${idAct}', 'a_revoir')">👩‍🏫 À revoir</button> <button class="dashboard-eval-btn" style="background:#27ae60; color:white;" onclick="validerDepuisDashboard('${e.id}', '${idAct}')">✅ Valider</button></td></tr>`;
+            let estValide = e.valides && e.valides[idAct];
+            
+            let styleRefaire = s.statut === 'a_refaire' ? 'background:#f39c12; color:white; font-weight:bold;' : 'background:#ecf0f1; color:#333;';
+            let styleRevoir = s.statut === 'a_revoir' ? 'background:#e74c3c; color:white; font-weight:bold;' : 'background:#ecf0f1; color:#333;';
+            let styleValider = estValide ? 'background:#27ae60; color:white; font-weight:bold;' : 'background:#ecf0f1; color:#333;';
+            let texteValider = estValide ? '✅ Validé' : '✅ Valider';
+
+            let infoC = s.commentaire ? `<br><span style="color:#7f8c8d; font-size:11px; font-style:italic;">💬 ${escHTML(s.commentaire)}</span>` : '';
+            let attenteTag = isAttente ? `<br><span style="color:#e67e22; font-size:11px; font-weight:bold;">⏳ Reporté en priorité</span>` : '';
+            let logoDeb = s.statut === 'a_revoir' ? '👩‍🏫 ' : (s.statut === 'a_refaire' ? '🔄 ' : '');
+            
+            planMiniHtml += `<tr style="${estValide ? 'background:#e8f8f5;' : ''}">
+                <td style="width:35px; font-weight:bold; text-align:center; color:#e74c3c;">${logoDeb}#${idx+1}</td>
+                <td><strong>${escHTML(act.matiere)}</strong> - ${escHTML(act.competence)}<br>${formaterEtoiles(act.difficulte)}<span style="color:#7f8c8d;">${escHTML(act.ressource)}</span>${infoC}${attenteTag}</td>
+                <td style="text-align:right; white-space:nowrap;">
+                    <button class="dashboard-eval-btn" style="${styleRefaire} border:1px solid #bdc3c7; padding:5px 8px; border-radius:4px; cursor:pointer;" onclick="setSuivi('${e.id}', '${idAct}', 'a_refaire')">🔄 À refaire</button>
+                    <button class="dashboard-eval-btn" style="${styleRevoir} border:1px solid #bdc3c7; padding:5px 8px; border-radius:4px; cursor:pointer;" onclick="setSuivi('${e.id}', '${idAct}', 'a_revoir')">👩‍🏫 À revoir</button>
+                    <button class="dashboard-eval-btn" style="${styleValider} border:1px solid #bdc3c7; padding:5px 8px; border-radius:4px; cursor:pointer;" onclick="validerDepuisDashboard('${e.id}', '${idAct}')">${texteValider}</button>
+                </td>
+            </tr>`;
         });
         if(planObjectsTries.length === 0) planMiniHtml += '<tr><td colspan="3" style="text-align:center; padding:15px;">Plan vide.</td></tr>'; planMiniHtml += '</table>';
-        html += `<tr style="border-top: 2px solid #ecf0f1;"><td style="font-size:16px;"><strong>[${e.niveau}] ${escHTML(e.nom)}</strong></td><td><div class="jauge-container"><div class="jauge-fill" style="width: ${pct}%; background-color: ${colorBar};"></div></div><div class="jauge-text">${currentPlanLen} ateliers en cours sur ${max} max</div></td><td style="text-align: center;">${btnExpand}</td></tr><tr id="dash_details_${e.id}" style="${dashboardExpanded.has(e.id) ? '' : 'display:none;'} background:#f2f4f4;"><td colspan="3" style="padding:15px;">${planMiniHtml}</td></tr>`;
+        let infoSem = e.semaines.length > 1 ? ` <span style="font-size:12px; color:#2980b9;">(Semaine ${e.semaineIndex + 1}/${e.semaines.length})</span>` : '';
+        html += `<tr style="border-top: 2px solid #ecf0f1;"><td style="font-size:16px;"><strong>[${e.niveau}] ${escHTML(e.nom)}</strong>${infoSem}</td><td><div class="jauge-container"><div class="jauge-fill" style="width: ${pct}%; background-color: ${colorBar};"></div></div><div class="jauge-text">${currentPlanLen} ateliers en cours sur ${max} max</div></td><td style="text-align: center;">${btnExpand}</td></tr><tr id="dash_details_${e.id}" style="${dashboardExpanded.has(e.id) ? '' : 'display:none;'} background:#f2f4f4;"><td colspan="3" style="padding:15px;">${planMiniHtml}</td></tr>`;
     });
     tbody.innerHTML = html; genererMatriceCompetences();
 }
@@ -730,16 +1260,31 @@ function changerBilanEval(idEleve, idAct, valeur) { let eleve = eleves[idEleve];
 
 function genererBilanEleve() {
     let selectBilan = document.getElementById('selectEleveBilan'); let zone = document.getElementById('zoneBilanPrint'); if (!selectBilan || !zone) return; let idEleve = selectBilan.value;
-    if (!idEleve || idEleve === "TOUS_ELEVES") { zone.innerHTML = '<h3 style="text-align: center; color: #7f8c8d; margin-top: 50px;">Sélectionnez un seul élève pour voir son bilan des évaluations.</h3>'; return; }
+    if (!idEleve || idEleve.startsWith("TOUS") || idEleve.startsWith("NIVEAU_")) { zone.innerHTML = '<h3 style="text-align: center; color: #7f8c8d; margin-top: 50px;">Sélectionnez un seul élève pour voir son bilan des évaluations.</h3>'; return; }
     let eleve = eleves[idEleve]; let evalActs = [];
     if(eleve.historique && Array.isArray(eleve.historique)) { eleve.historique.forEach(h => { let act = baseDonnees.find(b => b.id === h.idActivite); if(act && act.estEvaluation) { evalActs.push({ act: act, date: h.date }); } }); }
     if (evalActs.length === 0) { zone.innerHTML = `<h3 style="color:#2c3e50;">Bilan des évaluations - [${eleve.niveau}] ${escHTML(eleve.nom)}</h3><p>Aucune évaluation validée pour le moment.</p>`; return; }
 
-    let html = `<div style="border-bottom: 2px solid #9b59b6; padding-bottom: 10px; margin-bottom: 20px;"><h2 style="margin:0; color:#2c3e50;">Bilan des Évaluations : [${eleve.niveau}] ${escHTML(eleve.nom)}</h2><p style="margin:5px 0 0 0; color:#7f8c8d; font-size:14px;">Généré le ${new Date().toLocaleDateString('fr-FR')}</p></div>`;
+    let nbA = 0, nbPA = 0, nbNA = 0;
+    evalActs.forEach(item => {
+        let v = (eleve.bilanEvaluations && eleve.bilanEvaluations[item.act.id]) ? eleve.bilanEvaluations[item.act.id] : "";
+        if (v === 'A') nbA++; else if (v === 'PA') nbPA++; else if (v === 'NA') nbNA++;
+    });
+
+    let html = `<div style="border-bottom: 2px solid #9b59b6; padding-bottom: 10px; margin-bottom: 15px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <div><h2 style="margin:0; color:#2c3e50;">Bilan des Évaluations : [${eleve.niveau}] ${escHTML(eleve.nom)}</h2><p style="margin:5px 0 0 0; color:#7f8c8d; font-size:13px;">Généré le ${new Date().toLocaleDateString('fr-FR')} (${evalActs.length} évaluation(s))</p></div>
+        <div style="display:flex; gap:10px;">
+            <span style="background:#e8f8f5; border:1px solid #27ae60; color:#115e59; padding:6px 12px; border-radius:8px; font-weight:bold; font-size:13px;">✅ A : ${nbA}</span>
+            <span style="background:#fef5e7; border:1px solid #f39c12; color:#7c2d12; padding:6px 12px; border-radius:8px; font-weight:bold; font-size:13px;">🟠 PA : ${nbPA}</span>
+            <span style="background:#fdedec; border:1px solid #e74c3c; color:#881337; padding:6px 12px; border-radius:8px; font-weight:bold; font-size:13px;">❌ NA : ${nbNA}</span>
+        </div>
+    </div>`;
+
     let groupes = {}; evalActs.forEach(item => { let mat = item.act.matiere || "Autre"; if (!groupes[mat]) groupes[mat] = []; groupes[mat].push(item); });
 
     Object.keys(groupes).sort().forEach(mat => {
-        html += `<h3 style="color:#9b59b6; margin-top:20px; border-bottom:1px solid #bdc3c7;">${escHTML(mat)}</h3><table style="width:100%; font-size:13px; margin-bottom:15px;"><thead><tr><th>Compétence / Évaluation</th><th style="width:100px; text-align:center;">Date</th><th style="width:140px; text-align:center;">Position (A / PA / NA)</th></tr></thead><tbody>`;
+        let coul = getCouleurMatiereBandeau(mat);
+        html += `<h3 style="background:${coul.bg}; color:${coul.text}; padding:6px 12px; border-radius:6px; margin-top:20px; font-size:14px;">${escHTML(mat)}</h3><table style="width:100%; font-size:13px; margin-bottom:15px;"><thead><tr><th>Compétence / Évaluation</th><th style="width:100px; text-align:center;">Date</th><th style="width:140px; text-align:center;">Position (A / PA / NA)</th></tr></thead><tbody>`;
         groupes[mat].forEach(item => {
             let actId = item.act.id; let currentVal = (eleve.bilanEvaluations && eleve.bilanEvaluations[actId]) ? eleve.bilanEvaluations[actId] : "";
             let btnA = `background: ${currentVal === 'A' ? '#27ae60' : '#ecf0f1'}; color: ${currentVal === 'A' ? 'white' : '#333'};`; let btnPA = `background: ${currentVal === 'PA' ? '#f39c12' : '#ecf0f1'}; color: ${currentVal === 'PA' ? 'white' : '#333'};`; let btnNA = `background: ${currentVal === 'NA' ? '#e74c3c' : '#ecf0f1'}; color: ${currentVal === 'NA' ? 'white' : '#333'};`;
@@ -963,8 +1508,10 @@ function supprimerActiviteBase(idActivite) {
     if(confirm("Supprimer définitivement ?")) { 
         baseDonnees = baseDonnees.filter(a => a.id !== idActivite); 
         Object.values(eleves).forEach(e => {
+            assurerStructureSemaines(e);
             if (e.planHebdo) e.planHebdo = e.planHebdo.filter(id => id !== idActivite); if (e.historique) e.historique = e.historique.filter(h => h.idActivite !== idActivite); if (e.masquees) e.masquees = e.masquees.filter(id => id !== idActivite);
             if (e.suivi && e.suivi[idActivite]) delete e.suivi[idActivite]; if (e.valides && e.valides[idActivite]) delete e.valides[idActivite]; if (e.priorites) e.priorites = e.priorites.filter(id => id !== idActivite); if (e.enAttente) e.enAttente = e.enAttente.filter(id => id !== idActivite); if (e.bilanEvaluations && e.bilanEvaluations[idActivite]) delete e.bilanEvaluations[idActivite]; if (e.joursAssignes && e.joursAssignes[idActivite]) delete e.joursAssignes[idActivite];
+            e.semaines.forEach(s => { if (s.planHebdo) s.planHebdo = s.planHebdo.filter(id => id !== idActivite); if (s.joursAssignes) delete s.joursAssignes[idActivite]; });
         });
         sauvegarderEleves(); sauvegarderBase(); initNiveaux(); initProgFilters(); afficherProgrammation(); afficherBase(); initialiserSelectsFormulaire(); afficherChoixEtiquettes(); 
         if(idEleveCourant) { afficherPlanHebdo(); afficherRessourcesDisponibles(); } rafraichirDashboard(); showToast("Activité supprimée", "success");
@@ -974,7 +1521,7 @@ function supprimerActiviteBase(idActivite) {
 function viderBase() { 
     if(confirm("Vider la base ? Attention, cela retirera toutes les activités des plans des élèves.")) { 
         baseDonnees = []; 
-        Object.values(eleves).forEach(e => { e.planHebdo = []; e.historique = []; e.masquees = []; e.suivi = {}; e.valides = {}; e.enAttente = []; e.priorites = []; e.bilanEvaluations = {}; e.joursAssignes = {}; });
+        Object.values(eleves).forEach(e => { e.planHebdo = []; e.historique = []; e.masquees = []; e.suivi = {}; e.valides = {}; e.enAttente = []; e.priorites = []; e.bilanEvaluations = {}; e.joursAssignes = {}; e.semaines = []; assurerStructureSemaines(e); });
         sauvegarderEleves(); sauvegarderBase(); initNiveaux(); initProgFilters(); afficherProgrammation(); afficherBase(); initialiserSelectsFormulaire(); afficherChoixEtiquettes(); 
         if(idEleveCourant) { afficherPlanHebdo(); afficherRessourcesDisponibles(); } rafraichirDashboard(); showToast("Base vidée", "success");
     } 
@@ -1052,9 +1599,13 @@ function genererApercuEtiquettes() {
 function lancerImpressionEtiquettes() { if(document.querySelectorAll('.cb-etiquette:checked').length === 0) { alert("Cochez au moins une étiquette."); return; } document.body.classList.add('print-mode-etiquettes'); window.print(); document.body.classList.remove('print-mode-etiquettes'); }
 
 // ==========================================
-// 10. SAUVEGARDE LOCALE, IMPRESSION & NAVIGATION
+// 10. SAUVEGARDE, IMPRESSION & INITIALISATION
 // ==========================================
-function exporterSauvegarde() { const data = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations }; const blob = new Blob([JSON.stringify(data)], { type: "application/json" }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "Sauvegarde_Classe_" + new Date().toLocaleDateString('fr-FR').replace(/\//g, '-') + ".json"; a.click(); }
+function exporterSauvegarde() {
+    Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
+    const data = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, theme: localStorage.getItem(KEY_THEME) || 'pastel' };
+    const blob = new Blob([JSON.stringify(data)], { type: "application/json" }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "Sauvegarde_Classe_" + new Date().toLocaleDateString('fr-FR').replace(/\//g, '-') + ".json"; a.click();
+}
 
 function restaurerSauvegarde() {
     const fileInput = document.getElementById('fileImport'); if(!fileInput || fileInput.files.length === 0) return; const reader = new FileReader();
@@ -1065,10 +1616,8 @@ function restaurerSauvegarde() {
                 baseDonnees = Array.isArray(data.base) ? data.base : []; eleves = data.eleves;
                 if (data.archives) { dashboardArchives = data.archives; localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); }
                 if (data.programmations) { programmations = data.programmations; localStorage.setItem(KEY_PROG, JSON.stringify(programmations)); }
-                Object.values(eleves).forEach(el => { 
-                    if(!el.maxAteliers) el.maxAteliers = 15; if(el.maxTablettes === undefined) el.maxTablettes = 2; if(!el.niveau) el.niveau = "CP";
-                    if(!el.suivi) el.suivi = {}; if(!el.priorites) el.priorites = []; if(!el.enAttente) el.enAttente = []; if(!el.bilanEvaluations) el.bilanEvaluations = {}; if(!el.joursAssignes) el.joursAssignes = {};
-                });
+                if (data.theme) { appliquerThemeVisuel(data.theme); }
+                Object.values(eleves).forEach(el => assurerStructureSemaines(el));
                 if(data.images) { imagesParType = data.images; localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType)); majListeTypesSelect(); }
                 trierBaseDonnees(); sauvegarderBase(); sauvegarderEleves(); initNiveaux(); initProgFilters(); afficherProgrammation(); majListeEleves(); initialiserSelectsFormulaire(); afficherBase(); afficherChoixEtiquettes(); majSelectCouleursRapides();
                 showToast("Données restaurées et triées !", "success"); fileInput.value = '';
@@ -1081,8 +1630,9 @@ function changerOnglet(idPage, element) {
     document.querySelectorAll('.page').forEach(page => page.classList.remove('active')); document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
     let targetPage = document.getElementById(idPage); if(targetPage) targetPage.classList.add('active'); if(element) element.classList.add('active');
     
+    if(idPage === 'pageSuivi') { if(idEleveCourant) chargerEleve(); }
     if(idPage === 'pageEtiquettes') { initNiveaux(); afficherChoixEtiquettes(); }
-    if(idPage === 'pageImpression') { if(idEleveCourant) { idEleveImpressionCourant = idEleveCourant; } majListeEleves(); rafraichirFicheImpression(); } 
+    if(idPage === 'pageImpression') { if(idEleveCourant) { idEleveImpressionCourant = idEleveCourant; } majListeEleves(); changementEleveImpression(); } 
     if(idPage === 'pageBase') { majSelectCouleursRapides(); afficherBase(); }
     if(idPage === 'pageProg') { initProgFilters(); afficherProgrammation(); }
     if(idPage === 'pageDashboard') { rafraichirDashboard(); }
@@ -1092,52 +1642,165 @@ function changerOnglet(idPage, element) {
     window.scrollTo({top: 0, behavior: 'smooth'});
 }
 
+function changementEleveImpression() {
+    let selImp = document.getElementById('selectEleveImpression'); if(!selImp) return;
+    idEleveImpressionCourant = selImp.value;
+    let blocSem = document.getElementById('blocSelectSemaineImpression');
+    let selSemImp = document.getElementById('selectSemaineImpression');
+    let picker = document.getElementById('pdtDateDebutPicker');
+    let spanFin = document.getElementById('pdtDateFinAffiche');
+
+    if (idEleveImpressionCourant && eleves[idEleveImpressionCourant]) {
+        let e = eleves[idEleveImpressionCourant];
+        assurerStructureSemaines(e); syncEleveVersSemaineActive(e);
+        if (blocSem && selSemImp) {
+            blocSem.style.display = 'flex';
+            let html = '';
+            e.semaines.forEach((s, idx) => {
+                let dTxt = (s.dateDebut && s.dateFin) ? ` (${s.dateDebut} au ${s.dateFin})` : '';
+                html += `<option value="${idx}">Semaine ${idx + 1}${dTxt}</option>`;
+            });
+            selSemImp.innerHTML = html;
+            selSemImp.value = e.semaineIndex;
+        }
+        if (e.dateDebutISO) {
+            if (picker) picker.value = e.dateDebutISO;
+            if (spanFin) spanFin.innerText = `➔ au Vendredi ${e.dateFin}`;
+        }
+    } else if (idEleveImpressionCourant && (idEleveImpressionCourant === 'TOUS_ELEVES' || idEleveImpressionCourant.startsWith('NIVEAU_'))) {
+        if (blocSem && selSemImp) {
+            blocSem.style.display = 'flex';
+            let maxSem = 1;
+            Object.values(eleves).forEach(el => { assurerStructureSemaines(el); if (el.semaines.length > maxSem) maxSem = el.semaines.length; });
+            let curVal = selSemImp.value || "0";
+            let html = '<option value="ACTIVE">Semaine active de chaque élève</option>';
+            for (let i = 0; i < maxSem; i++) { html += `<option value="${i}">Semaine ${i + 1} pour tout le groupe</option>`; }
+            selSemImp.innerHTML = html;
+            selSemImp.value = (curVal === "ACTIVE" || parseInt(curVal) < maxSem) ? curVal : "ACTIVE";
+        }
+    } else {
+        if (blocSem) blocSem.style.display = 'none';
+    }
+    rafraichirFicheImpression();
+}
+
+function changerSemaineDepuisImpression(nouvelIndex) {
+    if (idEleveImpressionCourant && eleves[idEleveImpressionCourant]) {
+        let e = eleves[idEleveImpressionCourant];
+        chargerSemaineDepuisIndex(e, nouvelIndex);
+        sauvegarderEleves();
+        changementEleveImpression();
+    } else {
+        rafraichirFicheImpression();
+    }
+}
+
+function appliquerDateImpression(dateISO) {
+    let res = calculerVendrediDepuisISO(dateISO);
+    dateGlobaleDebutISO = dateISO || "";
+    dateGlobaleDebutFR = res.debutFR;
+    dateGlobaleFinFR = res.finFR;
+    let spanFin = document.getElementById('pdtDateFinAffiche');
+    if (spanFin) spanFin.innerText = res.finFR ? `➔ au Vendredi ${res.finFR}` : "➔ au --/--";
+
+    if (idEleveImpressionCourant && eleves[idEleveImpressionCourant]) {
+        let e = eleves[idEleveImpressionCourant];
+        e.dateDebutISO = dateGlobaleDebutISO;
+        e.dateDebut = dateGlobaleDebutFR;
+        e.dateFin = dateGlobaleFinFR;
+        sauvegarderEleves();
+        changementEleveImpression();
+    } else {
+        rafraichirFicheImpression();
+    }
+}
+
 function rafraichirFicheImpression() {
     try {
         let selImp = document.getElementById('selectEleveImpression'); if(!selImp) return; idEleveImpressionCourant = selImp.value; 
         const container = document.getElementById('containerFichesImpression'); if(!container) return;
-        if(!idEleveImpressionCourant) { container.innerHTML = '<div style="text-align: center; padding: 40px; color: #7f8c8d;" class="no-print"><h2>Veuillez sélectionner un élève ou l\'option "Tous les élèves" ci-dessus.</h2></div>'; return; }
+        if(!idEleveImpressionCourant) { container.innerHTML = '<div style="text-align: center; padding: 40px; color: #7f8c8d;" class="no-print"><h2>Veuillez sélectionner un élève ou un groupe ci-dessus.</h2></div>'; return; }
         
-        if(idEleveImpressionCourant === 'TOUS_ELEVES') {
+        let selSemImp = document.getElementById('selectSemaineImpression');
+        let choixSemGroupe = selSemImp ? selSemImp.value : "ACTIVE";
+
+        if(idEleveImpressionCourant === 'TOUS_ELEVES' || idEleveImpressionCourant.startsWith('NIVEAU_')) {
             let listeEleves = getElevesTries();
-            if(listeEleves.length === 0) { container.innerHTML = '<div style="text-align: center; padding: 40px; color: #7f8c8d;" class="no-print"><h2>Aucun élève enregistré dans la classe.</h2></div>'; return; }
-            let htmlGlobal = ''; listeEleves.forEach(e => { htmlGlobal += genererHtmlFicheEleve(e, false); }); container.innerHTML = htmlGlobal;
-        } else { if(eleves[idEleveImpressionCourant]) { container.innerHTML = genererHtmlFicheEleve(eleves[idEleveImpressionCourant], true); } }
-    } catch(error) { console.error("Erreur lors de la génération de la fiche :", error); let containerErr = document.getElementById('containerFichesImpression'); if(containerErr) containerErr.innerHTML = '<div style="text-align: center; padding: 40px; color: #e74c3c;"><h2>Une erreur est survenue lors de l\'affichage.</h2></div>'; }
+            if (idEleveImpressionCourant.startsWith('NIVEAU_')) {
+                let nivCible = idEleveImpressionCourant.replace('NIVEAU_', '');
+                listeEleves = listeEleves.filter(e => (e.niveau || 'CP').toUpperCase() === nivCible);
+            }
+            if(listeEleves.length === 0) { container.innerHTML = '<div style="text-align: center; padding: 40px; color: #7f8c8d;" class="no-print"><h2>Aucun élève trouvé dans ce groupe.</h2></div>'; return; }
+            let htmlGlobal = '';
+            listeEleves.forEach(e => {
+                assurerStructureSemaines(e); syncEleveVersSemaineActive(e);
+                let semIdx = (choixSemGroupe === "ACTIVE" || choiceInvalid(choixSemGroupe, e)) ? e.semaineIndex : parseInt(choixSemGroupe);
+                htmlGlobal += genererHtmlFicheEleve(e, false, semIdx);
+            });
+            container.innerHTML = htmlGlobal;
+        } else {
+            if(eleves[idEleveImpressionCourant]) {
+                let e = eleves[idEleveImpressionCourant];
+                assurerStructureSemaines(e); syncEleveVersSemaineActive(e);
+                container.innerHTML = genererHtmlFicheEleve(e, true, e.semaineIndex);
+            }
+        }
+    } catch(error) { console.error("Erreur lors de la génération de la fiche :", error); }
 }
 
-function genererHtmlFicheEleve(eleve, estUnique) {
-    if(!eleve.planHebdo || !Array.isArray(eleve.planHebdo)) return "";
-    let dateDebutElem = document.getElementById('pdtDateDebut'); let dateFinElem = document.getElementById('pdtDateFin');
-    let dateDebut = dateDebutElem ? dateDebutElem.value.trim() : ''; let dateFin = dateFinElem ? dateFinElem.value.trim() : '';
+function choiceInvalid(val, e) {
+    let idx = parseInt(val);
+    return isNaN(idx) || idx < 0 || idx >= e.semaines.length;
+}
+
+function genererHtmlFicheEleve(eleve, estUnique, indexSemaineForce) {
+    assurerStructureSemaines(eleve);
+    let semObj = (indexSemaineForce !== undefined && eleve.semaines[indexSemaineForce]) ? eleve.semaines[indexSemaineForce] : eleve;
+    let planIds = semObj.planHebdo || [];
+    let priosIds = semObj.priorites || eleve.priorites || [];
+    let joursMap = semObj.joursAssignes || eleve.joursAssignes || {};
+    let suiviMap = { ...(eleve.suivi || {}), ...(semObj.suivi || {}) };
+
+    let dateDebut = semObj.dateDebut || dateGlobaleDebutFR || '';
+    let dateFin = semObj.dateFin || dateGlobaleFinFR || '';
     let infoDates = (dateDebut && dateFin) ? ` (du ${escHTML(dateDebut)} au ${escHTML(dateFin)})` : (dateDebut ? ` (à partir du ${escHTML(dateDebut)})` : "");
-    let planObjects = getListeTrie(eleve.planHebdo, eleve.priorites || []); let rowsHtml = ''; let derniereSequence = "";
+    
+    let planObjects = getListeTrie(planIds, priosIds, suiviMap);
+    let rowsHtml = ''; let derniereSequence = "";
 
     let joursJours = { "Lundi": [], "Mardi": [], "Jeudi": [], "Vendredi": [] };
 
     planObjects.forEach((a, index) => {
         const num = index + 1;
-        let jourImpose = (eleve.joursAssignes && eleve.joursAssignes[a.id]) ? eleve.joursAssignes[a.id] : "";
+        let jourImpose = joursMap[a.id] || "";
         if (jourImpose && joursJours[jourImpose]) {
             joursJours[jourImpose].push(num);
         }
 
-        if (a.sequence !== derniereSequence) { derniereSequence = a.sequence; rowsHtml += `<tr class="sequence-separator-row"><td colspan="7">📑 Séquence : ${escHTML(a.sequence)} (${escHTML(a.matiere)})</td></tr>`; }
+        if (a.sequence !== derniereSequence) {
+            derniereSequence = a.sequence;
+            let coul = getCouleurMatiereBandeau(a.matiere);
+            rowsHtml += `<tr class="sequence-separator-row"><td colspan="7" style="background-color: ${coul.bg} !important; color: ${coul.text} !important; border-color: ${coul.border} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">📑 Séquence : ${escHTML(a.sequence)} (${escHTML(a.matiere)})</td></tr>`;
+        }
         let badge = a.estEvaluation ? `<span class="badge-eval">🎯 Évaluation</span>` : ''; let rowClass = a.estEvaluation ? 'row-eval' : ''; let repereHtml = ""; let typeAct = a.typeRes ? a.typeRes.trim().toLowerCase() : ""; let cfgType = null;
         for(let key in imagesParType) { if(key.trim().toLowerCase() === typeAct) { cfgType = imagesParType[key]; break; } }
         let lienImageConfig = (cfgType && typeof cfgType === 'object') ? cfgType.img : (cfgType || ""); let remplacerNum = (cfgType && typeof cfgType === 'object') ? cfgType.remplacerNum : false;
         let imageFinale = a.visuel || lienImageConfig || ""; imageFinale = formaterLienImage(imageFinale);
         if (imageFinale && !imageFinale.startsWith('#')) { if (remplacerNum) { repereHtml = `<img src="${imageFinale}" style="max-height: 40px; max-width: 70px; border-radius: 3px; vertical-align: middle; display: block; margin: auto;" title="${escHTML(a.typeRes)}">`; } else { let numAtelier = a.symbole ? `<strong>${escHTML(a.symbole)}</strong><br>` : ''; repereHtml = `${numAtelier}<img src="${imageFinale}" style="max-height: 32px; max-width: 60px; margin-top: 2px; border-radius: 2px; display: block; margin-left: auto; margin-right: auto;">`; } } else { repereHtml = `<strong>${escHTML(a.symbole || '')}</strong>`; }
-        let bgColor = ""; if (a.visuel && a.visuel.startsWith('#') && a.visuel !== '#ffffff') { bgColor = `background-color: ${a.visuel}; color: ${isDarkColor(a.visuel) ? 'white' : 'black'}; border-radius: 2px; padding: 2px;`; }
+        let bgColor = ""; if (a.visuel && a.visuel.startsWith('#') && a.visuel !== '#ffffff') { bgColor = `background-color: ${a.visuel}; color: ${isDarkColor(a.visuel) ? 'white' : 'black'}; border-radius: 2px; padding: 2px; -webkit-print-color-adjust: exact; print-color-adjust: exact;`; }
 
         let numCellClass = jourImpose ? "col-num num-jour-impose" : "col-num";
         let resStyle = jourImpose ? "text-decoration: underline;" : "";
 
+        // Logo de la maîtresse 👩‍🏫 au début de la ligne si "à revoir avec la maitresse"
+        let statutAct = (suiviMap && suiviMap[a.id]) ? suiviMap[a.id].statut : "";
+        let logoMaitresseDebut = statutAct === 'a_revoir' ? `<span style="font-size: 13px; margin-right: 2px;">👩‍🏫</span>` : "";
+
         rowsHtml += `<tr class="${rowClass}">
-            <td class="${numCellClass}">${num}</td>
+            <td class="${numCellClass}" style="white-space:nowrap;">${logoMaitresseDebut}${num}</td>
             <td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td>
             <td>${a.lecon ? '<em>'+escHTML(a.lecon)+'</em><br>' : ''}${escHTML(a.competence)}</td>
-            <td>${formaterEtoiles(a.difficulte)}<strong style="${resStyle}">${escHTML(a.ressource)}</strong> ${badge}</td>
+            <td>${logoMaitresseDebut}${formaterEtoiles(a.difficulte)}<strong style="${resStyle}">${escHTML(a.ressource)}</strong> ${badge}</td>
             <td class="col-center">${escHTML(a.typeRes || '')}</td>
             <td class="col-center print-visual-cell" style="${bgColor}; width: 80px; text-align: center;">${repereHtml}</td>
             <td class="col-center">${escHTML(a.personnes || '')}</td>
@@ -1165,11 +1828,43 @@ function genererHtmlFicheEleve(eleve, estUnique) {
     }
     let wrapperClass = estUnique ? '' : 'plan-eleve-page';
 
-    return `<div class="panel ${wrapperClass}" style="margin-top: 1px;"><div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2c3e50; padding-bottom: 1px; margin-bottom: 2px;"><h2 style="margin:0; font-size: 11px;">Plan de travail - [${eleve.niveau}] ${escHTML(eleve.nom)}</h2><span style="font-size: 9.5px; font-weight: bold; color: #2980b9;">📅 Période${infoDates}</span></div><p style="font-size: 8px; font-style: italic; color: #555; margin: 0 0 2px 0; background: #f8f9f9; padding: 1px 3px; border-radius: 2px; border-left: 2px solid #2980b9;">💡 <strong>Consigne :</strong> Les numéros <u>soulignés</u> sont déjà placés dans ton semainier. Entoure le n° de l'activité commencée et barre-le quand tu as terminé.</p><table><thead><tr><th class="col-num">N°</th><th>Matière & Séquence</th><th>Compétence visée</th><th>Ressource à réaliser</th><th class="col-center">Type</th><th class="col-center" style="width: 80px;">N° Atelier</th><th class="col-center">Nb Pers.</th></tr></thead><tbody>${rowsHtml}</tbody></table><h4 style="margin: 2px 0 1px 0; color: #2c3e50; font-size: 8.5px;">📅 Planification journalière (Écris le N° de l'activité à faire) :</h4><table class="planning-table"><thead><tr><th>Lundi</th><th>Mardi</th><th>Jeudi</th><th>Vendredi</th></tr></thead><tbody>${planningRowsHtml}</tbody></table></div>`;
+    return `<div class="panel ${wrapperClass}" style="margin-top: 1px;"><div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2c3e50; padding-bottom: 1px; margin-bottom: 2px;"><h2 style="margin:0; font-size: 11px;">Plan de travail - [${eleve.niveau}] ${escHTML(eleve.nom)}</h2><span style="font-size: 9.5px; font-weight: bold; color: #2980b9;">📅 Période${infoDates}</span></div><p style="font-size: 8px; font-style: italic; color: #555; margin: 0 0 2px 0; background: #f8f9f9; padding: 1px 3px; border-radius: 2px; border-left: 2px solid #2980b9;">💡 <strong>Consigne :</strong> Les numéros <u>soulignés</u> sont déjà placés dans ton semainier. Le symbole 👩‍🏫 indique un atelier à faire avec la maîtresse. Entoure le n° commencé et barre-le quand tu as terminé.</p><table><thead><tr><th class="col-num">N°</th><th>Matière & Séquence</th><th>Compétence visée</th><th>Ressource à réaliser</th><th class="col-center">Type</th><th class="col-center" style="width: 80px;">N° Atelier</th><th class="col-center">Nb Pers.</th></tr></thead><tbody>${rowsHtml}</tbody></table><h4 style="margin: 2px 0 1px 0; color: #2c3e50; font-size: 8.5px;">📅 Planification journalière (Écris le N° de l'activité à faire) :</h4><table class="planning-table"><thead><tr><th>Lundi</th><th>Mardi</th><th>Jeudi</th><th>Vendredi</th></tr></thead><tbody>${planningRowsHtml}</tbody></table></div>`;
+}
+
+// Injection automatique du bouton Design et de la fenêtre de thème s'ils ne sont pas dans index.html
+function initialiserBoutonDesignUI() {
+    const navbar = document.querySelector('.navbar');
+    if (navbar && !document.querySelector('.btn-theme-config')) {
+        const btn = document.createElement('button');
+        btn.className = 'btn-theme-config no-print';
+        btn.innerHTML = '🎨 Design';
+        btn.title = 'Personnaliser le graphisme de l\'application';
+        btn.onclick = () => ouvrirModal('modalDesign');
+        navbar.appendChild(btn);
+    }
+    if (!document.getElementById('modalDesign')) {
+        const modal = document.createElement('div');
+        modal.id = 'modalDesign';
+        modal.className = 'modal-overlay no-print';
+        modal.innerHTML = `<div class="modal-content">
+            <h3 style="margin-top:0; color: #2c3e50;">🎨 Personnaliser le graphisme</h3>
+            <p style="font-size: 13px; color: #7f8c8d; margin-bottom: 15px;">Choisissez l'ambiance visuelle de votre application (l'impression des fiches restera toujours sur fond blanc).</p>
+            <div class="theme-card" id="card_theme_classique" onclick="appliquerThemeVisuel('classique')"><div><strong>💼 Classique (Origine)</strong><br><span style="font-size: 12px; color: #7f8c8d;">Couleurs franches et contrastées</span></div><div class="theme-preview-dots"><span class="theme-dot" style="background:#2c3e50;"></span><span class="theme-dot" style="background:#2980b9;"></span><span class="theme-dot" style="background:#27ae60;"></span></div></div>
+            <div class="theme-card" id="card_theme_pastel" onclick="appliquerThemeVisuel('pastel')"><div><strong>🌸 Pastel Poudré</strong><br><span style="font-size: 12px; color: #7f8c8d;">Teintes douces macaron, lavande et menthe</span></div><div class="theme-preview-dots"><span class="theme-dot" style="background:#e8dff5;"></span><span class="theme-dot" style="background:#a2d2ff;"></span><span class="theme-dot" style="background:#ffcad4;"></span></div></div>
+            <div class="theme-card" id="card_theme_doodles" onclick="appliquerThemeVisuel('doodles')"><div><strong>✏️ Carnet Doodles & Pastel</strong><br><span style="font-size: 12px; color: #7f8c8d;">Couleurs pastelles + petits dessins d'école en fond</span></div><div class="theme-preview-dots"><span class="theme-dot" style="background:#fdfbf7;"></span><span class="theme-dot" style="background:#b8c0ff;"></span><span class="theme-dot" style="background:#a3e4d7;"></span></div></div>
+            <div class="theme-card" id="card_theme_nature" onclick="appliquerThemeVisuel('nature')"><div><strong>🌿 Nature & Sauge</strong><br><span style="font-size: 12px; color: #7f8c8d;">Tons apaisants vert sauge, lin et bois</span></div><div class="theme-preview-dots"><span class="theme-dot" style="background:#cad2c5;"></span><span class="theme-dot" style="background:#74c69d;"></span><span class="theme-dot" style="background:#e9edc9;"></span></div></div>
+            <button onclick="fermerModal('modalDesign')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:8px; cursor:pointer; margin-top: 10px;">Fermer</button>
+        </div>`;
+        document.body.appendChild(modal);
+    }
 }
 
 // --- INITIALISATION AU CHARGEMENT ---
 document.addEventListener("DOMContentLoaded", function() {
+    initialiserBoutonDesignUI();
+    let themeSauvegarde = localStorage.getItem(KEY_THEME) || 'pastel';
+    appliquerThemeVisuel(themeSauvegarde);
+
     document.addEventListener('click', function(e) { const navBtn = e.target.closest('.nav-btn'); if (navBtn) { e.preventDefault(); let onclickAttr = navBtn.getAttribute('onclick'); if (onclickAttr) { let match = onclickAttr.match(/'(.*?)'/); if (match && match[1]) changerOnglet(match[1], navBtn); } } });
     document.querySelectorAll('.nav-btn').forEach(btn => { btn.addEventListener('touchstart', function(e) { e.preventDefault(); let onclickAttr = this.getAttribute('onclick'); if (onclickAttr) { let match = onclickAttr.match(/'(.*?)'/); if (match && match[1]) changerOnglet(match[1], this); } }, { passive: false }); });
     eliminerDoublonsHistoriques(); majListeTypesSelect(); initialiserSelectsFormulaire(); trierBaseDonnees(); majListeEleves(); afficherBase(); initNiveaux(); initProgFilters(); afficherProgrammation(); afficherChoixEtiquettes(); majSelectCouleursRapides(); tenterConnexionAuto(); calculTailleStockage();
