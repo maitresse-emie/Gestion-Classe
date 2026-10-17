@@ -310,7 +310,11 @@
          ========================================== -->
     <div id="pageDashboard" class="page">
         <div class="panel">
-            <h2 style="color: #f39c12; margin-top:0;">📊 Tableau de bord & Évaluation rapide</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+                <h2 style="color: #f39c12; margin:0;">📊 Tableau de bord & Évaluation rapide</h2>
+                <button type="button" class="btn-action" onclick="cloturerSemaineClasseGlobale()" style="background: #d35400; padding: 10px 15px;">🔄 Clôturer la semaine de TOUTE LA CLASSE</button>
+            </div>
+            
             <div id="memoDashboardContainer" style="margin-bottom: 20px;">
                 <h3 style="color:#2c3e50; border-bottom: 2px solid #bdc3c7; padding-bottom:5px;">🧑‍🏫 Groupes de besoins & Ateliers dirigés (Automatique)</h3>
                 <div id="memoListContent"></div>
@@ -538,7 +542,10 @@
          ========================================== -->
     <div id="pageBilan" class="page">
         <div class="panel no-print" style="margin-bottom: 20px;">
-            <h2 style="margin:0 0 15px 0; color: #9b59b6;">📝 Éditer un Bilan d'Élève (Évaluations & Positions A / PA / NA)</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
+                <h2 style="margin:0; color: #9b59b6;">📝 Éditer un Bilan d'Élève (Évaluations & Positions A / PA / NA)</h2>
+                <button type="button" class="btn-action" onclick="exporterBilanEdulivret()" style="background: #27ae60; padding: 8px 12px; font-size: 13px;" title="Copier un résumé formaté pour Edulivret/LSU">📋 Copier résumé pour Edulivret / LSU</button>
+            </div>
             <div style="display:flex; gap: 15px; align-items: center; flex-wrap: wrap;">
                 <select id="selectEleveBilan" onchange="genererBilanEleve()" style="padding: 8px; font-size: 14px;"><option value="">-- Choisir un élève --</option></select>
                 <button type="button" class="btn-action" onclick="window.print()" style="background: #9b59b6; padding: 10px 15px;">🖨️ Imprimer le bilan</button>
