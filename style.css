@@ -9,7 +9,6 @@ body {
     padding: 0 0 40px 0;
 }
 
-/* Navbar supérieure */
 .navbar {
     background-color: #2c3e50;
     display: flex;
@@ -35,35 +34,13 @@ body {
     transition: background 0.2s;
 }
 
-.nav-btn:hover {
-    background-color: #515a5a;
-}
+.nav-btn:hover { background-color: #515a5a; }
+.nav-btn.active { background-color: #2980b9; outline: 2px solid white; }
 
-.nav-btn.active {
-    background-color: #2980b9;
-}
+.page { display: none; padding: 20px; max-width: 1200px; margin: 0 auto; }
+.page.active { display: block; }
+.panel { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 20px; }
 
-/* Pages / Contenu */
-.page {
-    display: none;
-    padding: 20px;
-    max-width: 1200px;
-    margin: 0 auto;
-}
-
-.page.active {
-    display: block;
-}
-
-.panel {
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-    margin-bottom: 20px;
-}
-
-/* Barre de sélection d'élève */
 .student-bar {
     background: #eaeded;
     padding: 12px 20px;
@@ -76,364 +53,91 @@ body {
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
 }
 
-.student-bar select, .student-bar input {
-    padding: 8px;
-    border-radius: 4px;
-    border: 1px solid #bdc3c7;
-    font-size: 14px;
+.student-bar select, .student-bar input { padding: 8px; border-radius: 4px; border: 1px solid #bdc3c7; font-size: 14px; }
+.student-bar button { padding: 8px 14px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+
+table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 15px; background: white; }
+th, td { border: 1px solid #ecf0f1; padding: 8px 10px; text-align: left; font-size: 13px; }
+th { background-color: #f8f9f9; color: #2c3e50; font-weight: bold; }
+tr.row-eval { background-color: #fdedec; }
+tr.row-valide { background-color: #e8f8f5; }
+
+.col-num { width: 35px; text-align: center; font-weight: bold; }
+.col-center { text-align: center; }
+
+/* Numéro d'atelier souligné quand un jour est imposé */
+.num-jour-impose {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+    font-weight: 900;
+    color: #d35400;
 }
 
-.student-bar button {
-    padding: 8px 14px;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
-}
+.cascade-box { display: flex; gap: 15px; background: #f8f9f9; padding: 15px; border-radius: 8px; border: 1px solid #d5dbdb; margin-bottom: 15px; flex-wrap: wrap; }
+.cascade-item { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 5px; }
+.cascade-item label { font-weight: bold; font-size: 12px; color: #7f8c8d; text-transform: uppercase; }
+.cascade-item select { padding: 8px; border-radius: 4px; border: 1px solid #bdc3c7; }
 
-/* Tableaux généraux */
-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 10px;
-    margin-bottom: 15px;
-    background: white;
-}
+.form-row { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.form-row input, .form-row select { padding: 8px; border-radius: 4px; border: 1px solid #bdc3c7; }
 
-th, td {
-    border: 1px solid #ecf0f1;
-    padding: 8px 10px;
-    text-align: left;
-    font-size: 13px;
-}
+.manual-add-box { background: #f2f4f4; padding: 15px; border-radius: 8px; border: 1px solid #bdc3c7; margin-bottom: 20px; }
+.manual-add-box.edit-mode { background: #fef5e7; border-color: #f39c12; }
 
-th {
-    background-color: #f8f9f9;
-    color: #2c3e50;
-    font-weight: bold;
-}
+.btn-action { background-color: #27ae60; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+.btn-action:hover { background-color: #219653; }
+.btn-valid { background-color: #27ae60; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+.btn-remove { background-color: #e74c3c; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+.btn-hide { background-color: #7f8c8d; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+.btn-add { background-color: #2980b9; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; }
 
-tr.row-eval {
-    background-color: #fdedec;
-}
+.filter-btn { background: #ecf0f1; border: 1px solid #bdc3c7; padding: 6px 12px; border-radius: 15px; cursor: pointer; font-size: 12px; font-weight: bold; color: #34495e; }
+.filter-btn.active { background: #2980b9; color: white; border-color: #1b4f72; }
 
-tr.row-valide {
-    background-color: #e8f8f5;
-}
+.jauge-container { background-color: #ecf0f1; border-radius: 4px; overflow: hidden; height: 12px; width: 100%; margin-top: 4px; }
+.jauge-fill { height: 100%; transition: width 0.3s ease; }
+.jauge-text { font-size: 11px; color: #7f8c8d; margin-top: 2px; }
 
-/* Formulaires & Cascades */
-.cascade-box {
-    display: flex;
-    gap: 15px;
-    background: #f8f9f9;
-    padding: 15px;
-    border-radius: 8px;
-    border: 1px solid #d5dbdb;
-    margin-bottom: 15px;
-    flex-wrap: wrap;
-}
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 2000; }
+.modal-content { background: white; padding: 20px; border-radius: 8px; width: 90%; max-width: 500px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); max-height: 80vh; overflow-y: auto; }
 
-.cascade-item {
-    flex: 1;
-    min-width: 200px;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-}
+#toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px; }
+.toast { background: #27ae60; color: white; padding: 12px 20px; border-radius: 5px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); font-weight: bold; font-size: 14px; animation: fadeInOut 3s forwards; }
+.toast.error { background: #e74c3c; }
+@keyframes fadeInOut { 0% { opacity: 0; transform: translateY(20px); } 15% { opacity: 1; transform: translateY(0); } 85% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-20px); } }
 
-.cascade-item label {
-    font-weight: bold;
-    font-size: 12px;
-    color: #7f8c8d;
-    text-transform: uppercase;
-}
+#btnScrollTop { display: none; position: fixed; bottom: 20px; left: 20px; z-index: 999; background: #2c3e50; color: white; border: none; padding: 10px 14px; border-radius: 50%; cursor: pointer; font-size: 16px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
 
-.cascade-item select {
-    padding: 8px;
-    border-radius: 4px;
-    border: 1px solid #bdc3c7;
-}
+.matrice-table th { text-align: center; vertical-align: bottom; padding: 5px; font-size: 11px; }
+.matrice-table td { text-align: center; font-size: 12px; }
 
-.form-row {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 12px;
-    flex-wrap: wrap;
-}
-
-.form-row input, .form-row select {
-    padding: 8px;
-    border-radius: 4px;
-    border: 1px solid #bdc3c7;
-}
-
-.manual-add-box {
-    background: #f2f4f4;
-    padding: 15px;
-    border-radius: 8px;
-    border: 1px solid #bdc3c7;
-    margin-bottom: 20px;
-}
-
-.manual-add-box.edit-mode {
-    background: #fef5e7;
-    border-color: #f39c12;
-}
-
-/* Boutons d'action */
-.btn-action {
-    background-color: #27ae60;
-    color: white;
-    border: none;
-    padding: 8px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
-}
-
-.btn-action:hover {
-    background-color: #219653;
-}
-
-.btn-valid {
-    background-color: #27ae60;
-    color: white;
-    border: none;
-    padding: 6px 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
-}
-
-.btn-remove {
-    background-color: #e74c3c;
-    color: white;
-    border: none;
-    padding: 6px 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
-}
-
-.btn-hide {
-    background-color: #7f8c8d;
-    color: white;
-    border: none;
-    padding: 6px 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
-}
-
-.btn-add {
-    background-color: #2980b9;
-    color: white;
-    border: none;
-    padding: 6px 10px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-weight: bold;
-}
-
-/* Filtres de la base de données */
-.filter-btn {
-    background: #ecf0f1;
-    border: 1px solid #bdc3c7;
-    padding: 6px 12px;
-    border-radius: 15px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: bold;
-    color: #34495e;
-}
-
-.filter-btn.active {
-    background: #2980b9;
-    color: white;
-    border-color: #1b4f72;
-}
-
-/* Jauges et progress bars */
-.jauge-container {
-    background-color: #ecf0f1;
-    border-radius: 4px;
-    overflow: hidden;
-    height: 12px;
-    width: 100%;
-    margin-top: 4px;
-}
-
-.jauge-fill {
-    height: 100%;
-    transition: width 0.3s ease;
-}
-
-.jauge-text {
-    font-size: 11px;
-    color: #7f8c8d;
-    margin-top: 2px;
-}
-
-/* Modals */
-.modal-overlay {
-    position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.5);
-    display: none;
-    justify-content: center;
-    align-items: center;
-    z-index: 2000;
-}
-
-.modal-content {
-    background: white;
-    padding: 20px;
-    border-radius: 8px;
-    width: 90%;
-    max-width: 500px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    max-height: 80vh;
-    overflow-y: auto;
-}
-
-/* Toasts de notification */
-#toast-container {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 9999;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.toast {
-    background: #27ae60;
-    color: white;
-    padding: 12px 20px;
-    border-radius: 5px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-    font-weight: bold;
-    font-size: 14px;
-    animation: fadeInOut 3s forwards;
-}
-
-.toast.error {
-    background: #e74c3c;
-}
-
-@keyframes fadeInOut {
-    0% { opacity: 0; transform: translateY(20px); }
-    15% { opacity: 1; transform: translateY(0); }
-    85% { opacity: 1; transform: translateY(0); }
-    100% { opacity: 0; transform: translateY(-20px); }
-}
-
-/* Bouton retour en haut */
-#btnScrollTop {
-    display: none;
-    position: fixed;
-    bottom: 20px;
-    left: 20px;
-    z-index: 999;
-    background: #2c3e50;
-    color: white;
-    border: none;
-    padding: 10px 14px;
-    border-radius: 50%;
-    cursor: pointer;
-    font-size: 16px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-}
-
-/* Matrice des compétences */
-.matrice-table th {
-    text-align: center;
-    vertical-align: bottom;
-    padding: 5px;
-    font-size: 11px;
-}
-
-.matrice-table td {
-    text-align: center;
-    font-size: 12px;
-}
-
-/* Planning journalier des fiches d'élèves */
-.planning-table th, .planning-table td {
-    height: 35px;
-    text-align: center;
-    vertical-align: middle;
-}
-
+.planning-table th, .planning-table td { height: 35px; text-align: center; vertical-align: middle; }
 .planning-cell-box {
-    display: inline-block;
-    width: 25px;
-    height: 25px;
-    border: 1px dashed #bdc3c7;
-    border-radius: 3px;
-}
-
-.sequence-separator-row td {
-    background-color: #eaeded !important;
-    font-weight: bold;
-    color: #2c3e50;
-    font-size: 12px;
-}
-
-/* Style des étiquettes (Onglet 4) */
-.etiquette-box {
-    display: flex;
-    flex-direction: column;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    box-sizing: border-box;
-    page-break-inside: avoid;
-    break-inside: avoid;
-    text-align: center;
-    overflow: hidden;
-    border-radius: 4px;
+    width: 26px;
+    height: 26px;
+    border: 1px dashed #7f8c8d;
+    border-radius: 3px;
+    font-weight: bold;
+    font-size: 13px;
+    color: #000;
 }
 
-/* Boutons jours de la semaine */
-.btn-jour {
-    padding: 4px 6px;
-    font-size: 11px;
-    font-weight: bold;
-    cursor: pointer;
-    border: 1px solid #bdc3c7;
-    background: white;
-    border-radius: 3px;
-    transition: all 0.2s;
-}
+.sequence-separator-row td { background-color: #eaeded !important; font-weight: bold; color: #2c3e50; font-size: 12px; }
+
+.etiquette-box { display: flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box; page-break-inside: avoid; break-inside: avoid; text-align: center; overflow: hidden; border-radius: 4px; }
 
 /* ==========================================
-   RÈGLES D'IMPRESSION (CORRECTION ONGLET 2)
+   RÈGLES D'IMPRESSION
    ========================================== */
 @media print {
-    body * {
-        visibility: hidden;
-    }
-    
-    #containerFichesImpression, #containerFichesImpression * {
-        visibility: visible;
-    }
-    
-    #containerFichesImpression {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-        margin: 0;
-        padding: 0;
-    }
-
-    .navbar, .no-print, .student-bar, .modal-overlay, #btnScrollTop {
-        display: none !important;
-    }
-
-    .plan-eleve-page {
-        page-break-after: always;
-        break-after: page;
-    }
+    body * { visibility: hidden; }
+    #containerFichesImpression, #containerFichesImpression * { visibility: visible; }
+    #containerFichesImpression { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
+    .navbar, .no-print, .student-bar, .modal-overlay, #btnScrollTop { display: none !important; }
+    .plan-eleve-page { page-break-after: always; break-after: page; }
+    .num-jour-impose { color: #000 !important; text-decoration: underline !important; text-decoration-thickness: 2px !important; font-weight: 900 !important; }
 }
