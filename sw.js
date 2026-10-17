@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gestion-classe-v2026-10';
+const CACHE_NAME = 'gestion-classe-v2026-10-v2';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -17,7 +17,7 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activation : nettoyage automatique des anciens caches bloquants
+// Activation : nettoyage automatique des anciens caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -32,8 +32,8 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Stratégie "Network First" : cherche toujours la dernière version sur GitHub en priorité,
-// et utilise le cache uniquement si vous êtes hors-ligne.
+// Stratégie "Network First" : cherche toujours la dernière version en ligne d'abord,
+// et utilise le cache uniquement si l'appareil est hors-ligne.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) {
     return;
