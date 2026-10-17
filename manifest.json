@@ -4,7 +4,7 @@
   "description": "Application de gestion des plans de travail, ateliers et programmations par période.",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#f4f6f7",
+  "background_color": "#faf6f2",
   "theme_color": "#2c3e50",
   "orientation": "any",
   "icons": [
