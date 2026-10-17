@@ -12,12 +12,12 @@
     <script src="https://apis.google.com/js/api.js" async defer></script>
     <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="theme-pastel">
 
     <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" title="Remonter tout en haut">⬆</button>
     <div id="toast-container" class="no-print"></div>
 
-    <!-- BARRE DE NAVIGATION RÉORGANISÉE -->
+    <!-- BARRE DE NAVIGATION -->
     <div class="navbar no-print">
         <button class="nav-btn active" onclick="changerOnglet('pageSuivi', this)">🧑‍🎓 1. Plan & Suivi</button>
         <button class="nav-btn" onclick="changerOnglet('pageImpression', this)">🖨️ 2. Fiche Élève</button>
@@ -28,14 +28,71 @@
         <button class="nav-btn" onclick="changerOnglet('pageMatrice', this)" style="background:#16a085;">🧮 7. Matrice</button>
         <button class="nav-btn" onclick="changerOnglet('pageBilan', this)" style="background:#9b59b6;">📝 8. Bilans</button>
         <button class="nav-btn" onclick="changerOnglet('pageSave', this)" style="background:#c0392b;">💾 9. Sauvegarde</button>
+        <button class="btn-theme-config" onclick="ouvrirModal('modalDesign')" title="Personnaliser le graphisme de l'application">🎨 Design</button>
     </div>
 
-    <!-- MODALS GESTION & ASSIGNATION -->
+    <!-- MODAL CHOIX DU DESIGN / THÈME -->
+    <div id="modalDesign" class="modal-overlay no-print">
+        <div class="modal-content">
+            <h3 style="margin-top:0; color: #2c3e50;">🎨 Personnaliser le graphisme</h3>
+            <p style="font-size: 13px; color: #7f8c8d; margin-bottom: 15px;">Choisissez l'ambiance visuelle de votre application (l'impression des fiches restera toujours sur fond blanc).</p>
+            
+            <div class="theme-card" id="card_theme_classique" onclick="appliquerThemeVisuel('classique')">
+                <div><strong>💼 Classique (Origine)</strong><br><span style="font-size: 12px; color: #7f8c8d;">Couleurs franches et contrastées</span></div>
+                <div class="theme-preview-dots"><span class="theme-dot" style="background:#2c3e50;"></span><span class="theme-dot" style="background:#2980b9;"></span><span class="theme-dot" style="background:#27ae60;"></span></div>
+            </div>
+
+            <div class="theme-card" id="card_theme_pastel" onclick="appliquerThemeVisuel('pastel')">
+                <div><strong>🌸 Pastel Poudré</strong><br><span style="font-size: 12px; color: #7f8c8d;">Teintes douces macaron, lavande et menthe</span></div>
+                <div class="theme-preview-dots"><span class="theme-dot" style="background:#e8dff5;"></span><span class="theme-dot" style="background:#a2d2ff;"></span><span class="theme-dot" style="background:#ffcad4;"></span></div>
+            </div>
+
+            <div class="theme-card" id="card_theme_doodles" onclick="appliquerThemeVisuel('doodles')">
+                <div><strong>✏️ Carnet Doodles & Pastel</strong><br><span style="font-size: 12px; color: #7f8c8d;">Couleurs pastelles + petits dessins d'école en fond</span></div>
+                <div class="theme-preview-dots"><span class="theme-dot" style="background:#fdfbf7;"></span><span class="theme-dot" style="background:#b8c0ff;"></span><span class="theme-dot" style="background:#a3e4d7;"></span></div>
+            </div>
+
+            <div class="theme-card" id="card_theme_nature" onclick="appliquerThemeVisuel('nature')">
+                <div><strong>🌿 Nature & Sauge</strong><br><span style="font-size: 12px; color: #7f8c8d;">Tons apaisants vert sauge, lin et bois</span></div>
+                <div class="theme-preview-dots"><span class="theme-dot" style="background:#cad2c5;"></span><span class="theme-dot" style="background:#74c69d;"></span><span class="theme-dot" style="background:#e9edc9;"></span></div>
+            </div>
+
+            <button onclick="fermerModal('modalDesign')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:8px; cursor:pointer; margin-top: 10px;">Fermer</button>
+        </div>
+    </div>
+
+    <!-- MODAL ASSIGNATION MULTIPLE -->
     <div id="modalAssigner" class="modal-overlay no-print">
         <div class="modal-content">
             <h3 style="margin-top:0; color: #2980b9;">👥 Assigner à plusieurs élèves</h3>
-            <p style="font-size: 14px;">Activité : <strong id="nomActiviteAssign"></strong></p>
-            <div id="listeElevesAssign" style="display:flex; flex-direction:column; gap:8px; max-height:250px; overflow-y:auto; padding:10px; border:1px solid #ccc; border-radius:5px; margin-bottom:15px; background:#f9f9f9;"></div>
+            <p style="font-size: 14px; margin-bottom: 10px;">Activité : <strong id="nomActiviteAssign"></strong></p>
+            <div style="background: #eaf2f8; padding: 10px; border-radius: 8px; margin-bottom: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                <label style="font-size: 12px; font-weight: bold;">📅 Jour :</label>
+                <select id="selectJourAssignMultiple" style="padding: 5px; border-radius: 4px; border: 1px solid #bdc3c7; flex: 1;">
+                    <option value="">-- Libre (Au choix) --</option>
+                    <option value="Lundi">Lundi</option>
+                    <option value="Mardi">Mardi</option>
+                    <option value="Jeudi">Jeudi</option>
+                    <option value="Vendredi">Vendredi</option>
+                </select>
+                <label style="font-size: 12px; font-weight: bold;">Semaine :</label>
+                <select id="selectSemaineAssignMultiple" style="padding: 5px; border-radius: 4px; border: 1px solid #bdc3c7;">
+                    <option value="ACTIVE">Semaine active</option>
+                    <option value="0">Semaine 1</option>
+                    <option value="1">Semaine 2 (crée si besoin)</option>
+                    <option value="2">Semaine 3 (crée si besoin)</option>
+                </select>
+            </div>
+            <div style="display:flex; gap:5px; flex-wrap:wrap; margin-bottom:8px;">
+                <span style="font-size:11px; font-weight:bold; color:#7f8c8d; width:100%;">Sélection rapide par niveau :</span>
+                <button type="button" class="filter-btn" onclick="cocherNiveauModal('cb-assign-eleve', 'CP')">📘 CP</button>
+                <button type="button" class="filter-btn" onclick="cocherNiveauModal('cb-assign-eleve', 'CE1')">📘 CE1</button>
+                <button type="button" class="filter-btn" onclick="cocherNiveauModal('cb-assign-eleve', 'CE2')">📘 CE2</button>
+                <button type="button" class="filter-btn" onclick="cocherNiveauModal('cb-assign-eleve', 'CM1')">📘 CM1</button>
+                <button type="button" class="filter-btn" onclick="cocherNiveauModal('cb-assign-eleve', 'CM2')">📘 CM2</button>
+                <button type="button" class="filter-btn" onclick="cocherNiveauModal('cb-assign-eleve', 'AUCUN')">❌ Aucun</button>
+            </div>
+            <div id="listeElevesAssign" style="display:flex; flex-direction:column; gap:8px; max-height:220px; overflow-y:auto; padding:10px; border:1px solid #ccc; border-radius:5px; margin-bottom:15px; background:#f9f9f9;"></div>
             <div style="display:flex; gap:10px;">
                 <button class="btn-action" style="flex:1; padding: 12px;" onclick="validerAssignationMultiple()">✅ Envoyer aux élèves</button>
                 <button style="background: #95a5a6; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; flex:1; font-weight:bold;" onclick="fermerModal('modalAssigner')">❌ Annuler</button>
@@ -43,11 +100,21 @@
         </div>
     </div>
 
+    <!-- MODAL DUPLICATION -->
     <div id="modalDupliquer" class="modal-overlay no-print">
         <div class="modal-content">
             <h3 style="margin-top:0; color: #2980b9;">📋 Copier le plan vers d'autres élèves</h3>
-            <p>Cochez les élèves à qui vous souhaitez affecter le plan de <strong id="nomEleveSourceDupli"></strong>.</p>
-            <div id="listeElevesDupli" style="display:flex; flex-direction:column; gap:10px; max-height:250px; overflow-y:auto; padding:10px; border:1px solid #ccc; border-radius:5px; margin-bottom:15px;"></div>
+            <p>Cochez les élèves à qui vous souhaitez affecter le plan affiché de <strong id="nomEleveSourceDupli"></strong>.</p>
+            <div style="display:flex; gap:5px; flex-wrap:wrap; margin-bottom:8px;">
+                <span style="font-size:11px; font-weight:bold; color:#7f8c8d; width:100%;">Sélection rapide par niveau :</span>
+                <button type="button" class="filter-btn" onclick="cocherNiveauModal('cb-dupli-eleve', 'CP')">📘 CP</button>
+                <button type="button" class="filter-btn" onclick="cocherNiveauModal('cb-dupli-eleve', 'CE1')">📘 CE1</button>
+                <button type="button" class="filter-btn" onclick="cocherNiveauModal('cb-dupli-eleve', 'CE2')">📘 CE2</button>
+                <button type="button" class="filter-btn" onclick="cocherNiveauModal('cb-dupli-eleve', 'CM1')">📘 CM1</button>
+                <button type="button" class="filter-btn" onclick="cocherNiveauModal('cb-dupli-eleve', 'CM2')">📘 CM2</button>
+                <button type="button" class="filter-btn" onclick="cocherNiveauModal('cb-dupli-eleve', 'AUCUN')">❌ Aucun</button>
+            </div>
+            <div id="listeElevesDupli" style="display:flex; flex-direction:column; gap:10px; max-height:220px; overflow-y:auto; padding:10px; border:1px solid #ccc; border-radius:5px; margin-bottom:15px;"></div>
             <div style="display:flex; gap:10px;">
                 <button class="btn-action" style="flex:1;" onclick="validerDuplication()">✅ Copier le plan</button>
                 <button style="background: #95a5a6; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; flex:1;" onclick="fermerModal('modalDupliquer')">❌ Annuler</button>
@@ -83,7 +150,22 @@
         </div>
 
         <div class="panel" id="zoneTravail" style="display: none;">
-            <h3>Ajouter au plan de la semaine</h3>
+            
+            <!-- BARRE DE GESTION MULTI-SEMAINES & DATE AUTO -->
+            <div style="background: #eaf2f8; border: 1px solid #a9cce3; padding: 12px 15px; border-radius: 10px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+                <strong>📅 Semaine affichée :</strong>
+                <select id="selectSemaineEleve" onchange="changerSemaineActive(this.value)" style="padding: 8px; border-radius: 5px; border: 1px solid #2980b9; font-weight: bold; color: #2c3e50;"></select>
+                <button type="button" onclick="ajouterSemaineAvance()" style="background: #2980b9; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold;">➕ Préparer une semaine d'avance</button>
+                <button type="button" id="btnSupprimerSemaine" onclick="supprimerSemaineActive()" style="background: #e74c3c; color: white; border: none; padding: 8px 10px; border-radius: 5px; cursor: pointer; font-weight: bold; display: none;" title="Supprimer cette semaine préparée">🗑️</button>
+                
+                <div style="margin-left: auto; display: flex; align-items: center; gap: 8px; background: white; padding: 6px 12px; border-radius: 5px; border: 1px solid #bdc3c7;">
+                    <label style="font-size: 13px; font-weight: bold;">Début :</label>
+                    <input type="date" id="dateDebutSemaineInput" onchange="appliquerDateDebutSemaine(this.value)" style="padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
+                    <span style="font-size: 13px; color: #2980b9; font-weight: bold;" id="dateFinSemaineAffiche">➔ Vendredi : --/--</span>
+                </div>
+            </div>
+
+            <h3>Ajouter au plan de la semaine sélectionnée</h3>
             <div class="cascade-box">
                 <div class="cascade-item"><label>1. Niveau</label><select id="selectNiveau" onchange="majCascadeMatiere()"><option value="">-- Choix --</option></select></div>
                 <div class="cascade-item"><label>2. Période</label><select id="selectPeriode" onchange="majCascadeMatiere()"><option value="">-- Toutes les périodes --</option><option value="P1">Période 1</option><option value="P2">Période 2</option><option value="P3">Période 3</option><option value="P4">Période 4</option><option value="P5">Période 5</option></select></div>
@@ -91,24 +173,33 @@
                 <div class="cascade-item" style="flex-grow: 2;"><label>4. Séquence</label><select id="selectSequence" onchange="afficherRessourcesDisponibles()" disabled><option value="">-- --</option></select></div>
             </div>
             <div id="zoneRessources" class="list-ressources" style="display: none;">
-                <h4 style="margin-top: 0; color: #2980b9;">Activité(s) disponible(s) :</h4>
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:8px;">
+                    <h4 style="margin: 0; color: #2980b9;">Activité(s) disponible(s) :</h4>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <span style="font-size:12px; font-weight:bold; color:#7f8c8d;">Filtrer par difficulté :</span>
+                        <button type="button" class="filter-btn active" id="btnFiltreEtoile_TOUS" onclick="filtrerParEtoiles('TOUS')">Toutes</button>
+                        <button type="button" class="filter-btn" id="btnFiltreEtoile_1" onclick="filtrerParEtoiles(1)">⭐</button>
+                        <button type="button" class="filter-btn" id="btnFiltreEtoile_2" onclick="filtrerParEtoiles(2)">⭐⭐</button>
+                        <button type="button" class="filter-btn" id="btnFiltreEtoile_3" onclick="filtrerParEtoiles(3)">⭐⭐⭐</button>
+                    </div>
+                </div>
                 <table id="tableRessourcesDispo"></table>
             </div>
             <hr>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
-                <h3 style="margin:0;">📋 Plan de la semaine (<span class="nomEleveAffiche">...</span>) - <span id="compteurAteliersEleve">0</span> / <span id="maxAteliersAffiche">15</span> (<span id="compteurTablettesEleve">0</span> tablettes)</h3>
+                <h3 style="margin:0;">📋 Plan de <span class="nomEleveAffiche">...</span> (<span id="labelSemaineTitre">Semaine 1</span>) - <span id="compteurAteliersEleve">0</span> / <span id="maxAteliersAffiche">15</span> (<span id="compteurTablettesEleve">0</span> tablettes)</h3>
                 <div style="display: flex; gap: 10px;">
-                    <button type="button" onclick="commencerNouvelleSemaine()" style="background: #e67e22; color: white; font-weight: bold; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">🔄 Nouvelle semaine</button>
+                    <button type="button" onclick="commencerNouvelleSemaine()" style="background: #e67e22; color: white; font-weight: bold; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">🔄 Clôturer & Passer à la suivante</button>
                     <button type="button" onclick="validerSelectionPlan()" style="background: #27ae60; color: white; font-weight: bold; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">🏁 Marquer comme TERMINÉ</button>
                 </div>
             </div>
-            <p style="font-size: 13px; color: #7f8c8d; margin-top:0;"><strong>Astuce :</strong> Choisissez un jour dans la colonne <em>Jour imposé</em> pour placer automatiquement le numéro de l'atelier dans le semainier de l'élève et le souligner dans sa liste.</p>
+            <p style="font-size: 13px; color: #7f8c8d; margin-top:0;"><strong>Repères :</strong> Les ateliers avec un jour imposé ont leur numéro <u>souligné</u>. Ceux notés « À revoir avec la maîtresse » affichent <strong>👩‍🏫</strong> en début de ligne et sont placés en priorité.</p>
             <table>
                 <thead>
                     <tr>
                         <th style="width:30px; text-align:center;"><input type="checkbox" onchange="cocherToutPlan(this)"></th>
                         <th style="width:30px; text-align:center;">Prio</th>
-                        <th class="col-num">N°</th>
+                        <th class="col-num" style="width:55px;">N°</th>
                         <th>Séquence / Leçon</th>
                         <th>Compétence</th>
                         <th>Ressource & Suivi</th>
@@ -139,20 +230,23 @@
     <div id="pageImpression" class="page">
         <div class="panel no-print" style="background: #eaf2f8; border: 1px solid #a9cce3; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; padding: 15px;">
             <div>
-                <strong>🧑‍🎓 Fiche de l'élève :</strong>
-                <select id="selectEleveImpression" onchange="rafraichirFicheImpression()" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 1px solid #ccc; margin-left: 10px;"><option value="">-- Choisir un élève --</option></select>
+                <strong>🧑‍🎓 Fiche à imprimer :</strong>
+                <select id="selectEleveImpression" onchange="changementEleveImpression()" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 1px solid #ccc; margin-left: 5px;"><option value="">-- Choisir --</option></select>
             </div>
-            <div style="display: flex; gap: 10px; align-items: center; background: white; padding: 5px 10px; border-radius: 5px; border: 1px solid #ccc;">
-                <strong>📅 Période du PDT :</strong>
-                <input type="text" id="pdtDateDebut" placeholder="ex: 06/11" style="width: 80px; padding: 5px; text-align: center;" oninput="rafraichirFicheImpression()">
-                <span>au</span>
-                <input type="text" id="pdtDateFin" placeholder="ex: 10/11" style="width: 80px; padding: 5px; text-align: center;" oninput="rafraichirFicheImpression()">
+            <div id="blocSelectSemaineImpression" style="display: flex; align-items: center; gap: 6px;">
+                <strong>📅 Semaine :</strong>
+                <select id="selectSemaineImpression" onchange="changerSemaineDepuisImpression(this.value)" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 1px solid #2980b9; font-weight: bold;"></select>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center; background: white; padding: 6px 12px; border-radius: 5px; border: 1px solid #ccc;">
+                <strong>📅 Date de début :</strong>
+                <input type="date" id="pdtDateDebutPicker" onchange="appliquerDateImpression(this.value)" style="padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
+                <span id="pdtDateFinAffiche" style="font-size: 13px; font-weight: bold; color: #2980b9;">➔ au --/--</span>
             </div>
             <div style="margin-left: auto; display: flex; gap: 10px;">
                 <button type="button" class="btn-action" onclick="window.print()" style="background: #2980b9; padding: 10px 15px;">🖨️ Imprimer (Portrait)</button>
             </div>
         </div>
-        <div id="containerFichesImpression"><div style="text-align: center; padding: 40px; color: #7f8c8d;" class="no-print"><h2>Veuillez sélectionner un élève ou l'option "Tous les élèves" ci-dessus.</h2></div></div>
+        <div id="containerFichesImpression"><div style="text-align: center; padding: 40px; color: #7f8c8d;" class="no-print"><h2>Veuillez sélectionner un élève, un niveau ou "Tous les élèves" ci-dessus.</h2></div></div>
     </div>
 
     <!-- 3. TABLEAU DE BORD VISUEL & EVALUATION RAPIDE -->
@@ -182,7 +276,7 @@
                 <thead>
                     <tr>
                         <th style="width: 25%;">Élève</th>
-                        <th style="width: 55%;">Progression du Plan Actuel</th>
+                        <th style="width: 55%;">Progression du Plan Actif</th>
                         <th style="width: 20%; text-align: center;">Actions</th>
                     </tr>
                 </thead>
