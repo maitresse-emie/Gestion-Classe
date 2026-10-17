@@ -936,3 +936,23 @@ function afficherPlanHebdo() {
         });
     }
 }
+function changerOnglet(idPage, element) {
+    document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+    
+    let targetPage = document.getElementById(idPage);
+    if(targetPage) targetPage.classList.add('active');
+    if(element) element.classList.add('active');
+    
+    if(idPage === 'pageSuivi') { if(idEleveCourant) chargerEleve(); }
+    if(idPage === 'pageEtiquettes') { initNiveaux(); afficherChoixEtiquettes(); }
+    if(idPage === 'pageImpression') { if(idEleveCourant) { idEleveImpressionCourant = idEleveCourant; } majListeEleves(); changementEleveImpression(); } 
+    if(idPage === 'pageBase') { majSelectCouleursRapides(); afficherBase(); }
+    if(idPage === 'pageProg') { initProgFilters(); afficherProgrammation(); }
+    if(idPage === 'pageDashboard') { rafraichirDashboard(); }
+    if(idPage === 'pageMatrice') { genererMatriceCompetences(); }
+    if(idPage === 'pageBilan') { majListeEleves(); genererBilanEleve(); }
+    if(idPage === 'pageSave') { calculTailleStockage(); }
+    
+    window.scrollTo({top: 0, behavior: 'smooth'});
+}
