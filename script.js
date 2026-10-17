@@ -19,7 +19,7 @@ let programmations = JSON.parse(localStorage.getItem(KEY_PROG)) || {};
 let dateGlobaleDebutISO = "";
 let dateGlobaleDebutFR = "";
 let dateGlobaleFinFR = "";
-let filtreEtoilesDispo = 0; // 0 = Toutes, 1 = ⭐, 2 = ⭐⭐, 3 = ⭐⭐⭐
+let filtreEtoilesDispo = 0;
 
 let imagesParType = JSON.parse(localStorage.getItem(KEY_IMAGES));
 if (!imagesParType) {
@@ -44,7 +44,6 @@ if (!baseDonnees || !Array.isArray(baseDonnees)) { baseDonnees = []; }
 let eleves = JSON.parse(localStorage.getItem(KEY_ELEVES));
 if (!eleves) { eleves = {}; }
 
-// Code couleur strict par matière pour les titres et bandeaux de séquences
 function getCouleurMatiereBandeau(matiere) {
     let m = (matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     if (m.includes("francais") || m.includes("lecture") || m.includes("grammaire") || m.includes("orthographe") || m.includes("conjugaison") || m.includes("lexique") || m.includes("ecriture")) {
@@ -263,7 +262,7 @@ function getElevesTries() {
 }
 
 // ==========================================
-// 2. UI, THÈMES VISUELS ET OUTILS
+// NAVIGATION & THÈMES
 // ==========================================
 function appliquerThemeVisuel(nomTheme) {
     document.body.classList.remove('theme-pastel', 'theme-doodles', 'theme-nature');
@@ -330,7 +329,7 @@ function calculTailleStockage() {
 }
 
 // ==========================================
-// 3. SYNCHRONISATION GOOGLE DRIVE
+// GOOGLE DRIVE
 // ==========================================
 const CLIENT_ID = '133293729951-pv43qv8a9758rbm4atpiiq3rv0g79vnd.apps.googleusercontent.com';
 const API_KEY = ''; const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
@@ -431,7 +430,7 @@ function tenterConnexionAuto() {
 }
 
 // ==========================================
-// 4. GESTION DES ELEVES, SEMAINES & DATES
+// GESTION DES ELEVES & SEMAINES
 // ==========================================
 function majListeEleves() {
     const select = document.getElementById('selectEleveProfile'); const selectImp = document.getElementById('selectEleveImpression'); const selectBilan = document.getElementById('selectEleveBilan');
@@ -584,7 +583,7 @@ function ajouterSemaineAvance() {
     majBarreSemainesUI();
     afficherPlanHebdo();
     if (document.getElementById('selectSequence') && document.getElementById('selectSequence').value) afficherRessourcesDisponibles();
-    showToast(`Semaine ${e.semaines.length} créée (avec ${planInitial.length} atelier(s) prioritaire(s) reporté(s)) !`, "success");
+    showToast(`Semaine ${e.semaines.length} créée (avec ${planInitial.length} atelier(s) prioritaire(s)) !`, "success");
 }
 
 function supprimerSemaineActive() {
@@ -716,8 +715,69 @@ function validerAssignationMultiple() {
     sauvegarderEleves(); document.getElementById('modalAssigner').style.display = 'none'; rafraichirDashboard(); if(idEleveCourant) afficherPlanHebdo(); showToast(`Activité assignée à ${count} élève(s).`, "success");
 }
 
+function commencerNouvelleSemaine() {
+    if(!idEleveCourant) return; let eleve = eleves[idEleveCourant];
+    assurerStructureSemaines(eleve); syncEleveVersSemaineActive(eleve);
+    let msg = eleve.semaines.length > 1
+        ? `Voulez-vous clôturer la Semaine ${eleve.semaineIndex + 1} de ${eleve.nom} et passer automatiquement à la semaine préparée suivante ?\n\nLes activités notées "à revoir / à refaire" y seront placées EN PRIORITÉ.`
+        : `Voulez-vous clôturer cette semaine pour ${eleve.nom} et initialiser une nouvelle semaine ?\n\nLes activités notées "à revoir / à refaire" seront placées EN PRIORITÉ dans le nouveau plan.`;
+    if(confirm(msg)) {
+        let aTransferer = [...(eleve.enAttente || [])];
+        (eleve.planHebdo || []).forEach(idAct => {
+            if (eleve.suivi && eleve.suivi[idAct] && (eleve.suivi[idAct].statut === 'a_revoir' || eleve.suivi[idAct].statut === 'a_refaire')) {
+                if (!aTransferer.includes(idAct)) aTransferer.push(idAct);
+            }
+        });
+        eleve.enAttente = [];
+
+        if (eleve.semaines.length > 1) {
+            eleve.semaines.splice(eleve.semaineIndex, 1);
+            let nextIdx = Math.min(eleve.semaineIndex, eleve.semaines.length - 1);
+            eleve.semaineIndex = nextIdx;
+            let s = eleve.semaines[nextIdx];
+            if (!s.priorites) s.priorites = [];
+            aTransferer.forEach(idAct => {
+                if (!s.planHebdo.includes(idAct)) s.planHebdo.unshift(idAct);
+                if (!s.priorites.includes(idAct)) s.priorites.push(idAct);
+            });
+            eleve.planHebdo = [...s.planHebdo];
+            eleve.priorites = [...s.priorites];
+            eleve.joursAssignes = { ...(s.joursAssignes || {}) };
+            eleve.valides = { ...(s.valides || {}) };
+            eleve.suivi = { ...(eleve.suivi || {}), ...(s.suivi || {}) };
+            eleve.dateDebutISO = s.dateDebutISO || "";
+            eleve.dateDebut = s.dateDebut || "";
+            eleve.dateFin = s.dateFin || "";
+        } else {
+            let nextISO = ""; let nextDeb = ""; let nextFin = "";
+            if (eleve.dateDebutISO) {
+                let c = calculerVendrediDepuisISO(eleve.dateDebutISO);
+                if (c.lundiSuivantISO) {
+                    nextISO = c.lundiSuivantISO;
+                    let c2 = calculerVendrediDepuisISO(nextISO);
+                    nextDeb = c2.debutFR; nextFin = c2.finFR;
+                }
+            }
+            eleve.planHebdo = [...aTransferer];
+            eleve.valides = {};
+            eleve.priorites = [...aTransferer];
+            eleve.joursAssignes = {};
+            eleve.dateDebutISO = nextISO; eleve.dateDebut = nextDeb; eleve.dateFin = nextFin;
+            eleve.semaines[0] = { id: 'sem_' + Date.now(), dateDebutISO: nextISO, dateDebut: nextDeb, dateFin: nextFin, planHebdo: [...eleve.planHebdo], priorites: [...eleve.priorites], joursAssignes: {}, valides: {}, suivi: JSON.parse(JSON.stringify(eleve.suivi || {})) };
+        }
+        dashboardArchives = dashboardArchives.filter(cle => !cle.startsWith(eleve.id + '_')); localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
+        sauvegarderEleves(); chargerEleve(); rafraichirDashboard(); showToast("✅ Semaine suivante activée avec report prioritaire !", "success");
+    }
+}
+
+function basculerPriorite(idActivite) {
+    if (!idEleveCourant) return; let eleve = eleves[idEleveCourant];
+    if (!eleve.priorites) eleve.priorites = []; let idx = eleve.priorites.indexOf(idActivite);
+    if (idx > -1) { eleve.priorites.splice(idx, 1); } else { eleve.priorites.push(idActivite); } sauvegarderEleves(); afficherPlanHebdo();
+}
+
 // ==========================================
-// 5. VALIDATIONS, LOGO 👩‍🏫 & PLAN HEBDO
+// VALIDATIONS & PLAN HEBDO
 // ==========================================
 function cocherToutPlan(source) { document.querySelectorAll('.cb-plan-valider:not(:disabled)').forEach(cb => cb.checked = source.checked); }
 
@@ -876,131 +936,4 @@ function afficherPlanHebdo() {
             tbodyApercu.innerHTML += `<tr style="background:#fef5e7;"><td style="text-align:center;">⏸️</td><td style="text-align:center;">⭐</td><td class="col-num">${logoDeb}</td><td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td><td>${a.lecon ? '<em>'+escHTML(a.lecon)+'</em> - ' : ''}${escHTML(a.competence)}</td><td>${logoDeb}${etoilesHtml}<strong>${escHTML(a.ressource)}</strong> ${badge} ${suiviHtml}</td><td style="text-align:center;">-</td><td>${actionHtml}</td></tr>`;
         });
     }
-}
-
-// ==========================================
-// 6. PROGRAMMATION & HISTORIQUE
-// ==========================================
-function afficherHistorique() {
-    const eleve = eleves[idEleveCourant]; const tbodyHist = document.getElementById('tableHistorique'); const tbodyMasq = document.getElementById('tableMasquees'); if(!tbodyHist || !tbodyMasq) return; tbodyHist.innerHTML = ''; tbodyMasq.innerHTML = '';
-    [...eleve.historique].reverse().forEach(hist => { const a = baseDonnees.find(b => b.id === hist.idActivite); if(a) tbodyHist.innerHTML += `<tr><td><strong>${hist.date}</strong></td><td>${escHTML(a.niveau)}</td><td>${escHTML(a.matiere)}<br><span style="font-size:11px">${escHTML(a.sequence)}</span></td><td>${escHTML(a.competence)}</td><td>${formaterEtoiles(a.difficulte)}${escHTML(a.ressource)}</td><td style="text-align: center;"><button type="button" onclick="desarchiverActivite('${a.id}')" style="background:none; border:none; cursor:pointer;">↩️ Restaurer</button></td></tr>`; });
-    if(eleve.historique.length === 0) tbodyHist.innerHTML = '<tr><td colspan="6" style="text-align:center;">Aucun historique.</td></tr>';
-    eleve.masquees.forEach(idAct => { const a = baseDonnees.find(b => b.id === idAct); if(a) tbodyMasq.innerHTML += `<tr><td>${escHTML(a.niveau)}</td><td>${escHTML(a.matiere)}<br><span style="font-size:11px">${escHTML(a.sequence)}</span></td><td>${escHTML(a.competence)}</td><td>${formaterEtoiles(a.difficulte)}${escHTML(a.ressource)}</td><td style="text-align: center;"><button type="button" onclick="demasquerActivite('${a.id}')" style="background:none; border:none; cursor:pointer;">↩️ Réintégrer</button></td></tr>`; });
-    if(eleve.masquees.length === 0) tbodyMasq.innerHTML = '<tr><td colspan="5" style="text-align:center;">Aucune activité masquée.</td></tr>';
-}
-
-function filtrerParEtoilesDispo(nbEtoiles) {
-    filtreEtoilesDispo = nbEtoiles;
-    document.querySelectorAll('.btn-filtre-etoile-dispo').forEach(b => b.classList.remove('active'));
-    let btnActif = document.getElementById('btn_etoile_dispo_' + nbEtoiles);
-    if (btnActif) btnActif.classList.add('active');
-    afficherRessourcesDisponibles();
-}
-
-function afficherRessourcesDisponibles() {
-    const niveau = document.getElementById('selectNiveau').value; const periode = document.getElementById('selectPeriode').value; const matiere = document.getElementById('selectMatiere').value;
-    const sequence = document.getElementById('selectSequence').value; const zoneRessources = document.getElementById('zoneRessources'); const tbody = document.getElementById('tableRessourcesDispo');
-    if(!sequence || !idEleveCourant) { if(zoneRessources) zoneRessources.style.display = 'none'; return; }
-    if(zoneRessources) zoneRessources.style.display = 'block'; if(tbody) tbody.innerHTML = '';
-    
-    const eleve = eleves[idEleveCourant];
-    assurerStructureSemaines(eleve); syncEleveVersSemaineActive(eleve);
-
-    let activites = baseDonnees.filter(a => a.niveau && a.niveau.toUpperCase().includes(niveau.toUpperCase()) && a.matiere === matiere && a.sequence === sequence);
-    if(periode) { activites = activites.filter(a => { let key = a.matiere + "|" + a.competence; return programmations[key] && programmations[key].includes(periode); }); }
-    if(filtreEtoilesDispo > 0) { activites = activites.filter(a => (parseInt(a.difficulte) || 0) === filtreEtoilesDispo); }
-    
-    const idsHistorique = eleve.historique.map(h => h.idActivite);
-    const idsToutesSemaines = new Set();
-    eleve.semaines.forEach(s => { if (s.planHebdo) s.planHebdo.forEach(id => idsToutesSemaines.add(id)); });
-
-    let nbAffichees = 0;
-    activites.forEach(a => {
-        if(idsHistorique.includes(a.id)) return;
-        if(eleve.masquees && eleve.masquees.includes(a.id)) return;
-        if(idsToutesSemaines.has(a.id)) return;
-        if(eleve.enAttente && eleve.enAttente.includes(a.id)) return;
-
-        nbAffichees++; let badge = a.estEvaluation ? `<span class="badge-eval">🎯 Évaluation</span>` : ''; let rowClass = a.estEvaluation ? 'row-eval' : '';
-        tbody.innerHTML += `<tr class="${rowClass}">
-            <td>${a.lecon ? '<em>'+escHTML(a.lecon)+'</em> - ' : ''}${escHTML(a.competence)}</td>
-            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> <br><span style="font-size:11px; color:#7f8c8d;">(${escHTML(a.typeRes)} Atelier: ${escHTML(a.symbole)})</span> ${badge}</td>
-            <td style="text-align: right; width: 340px; white-space: nowrap;">
-                <select id="jour_dispo_${a.id}" style="padding:5px; font-size:12px; border-radius:4px; border:1px solid #2980b9; margin-right:4px;" title="Choisir un jour imposé ou laisser libre">
-                    <option value="">📅 Libre (Au choix)</option>
-                    <option value="Lundi">Lundi</option>
-                    <option value="Mardi">Mardi</option>
-                    <option value="Jeudi">Jeudi</option>
-                    <option value="Vendredi">Vendredi</option>
-                </select>
-                <button type="button" class="btn-add" onclick="ajouterAuPlan('${a.id}')">➕ Plan</button>
-                <button type="button" class="btn-valid" onclick="validerDirectement('${a.id}')">🏁 Fini</button>
-                <button type="button" class="btn-hide" onclick="masquerActivite('${a.id}')">🚫 Masq</button>
-            </td>
-        </tr>`;
-    });
-    if(nbAffichees === 0) tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#7f8c8d;">Aucune activité disponible pour ces critères (ou toutes sont déjà planifiées).</td></tr>';
-}
-
-function initProgFilters() {
-    let selectNiv = document.getElementById('progNiveau'); let selectMat = document.getElementById('progMatiere'); if(!selectNiv || !selectMat) return;
-    let niveauxExistants = new Set(); baseDonnees.forEach(a => { if(a.niveau) a.niveau.split(/[,/]+/).forEach(x => { if(x.trim()) niveauxExistants.add(x.trim().toUpperCase()); }); });
-    let nivs = Array.from(niveauxExistants).filter(Boolean); const ordreNiveaux = { "CP": 1, "CE1": 2, "CE2": 3, "CM1": 4, "CM2": 5 };
-    nivs.sort((a,b) => (ordreNiveaux[a] || 99) - (ordreNiveaux[b] || 99));
-    let htmlNiv = '<option value="">-- Tous les niveaux --</option>'; nivs.forEach(n => htmlNiv += `<option value="${escHTML(n)}">${escHTML(n)}</option>`);
-    let oldNiv = selectNiv.value; selectNiv.innerHTML = htmlNiv; if(nivs.includes(oldNiv)) selectNiv.value = oldNiv;
-    
-    let mats = [...new Set(baseDonnees.map(a => a.matiere))].filter(Boolean).sort((a,b) => nettoyerNomPourTri(a).localeCompare(nettoyerNomPourTri(b), 'fr'));
-    let htmlMat = '<option value="">-- Toutes les matières --</option>'; mats.forEach(m => htmlMat += `<option value="${escHTML(m)}">${escHTML(m)}</option>`);
-    let oldMat = selectMat.value; selectMat.innerHTML = htmlMat; if(mats.includes(oldMat)) selectMat.value = oldMat;
-}
-
-function afficherProgrammation() {
-    let selectNiv = document.getElementById('progNiveau'); let selectMat = document.getElementById('progMatiere'); let tbody = document.getElementById('tableProg');
-    if(!tbody || !selectNiv || !selectMat) return;
-    let niv = selectNiv.value; let mat = selectMat.value;
-    let activitesFiltrees = Array.isArray(baseDonnees) ? baseDonnees : [];
-    if(niv) activitesFiltrees = activitesFiltrees.filter(a => a.niveau && a.niveau.toUpperCase().includes(niv));
-    if(mat) activitesFiltrees = activitesFiltrees.filter(a => a.matiere === mat);
-    
-    let clesUniques = new Map();
-    activitesFiltrees.forEach(a => {
-        let m = (a.matiere || "").trim(); let s = (a.sequence || "").trim(); let c = (a.competence || "").trim();
-        if(!m && !c) return;
-        let key = m + "|" + s + "|" + c;
-        if(!clesUniques.has(key)) { clesUniques.set(key, { matiere: m, sequence: s, competence: c }); }
-    });
-    
-    let listeItems = Array.from(clesUniques.values()).sort((a,b) => {
-        let mA = nettoyerNomPourTri(a.matiere); let mB = nettoyerNomPourTri(b.matiere);
-        if(mA !== mB) return mA.localeCompare(mB, 'fr');
-        if(a.sequence !== b.sequence) return a.sequence.localeCompare(b.sequence, 'fr');
-        return a.competence.localeCompare(b.competence, 'fr');
-    });
-    
-    let html = ''; let derniereMat = null;
-    listeItems.forEach(item => {
-        if(item.matiere !== derniereMat) {
-            let coul = getCouleurMatiereBandeau(item.matiere);
-            html += `<tr><td colspan="7" style="background:${coul.bg}; color:${coul.text}; font-size:14px; padding:10px;"><strong>📚 ${escHTML(item.matiere || 'Sans matière')}</strong></td></tr>`;
-            derniereMat = item.matiere;
-        }
-        let progKey = item.matiere + "|" + item.competence; let progs = programmations[progKey] || [];
-        html += `<tr>
-            <td>${escHTML(item.sequence)}</td><td><strong>${escHTML(item.competence)}</strong></td>
-            <td style="text-align:center;"><input type="checkbox" onchange="toggleProg('${escJS(item.matiere)}', '${escJS(item.competence)}', 'P1', this.checked)" ${progs.includes('P1') ? 'checked' : ''} style="transform:scale(1.3); cursor:pointer;"></td>
-            <td style="text-align:center;"><input type="checkbox" onchange="toggleProg('${escJS(item.matiere)}', '${escJS(item.competence)}', 'P2', this.checked)" ${progs.includes('P2') ? 'checked' : ''} style="transform:scale(1.3); cursor:pointer;"></td>
-            <td style="text-align:center;"><input type="checkbox" onchange="toggleProg('${escJS(item.matiere)}', '${escJS(item.competence)}', 'P3', this.checked)" ${progs.includes('P3') ? 'checked' : ''} style="transform:scale(1.3); cursor:pointer;"></td>
-            <td style="text-align:center;"><input type="checkbox" onchange="toggleProg('${escJS(item.matiere)}', '${escJS(item.competence)}', 'P4', this.checked)" ${progs.includes('P4') ? 'checked' : ''} style="transform:scale(1.3); cursor:pointer;"></td>
-            <td style="text-align:center;"><input type="checkbox" onchange="toggleProg('${escJS(item.matiere)}', '${escJS(item.competence)}', 'P5', this.checked)" ${progs.includes('P5') ? 'checked' : ''} style="transform:scale(1.3); cursor:pointer;"></td>
-        </tr>`;
-    });
-    if(listeItems.length === 0) html = '<tr><td colspan="7" style="text-align:center; padding: 20px; color:#7f8c8d;">Aucune compétence trouvée dans la base de données.</td></tr>';
-    tbody.innerHTML = html;
-}
-
-function toggleProg(matiere, competence, periode, isChecked) {
-    let key = matiere + "|" + competence; if(!programmations[key]) programmations[key] = [];
-    if(isChecked) { if(!programmations[key].includes(periode)) programmations[key].push(periode); } else { programmations[key] = programmations[key].filter(p => p !== periode); }
-    sauvegarderProgrammations();
 }
