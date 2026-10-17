@@ -19,7 +19,7 @@
     <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" title="Remonter tout en haut">⬆</button>
     <div id="toast-container" class="no-print"></div>
 
-    <!-- BARRE DE NAVIGATION PRINCIPALE -->
+    <!-- BARRE DE NAVIGATION -->
     <div class="navbar no-print">
         <button class="nav-btn active" onclick="changerOnglet('pageSuivi', this)">🧑‍🎓 1. Plan & Suivi</button>
         <button class="nav-btn" onclick="changerOnglet('pageImpression', this)">🖨️ 2. Fiche Élève</button>
@@ -87,11 +87,11 @@
                 </div>
             </div>
 
-            <button onclick="fermerModal('modalDesign')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:8px; cursor:pointer; margin-top: 10px;">Fermer</button>
+            <button type="button" onclick="fermerModal('modalDesign')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:8px; cursor:pointer; margin-top: 10px;">Fermer</button>
         </div>
     </div>
 
-    <!-- MODALS GESTION & ASSIGNATION -->
+    <!-- MODAL ASSIGNATION MULTIPLE -->
     <div id="modalAssigner" class="modal-overlay no-print">
         <div class="modal-content">
             <h3 style="margin-top:0; color: #2980b9;">👥 Assigner à plusieurs élèves</h3>
@@ -108,153 +108,57 @@
             </div>
             <div id="listeElevesAssign" style="display:flex; flex-direction:column; gap:8px; max-height:250px; overflow-y:auto; padding:10px; border:1px solid #ccc; border-radius:5px; margin-bottom:15px; background:#f9f9f9;"></div>
             <div style="display:flex; gap:10px;">
-                <button class="btn-action" style="flex:1; padding: 12px;" onclick="validerAssignationMultiple()">✅ Envoyer aux élèves</button>
-                <button style="background: #95a5a6; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; flex:1; font-weight:bold;" onclick="fermerModal('modalAssigner')">❌ Annuler</button>
+                <button type="button" class="btn-action" style="flex:1; padding: 12px;" onclick="validerAssignationMultiple()">✅ Envoyer aux élèves</button>
+                <button type="button" style="background: #95a5a6; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; flex:1; font-weight:bold;" onclick="fermerModal('modalAssigner')">❌ Annuler</button>
             </div>
         </div>
     </div>
 
+    <!-- MODAL DUPLICATION DE PLAN -->
     <div id="modalDupliquer" class="modal-overlay no-print">
         <div class="modal-content">
             <h3 style="margin-top:0; color: #2980b9;">📋 Copier le plan vers d'autres élèves</h3>
             <p>Cochez les élèves à qui vous souhaitez affecter le plan actif de <strong id="nomEleveSourceDupli"></strong>.</p>
             <div id="listeElevesDupli" style="display:flex; flex-direction:column; gap:10px; max-height:250px; overflow-y:auto; padding:10px; border:1px solid #ccc; border-radius:5px; margin-bottom:15px;"></div>
             <div style="display:flex; gap:10px;">
-                <button class="btn-action" style="flex:1;" onclick="val### 1. Fichier `index.html` complet
-
-```html
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mon Logiciel - Gestion de Classe</title>
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#2c3e50">
-    <link rel="apple-touch-icon" href="[https://cdn-icons-png.flaticon.com/512/3553/3553412.png](https://cdn-icons-png.flaticon.com/512/3553/3553412.png)">
-    
-    <!-- Intégration Google Drive -->
-    <script src="[https://accounts.google.com/gsi/client](https://accounts.google.com/gsi/client)" async defer></script>
-    <script src="[https://apis.google.com/js/api.js](https://apis.google.com/js/api.js)" async defer></script>
-
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-
-    <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" title="Remonter tout en haut">⬆</button>
-    <div id="toast-container" class="no-print"></div>
-
-    <!-- BARRE DE NAVIGATION -->
-    <div class="navbar no-print">
-        <button class="nav-btn active" onclick="changerOnglet('pageSuivi', this)">🧑‍🎓 1. Plan & Suivi</button>
-        <button class="nav-btn" onclick="changerOnglet('pageImpression', this)">🖨️ 2. Fiche Élève</button>
-        <button class="nav-btn" onclick="changerOnglet('pageDashboard', this)" style="background:#f39c12;">📊 3. Tableau de bord</button>
-        <button class="nav-btn" onclick="changerOnglet('pageBase', this)">📁 4. Base de données</button>
-        <button class="nav-btn" onclick="changerOnglet('pageProg', this)" style="background:#d35400;">📅 5. Programmation</button>
-        <button class="nav-btn" onclick="changerOnglet('pageEtiquettes', this)" style="background:#8e44ad;">🏷️ 6. Étiquettes</button>
-        <button class="nav-btn" onclick="changerOnglet('pageMatrice', this)" style="background:#16a085;">🧮 7. Matrice</button>
-        <button class="nav-btn" onclick="changerOnglet('pageBilan', this)" style="background:#9b59b6;">📝 8. Bilans</button>
-        <button class="nav-btn" onclick="changerOnglet('pageSave', this)" style="background:#c0392b;">💾 9. Sauvegarde</button>
-        <button class="btn-theme-config no-print" onclick="ouvrirModal('modalDesign')" title="Personnaliser le graphisme de l'application">🎨 Design</button>
-    </div>
-
-    <!-- MODAL CHOIX DU DESIGN / THÈME -->
-    <div id="modalDesign" class="modal-overlay no-print">
-        <div class="modal-content">
-            <h3 style="margin-top:0; color: #2c3e50;">🎨 Personnaliser le graphisme</h3>
-            <p style="font-size: 13px; color: #7f8c8d; margin-bottom: 15px;">Choisissez l'ambiance visuelle de votre application (l'impression des fiches restera toujours sur fond blanc).</p>
-            
-            <div class="theme-card" id="card_theme_classique" onclick="appliquerThemeVisuel('classique')">
-                <div>
-                    <strong>💼 Classique (Origine)</strong><br>
-                    <span style="font-size: 12px; color: #7f8c8d;">Couleurs franches et contrastées</span>
-                </div>
-                <div class="theme-preview-dots">
-                    <span class="theme-dot" style="background:#2c3e50;"></span>
-                    <span class="theme-dot" style="background:#2980b9;"></span>
-                    <span class="theme-dot" style="background:#27ae60;"></span>
-                </div>
-            </div>
-
-            <div class="theme-card" id="card_theme_pastel" onclick="appliquerThemeVisuel('pastel')">
-                <div>
-                    <strong>🌸 Pastel Poudré</strong><br>
-                    <span style="font-size: 12px; color: #7f8c8d;">Teintes douces macaron, lavande et menthe</span>
-                </div>
-                <div class="theme-preview-dots">
-                    <span class="theme-dot" style="background:#e8dff5;"></span>
-                    <span class="theme-dot" style="background:#a2d2ff;"></span>
-                    <span class="theme-dot" style="background:#ffcad4;"></span>
-                </div>
-            </div>
-
-            <div class="theme-card" id="card_theme_doodles" onclick="appliquerThemeVisuel('doodles')">
-                <div>
-                    <strong>✏️ Carnet Doodles & Pastel</strong><br>
-                    <span style="font-size: 12px; color: #7f8c8d;">Couleurs pastelles + petits dessins d'école en fond</span>
-                </div>
-                <div class="theme-preview-dots">
-                    <span class="theme-dot" style="background:#fdfbf7;"></span>
-                    <span class="theme-dot" style="background:#b8c0ff;"></span>
-                    <span class="theme-dot" style="background:#a3e4d7;"></span>
-                </div>
-            </div>
-
-            <div class="theme-card" id="card_theme_nature" onclick="appliquerThemeVisuel('nature')">
-                <div>
-                    <strong>🌿 Nature & Sauge</strong><br>
-                    <span style="font-size: 12px; color: #7f8c8d;">Tons apaisants vert sauge, lin et bois</span>
-                </div>
-                <div class="theme-preview-dots">
-                    <span class="theme-dot" style="background:#cad2c5;"></span>
-                    <span class="theme-dot" style="background:#74c69d;"></span>
-                    <span class="theme-dot" style="background:#e9edc9;"></span>
-                </div>
-            </div>
-
-            <button onclick="fermerModal('modalDesign')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:8px; cursor:pointer; margin-top: 10px;">Fermer</button>
-        </div>
-    </div>
-
-    <!-- MODALS GESTION & ASSIGNATION -->
-    <div id="modalAssigner" class="modal-overlay no-print">
-        <div class="modal-content">
-            <h3 style="margin-top:0; color: #2980b9;">👥 Assigner à plusieurs élèves</h3>
-            <p style="font-size: 14px; margin-bottom: 10px;">Activité : <strong id="nomActiviteAssign"></strong></p>
-            <div style="background: #eaf2f8; padding: 10px; border-radius: 5px; margin-bottom: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                <label style="font-size: 13px; font-weight: bold; color: #2c3e50;">📅 Jour imposé :</label>
-                <select id="selectJourAssignMultiple" style="padding: 6px; border-radius: 4px; border: 1px solid #bdc3c7; flex: 1;">
-                    <option value="">-- Libre (Au choix de l'élève) --</option>
-                    <option value="Lundi">Lundi</option>
-                    <option value="Mardi">Mardi</option>
-                    <option value="Jeudi">Jeudi</option>
-                    <option value="Vendredi">Vendredi</option>
-                </select>
-            </div>
-            <div id="listeElevesAssign" style="display:flex; flex-direction:column; gap:8px; max-height:250px; overflow-y:auto; padding:10px; border:1px solid #ccc; border-radius:5px; margin-bottom:15px; background:#f9f9f9;"></div>
-            <div style="display:flex; gap:10px;">
-                <button class="btn-action" style="flex:1; padding: 12px;" onclick="validerAssignationMultiple()">✅ Envoyer aux élèves</button>
-                <button style="background: #95a5a6; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; flex:1; font-weight:bold;" onclick="fermerModal('modalAssigner')">❌ Annuler</button>
+                <button type="button" class="btn-action" style="flex:1;" onclick="validerDuplication()">✅ Copier le plan</button>
+                <button type="button" style="background: #95a5a6; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; flex:1;" onclick="fermerModal('modalDupliquer')">❌ Annuler</button>
             </div>
         </div>
     </div>
 
-    <div id="modalDupliquer" class="modal-overlay no-print">
+    <!-- MODALS PARAMÈTRES DE LA BASE -->
+    <div id="modalTypes" class="modal-overlay no-print">
         <div class="modal-content">
-            <h3 style="margin-top:0; color: #2980b9;">📋 Copier le plan vers d'autres élèves</h3>
-            <p>Cochez les élèves à qui vous souhaitez affecter le plan actif de <strong id="nomEleveSourceDupli"></strong>.</p>
-            <div id="listeElevesDupli" style="display:flex; flex-direction:column; gap:10px; max-height:250px; overflow-y:auto; padding:10px; border:1px solid #ccc; border-radius:5px; margin-bottom:15px;"></div>
-            <div style="display:flex; gap:10px;">
-                <button class="btn-action" style="flex:1;" onclick="validerDuplication()">✅ Copier le plan</button>
-                <button style="background: #95a5a6; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; flex:1;" onclick="fermerModal('modalDupliquer')">❌ Annuler</button>
-            </div>
+            <h3 style="margin-top:0;">⚙️ Gérer les types</h3>
+            <div id="listeTypesModal" style="margin-bottom: 20px;"></div>
+            <button type="button" onclick="fermerModal('modalTypes')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:5px; cursor:pointer;">Fermer</button>
         </div>
     </div>
 
-    <div id="modalTypes" class="modal-overlay no-print"><div class="modal-content"><h3 style="margin-top:0;">⚙️ Gérer les types</h3><div id="listeTypesModal" style="margin-bottom: 20px;"></div><button onclick="fermerModal('modalTypes')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:5px; cursor:pointer;">Fermer</button></div></div>
-    <div id="modalMatieres" class="modal-overlay no-print"><div class="modal-content"><h3 style="margin-top:0;">📚 Gérer les Matières</h3><div id="listeMatieresModal" style="margin-bottom: 20px;"></div><button onclick="fermerModal('modalMatieres')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:5px; cursor:pointer;">Fermer</button></div></div>
-    <div id="modalSequences" class="modal-overlay no-print"><div class="modal-content"><h3 style="margin-top:0;">📑 Gérer les Séquences</h3><div id="listeSequencesModal" style="margin-bottom: 20px;"></div><button onclick="fermerModal('modalSequences')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:5px; cursor:pointer;">Fermer</button></div></div>
-    <div id="modalCompetences" class="modal-overlay no-print"><div class="modal-content"><h3 style="margin-top:0;">🎯 Gérer les Compétences</h3><div id="listeCompetencesModal" style="margin-bottom: 20px;"></div><button onclick="fermerModal('modalCompetences')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:5px; cursor:pointer;">Fermer</button></div></div>
+    <div id="modalMatieres" class="modal-overlay no-print">
+        <div class="modal-content">
+            <h3 style="margin-top:0;">📚 Gérer les Matières</h3>
+            <div id="listeMatieresModal" style="margin-bottom: 20px;"></div>
+            <button type="button" onclick="fermerModal('modalMatieres')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:5px; cursor:pointer;">Fermer</button>
+        </div>
+    </div>
+
+    <div id="modalSequences" class="modal-overlay no-print">
+        <div class="modal-content">
+            <h3 style="margin-top:0;">📑 Gérer les Séquences</h3>
+            <div id="listeSequencesModal" style="margin-bottom: 20px;"></div>
+            <button type="button" onclick="fermerModal('modalSequences')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:5px; cursor:pointer;">Fermer</button>
+        </div>
+    </div>
+
+    <div id="modalCompetences" class="modal-overlay no-print">
+        <div class="modal-content">
+            <h3 style="margin-top:0;">🎯 Gérer les Compétences</h3>
+            <div id="listeCompetencesModal" style="margin-bottom: 20px;"></div>
+            <button type="button" onclick="fermerModal('modalCompetences')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:5px; cursor:pointer;">Fermer</button>
+        </div>
+    </div>
 
     <!-- MODAL EDITION ELEVE -->
     <div id="modalEditEleve" class="modal-overlay no-print">
@@ -271,13 +175,15 @@
                 </select>
             </div>
             <div style="display:flex; gap:10px;">
-                <button class="btn-action" style="flex:1;" onclick="validerEditionEleve()">💾 Enregistrer</button>
-                <button style="background: #95a5a6; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; flex:1;" onclick="fermerModal('modalEditEleve')">❌ Annuler</button>
+                <button type="button" class="btn-action" style="flex:1;" onclick="validerEditionEleve()">💾 Enregistrer</button>
+                <button type="button" style="background: #95a5a6; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; flex:1;" onclick="fermerModal('modalEditEleve')">❌ Annuler</button>
             </div>
         </div>
     </div>
 
-    <!-- 1. SUIVI ELEVES -->
+    <!-- ==========================================
+         ONGLET 1 : PLAN & SUIVI ÉLÈVE
+         ========================================== -->
     <div id="pageSuivi" class="page active">
         <div class="student-bar no-print">
             <strong>🧑‍🎓 Élève :</strong>
@@ -300,8 +206,6 @@
         </div>
 
         <div class="panel" id="zoneTravail" style="display: none;">
-            
-            <!-- BARRE DE GESTION MULTI-SEMAINES & DATE AUTO -->
             <div style="background: #eaf2f8; border: 1px solid #a9cce3; padding: 12px 15px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                 <strong>📅 Semaine affichée :</strong>
                 <select id="selectSemaineEleve" onchange="changerSemaineActive(this.value)" style="padding: 8px; border-radius: 5px; border: 1px solid #2980b9; font-weight: bold; color: #2c3e50;"></select>
@@ -322,6 +226,7 @@
                 <div class="cascade-item"><label>3. Matière</label><select id="selectMatiere" onchange="majCascadeSequence()" disabled><option value="">-- --</option></select></div>
                 <div class="cascade-item" style="flex-grow: 2;"><label>4. Séquence</label><select id="selectSequence" onchange="afficherRessourcesDisponibles()" disabled><option value="">-- --</option></select></div>
             </div>
+
             <div id="zoneRessources" class="list-ressources" style="display: none;">
                 <h4 style="margin-top: 0; color: #2980b9;">Activité(s) disponible(s) (Choisissez « Libre » ou un jour avant de cliquer sur ➕ Plan) :</h4>
                 <div id="barreFiltreEtoilesDispo" style="display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap;">
@@ -333,6 +238,7 @@
                 </div>
                 <table id="tableRessourcesDispo"></table>
             </div>
+
             <hr>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
                 <h3 style="margin:0;">📋 Plan de <span class="nomEleveAffiche">...</span> (<span id="labelSemaineTitre">Semaine 1</span>) - <span id="compteurAteliersEleve">0</span> / <span id="maxAteliersAffiche">15</span> (<span id="compteurTablettesEleve">0</span> tablettes)</h3>
@@ -374,7 +280,9 @@
         <div id="messageSelectEleve" style="text-align: center; padding: 40px; color: #7f8c8d;"><h2>Veuillez sélectionner ou créer un élève.</h2></div>
     </div>
 
-    <!-- 2. IMPRESSION FICHE -->
+    <!-- ==========================================
+         ONGLET 2 : IMPRESSION FICHE ÉLÈVE
+         ========================================== -->
     <div id="pageImpression" class="page">
         <div class="panel no-print" style="background: #eaf2f8; border: 1px solid #a9cce3; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; padding: 15px;">
             <div>
@@ -397,11 +305,12 @@
         <div id="containerFichesImpression"><div style="text-align: center; padding: 40px; color: #7f8c8d;" class="no-print"><h2>Veuillez sélectionner un élève ou un groupe ci-dessus.</h2></div></div>
     </div>
 
-    <!-- 3. TABLEAU DE BORD VISUEL & EVALUATION RAPIDE -->
+    <!-- ==========================================
+         ONGLET 3 : TABLEAU DE BORD
+         ========================================== -->
     <div id="pageDashboard" class="page">
         <div class="panel">
             <h2 style="color: #f39c12; margin-top:0;">📊 Tableau de bord & Évaluation rapide</h2>
-            
             <div id="memoDashboardContainer" style="margin-bottom: 20px;">
                 <h3 style="color:#2c3e50; border-bottom: 2px solid #bdc3c7; padding-bottom:5px;">🧑‍🏫 Groupes de besoins & Ateliers dirigés (Automatique)</h3>
                 <div id="memoListContent"></div>
@@ -433,7 +342,9 @@
         </div>
     </div>
 
-    <!-- 4. BASE DE DONNÉES -->
+    <!-- ==========================================
+         ONGLET 4 : BASE DE DONNÉES
+         ========================================== -->
     <div id="pageBase" class="page">
         <div class="panel">
             <h2>📁 Inventaire (Base de données)</h2>
@@ -532,7 +443,9 @@
         </div>
     </div>
 
-    <!-- 5. PROGRAMMATION ANNUELLE -->
+    <!-- ==========================================
+         ONGLET 5 : PROGRAMMATION ANNUELLE
+         ========================================== -->
     <div id="pageProg" class="page">
         <div class="panel">
             <h2 style="color: #d35400; margin-top:0;">📅 Programmation Annuelle</h2>
@@ -563,7 +476,9 @@
         </div>
     </div>
 
-    <!-- 6. ETIQUETTES -->
+    <!-- ==========================================
+         ONGLET 6 : ÉTIQUETTES
+         ========================================== -->
     <div id="pageEtiquettes" class="page">
         <div class="panel no-print">
             <h2 style="color: #8e44ad;">🏷️ Studio d'impression d'Étiquettes</h2>
@@ -602,12 +517,14 @@
         <div id="printEtiquettesContainer" style="display: flex; flex-wrap: wrap; align-content: flex-start; background: white; border: 1px dashed #bdc3c7; min-height: 200px;"></div>
     </div>
 
-    <!-- 7. MATRICE COMPÉTENCES -->
+    <!-- ==========================================
+         ONGLET 7 : MATRICE DES COMPÉTENCES
+         ========================================== -->
     <div id="pageMatrice" class="page">
         <div class="panel">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                 <h2 style="margin:0; color: #16a085;">🧮 Matrice des Compétences</h2>
-                <button class="btn-action" onclick="window.print()" style="background: #16a085; padding: 10px 15px;">🖨️ Imprimer la matrice</button>
+                <button type="button" class="btn-action" onclick="window.print()" style="background: #16a085; padding: 10px 15px;">🖨️ Imprimer la matrice</button>
             </div>
             <p style="font-size: 13px; color: #7f8c8d;">Vue croisée des élèves et des compétences validées dans l'historique.</p>
             <div style="overflow-x: auto; max-height: 70vh;">
@@ -616,13 +533,15 @@
         </div>
     </div>
 
-    <!-- 8. BILANS ELEVES -->
+    <!-- ==========================================
+         ONGLET 8 : BILANS ÉLÈVES
+         ========================================== -->
     <div id="pageBilan" class="page">
         <div class="panel no-print" style="margin-bottom: 20px;">
             <h2 style="margin:0 0 15px 0; color: #9b59b6;">📝 Éditer un Bilan d'Élève (Évaluations & Positions A / PA / NA)</h2>
             <div style="display:flex; gap: 15px; align-items: center; flex-wrap: wrap;">
                 <select id="selectEleveBilan" onchange="genererBilanEleve()" style="padding: 8px; font-size: 14px;"><option value="">-- Choisir un élève --</option></select>
-                <button class="btn-action" onclick="window.print()" style="background: #9b59b6; padding: 10px 15px;">🖨️ Imprimer le bilan</button>
+                <button type="button" class="btn-action" onclick="window.print()" style="background: #9b59b6; padding: 10px 15px;">🖨️ Imprimer le bilan</button>
             </div>
         </div>
         <div id="zoneBilanPrint" style="background: white; padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 400px;">
@@ -630,7 +549,9 @@
         </div>
     </div>
 
-    <!-- 9. SAUVEGARDE & DRIVE -->
+    <!-- ==========================================
+         ONGLET 9 : SAUVEGARDE & DRIVE
+         ========================================== -->
     <div id="pageSave" class="page">
         <div class="panel">
             <h2>💾 Sécurité & Sauvegarde</h2>
