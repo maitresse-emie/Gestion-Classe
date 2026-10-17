@@ -9,7 +9,7 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "[https://cdn-icons-png.flaticon.com/512/3553/3553412.png](https://cdn-icons-png.flaticon.com/512/3553/3553412.png)",
+      "src": "https://cdn-icons-png.flaticon.com/512/3553/3553412.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
