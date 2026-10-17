@@ -49,7 +49,7 @@ body {
     cursor: pointer;
     font-weight: bold;
     font-size: 13px;
-    margin-left: 10px;
+    margin-left: 6px;
     transition: all 0.2s ease;
 }
 .btn-theme-config:hover { transform: scale(1.05); }
@@ -78,8 +78,9 @@ th, td { border: 1px solid #ecf0f1; padding: 8px 10px; text-align: left; font-si
 th { background-color: #f8f9f9; color: #2c3e50; font-weight: bold; }
 tr.row-eval { background-color: #fdedec; }
 tr.row-valide { background-color: #e8f8f5; }
+tr.row-revoir-prio { background-color: #fff8e7; }
 
-.col-num { width: 35px; text-align: center; font-weight: bold; }
+.col-num { width: 45px; text-align: center; font-weight: bold; }
 .col-center { text-align: center; }
 
 .num-jour-impose {
@@ -108,7 +109,8 @@ tr.row-valide { background-color: #e8f8f5; }
 .btn-hide { background-color: #7f8c8d; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; }
 .btn-add { background-color: #2980b9; color: white; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-weight: bold; }
 
-.filter-btn { background: #ecf0f1; border: 1px solid #bdc3c7; padding: 6px 12px; border-radius: 15px; cursor: pointer; font-size: 12px; font-weight: bold; color: #34495e; }
+.filter-btn { background: #ecf0f1; border: 1px solid #bdc3c7; padding: 5px 11px; border-radius: 15px; cursor: pointer; font-size: 12px; font-weight: bold; color: #34495e; transition: all 0.15s; }
+.filter-btn:hover { background: #dce1e3; }
 .filter-btn.active { background: #2980b9; color: white; border-color: #1b4f72; }
 
 .jauge-container { background-color: #ecf0f1; border-radius: 4px; overflow: hidden; height: 12px; width: 100%; margin-top: 4px; }
@@ -116,9 +118,8 @@ tr.row-valide { background-color: #e8f8f5; }
 .jauge-text { font-size: 11px; color: #7f8c8d; margin-top: 2px; }
 
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: none; justify-content: center; align-items: center; z-index: 2000; }
-.modal-content { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 500px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); max-height: 80vh; overflow-y: auto; }
+.modal-content { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 500px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); max-height: 85vh; overflow-y: auto; }
 
-/* Cartes de sélection de thème */
 .theme-card {
     border: 2px solid #ecf0f1;
     border-radius: 10px;
@@ -159,7 +160,7 @@ tr.row-valide { background-color: #e8f8f5; }
     color: #000;
 }
 
-.sequence-separator-row td { background-color: #eaeded !important; font-weight: bold; color: #2c3e50; font-size: 12px; }
+.sequence-separator-row td { background-color: #f2f4f4 !important; font-weight: bold; font-size: 12px; }
 .etiquette-box { display: flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box; page-break-inside: avoid; break-inside: avoid; text-align: center; overflow: hidden; border-radius: 4px; }
 
 /* ==========================================
@@ -184,10 +185,7 @@ body.theme-pastel .nav-btn, body.theme-doodles .nav-btn {
     box-shadow: 0 2px 4px rgba(0,0,0,0.03);
 }
 
-body.theme-pastel .nav-btn:hover, body.theme-doodles .nav-btn:hover {
-    background-color: #f3ebff !important;
-}
-
+body.theme-pastel .nav-btn:hover, body.theme-doodles .nav-btn:hover { background-color: #f3ebff !important; }
 body.theme-pastel .nav-btn.active, body.theme-doodles .nav-btn.active {
     background-color: #b8c0ff !important;
     color: #2b2d42 !important;
@@ -197,7 +195,7 @@ body.theme-pastel .nav-btn.active, body.theme-doodles .nav-btn.active {
 }
 
 body.theme-pastel .panel, body.theme-doodles .panel {
-    background-color: rgba(255, 255, 255, 0.94);
+    background-color: rgba(255, 255, 255, 0.95);
     border-radius: 16px;
     border: 1px solid #f2e9e4;
     box-shadow: 0 6px 20px rgba(74, 78, 105, 0.05);
@@ -217,7 +215,6 @@ body.theme-pastel .manual-add-box, body.theme-doodles .manual-add-box {
     border: 1px dashed #cbd5e1;
 }
 
-/* Adoucissement des boutons d'action en mode Pastel & Doodles */
 body.theme-pastel .btn-valid, body.theme-doodles .btn-valid,
 body.theme-pastel .btn-action, body.theme-doodles .btn-action,
 body.theme-pastel button[style*="#27ae60"], body.theme-doodles button[style*="#27ae60"] {
@@ -261,11 +258,7 @@ body.theme-pastel button[style*="#9b59b6"], body.theme-doodles button[style*="#9
     border: 1px solid #d08bff !important;
 }
 
-body.theme-pastel th, body.theme-doodles th {
-    background-color: #f3ebff;
-    color: #4a4e69;
-}
-
+body.theme-pastel th, body.theme-doodles th { background-color: #f3ebff; color: #4a4e69; }
 body.theme-pastel tr.row-eval, body.theme-doodles tr.row-eval { background-color: #fff0f3; }
 body.theme-pastel tr.row-valide, body.theme-doodles tr.row-valide { background-color: #ecfdf5; }
 body.theme-pastel .filter-btn.active, body.theme-doodles .filter-btn.active {
@@ -279,74 +272,27 @@ body.theme-pastel .filter-btn.active, body.theme-doodles .filter-btn.active {
    ========================================== */
 body.theme-doodles {
     background-color: #fdfbf7;
-    background-image: url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23d8c8e8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' opacity='0.65'%3E%3C!-- Etoile --%3E%3Cpath d='M25 15 l3 6 6 1 -4 4 1 6 -6 -3 -6 3 1 -6 -4 -4 6 -1 z'/%3E%3C!-- Nuage --%3E%3Cpath d='M85 28 a8 8 0 0 1 14 2 a6 6 0 0 1 2 11 h-22 a6 6 0 0 1 6 -13 z'/%3E%3C!-- Crayon --%3E%3Cpath d='M20 85 l15 -15 l5 5 l-15 15 l-7 2 z'/%3E%3C!-- Petit livre --%3E%3Cpath d='M75 75 v16 c6 -3 12 -3 18 0 v-16 c-6 -3 -12 -3 -18 0 z M93 75 v16 c6 -3 12 -3 18 0 v-16 c-6 -3 -12 -3 -18 0 z'/%3E%3C!-- Spirale / Fleur --%3E%3Ccircle cx='55' cy='55' r='4'/%3E%3Ccircle cx='55' cy='47' r='3'/%3E%3Ccircle cx='55' cy='63' r='3'/%3E%3Ccircle cx='47' cy='55' r='3'/%3E%3Ccircle cx='63' cy='55' r='3'/%3E%3C/g%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23d8c8e8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' opacity='0.65'%3E%3Cpath d='M25 15 l3 6 6 1 -4 4 1 6 -6 -3 -6 3 1 -6 -4 -4 6 -1 z'/%3E%3Cpath d='M85 28 a8 8 0 0 1 14 2 a6 6 0 0 1 2 11 h-22 a6 6 0 0 1 6 -13 z'/%3E%3Cpath d='M20 85 l15 -15 l5 5 l-15 15 l-7 2 z'/%3E%3Cpath d='M75 75 v16 c6 -3 12 -3 18 0 v-16 c-6 -3 -12 -3 -18 0 z M93 75 v16 c6 -3 12 -3 18 0 v-16 c-6 -3 -12 -3 -18 0 z'/%3E%3Ccircle cx='55' cy='55' r='4'/%3E%3Ccircle cx='55' cy='47' r='3'/%3E%3Ccircle cx='55' cy='63' r='3'/%3E%3Ccircle cx='47' cy='55' r='3'/%3E%3Ccircle cx='63' cy='55' r='3'/%3E%3C/g%3E%3C/svg%3E");
     background-attachment: fixed;
 }
 
-body.theme-doodles .panel {
-    border: 2px solid #e8dff5;
-    box-shadow: 4px 4px 0px #e8dff5;
-}
+body.theme-doodles .panel { border: 2px solid #e8dff5; box-shadow: 4px 4px 0px #e8dff5; }
 
 /* ==========================================
-   THÈME 4 : NATURE & SAUGE (ÉCOLE DEHORS)
+   THÈME 4 : NATURE & SAUGE
    ========================================== */
-body.theme-nature {
-    background-color: #f4f5f0;
-    color: #2f3e46;
-}
-
-body.theme-nature .navbar {
-    background-color: #cad2c5;
-    border-bottom: 2px solid #84a98c;
-}
-
-body.theme-nature .nav-btn {
-    background-color: #ffffff !important;
-    color: #2f3e46 !important;
-    border-radius: 12px;
-    border: 1px solid #84a98c;
-}
-
-body.theme-nature .nav-btn.active {
-    background-color: #52796f !important;
-    color: #ffffff !important;
-    outline: none;
-}
-
-body.theme-nature .panel {
-    background-color: #ffffff;
-    border-radius: 14px;
-    border: 1px solid #dce1de;
-}
-
-body.theme-nature .student-bar {
-    background-color: #e9edc9;
-    border: 1px solid #ccd5ae;
-    border-radius: 12px;
-}
-
-body.theme-nature .btn-valid, body.theme-nature .btn-action,
-body.theme-nature button[style*="#27ae60"] {
-    background-color: #74c69d !important;
-    color: #1b4332 !important;
-    border-radius: 8px;
-}
-
-body.theme-nature .btn-add, body.theme-nature button[style*="#2980b9"] {
-    background-color: #90e0ef !important;
-    color: #03045e !important;
-    border-radius: 8px;
-}
-
-body.theme-nature .btn-remove, body.theme-nature button[style*="#c0392b"], body.theme-nature button[style*="#e74c3c"] {
-    background-color: #f4a261 !important;
-    color: #5f0f40 !important;
-    border-radius: 8px;
-}
+body.theme-nature { background-color: #f4f5f0; color: #2f3e46; }
+body.theme-nature .navbar { background-color: #cad2c5; border-bottom: 2px solid #84a98c; }
+body.theme-nature .nav-btn { background-color: #ffffff !important; color: #2f3e46 !important; border-radius: 12px; border: 1px solid #84a98c; }
+body.theme-nature .nav-btn.active { background-color: #52796f !important; color: #ffffff !important; outline: none; }
+body.theme-nature .panel { background-color: #ffffff; border-radius: 14px; border: 1px solid #dce1de; }
+body.theme-nature .student-bar { background-color: #e9edc9; border: 1px solid #ccd5ae; border-radius: 12px; }
+body.theme-nature .btn-valid, body.theme-nature .btn-action, body.theme-nature button[style*="#27ae60"] { background-color: #74c69d !important; color: #1b4332 !important; border-radius: 8px; }
+body.theme-nature .btn-add, body.theme-nature button[style*="#2980b9"] { background-color: #90e0ef !important; color: #03045e !important; border-radius: 8px; }
+body.theme-nature .btn-remove, body.theme-nature button[style*="#c0392b"], body.theme-nature button[style*="#e74c3c"] { background-color: #f4a261 !important; color: #5f0f40 !important; border-radius: 8px; }
 
 /* ==========================================
-   RÈGLES D'IMPRESSION (TOUJOURS BLANC PUR)
+   RÈGLES D'IMPRESSION (TOUJOURS PROPRE)
    ========================================== */
 @media print {
     body { background: white !important; background-image: none !important; color: black !important; }
