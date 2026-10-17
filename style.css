@@ -346,31 +346,6 @@ tr.row-valide {
     box-shadow: 0 2px 5px rgba(0,0,0,0.3);
 }
 
-/* Mode classe (Tablette / Grand écran) */
-body.mode-classe {
-    font-size: 16px;
-}
-
-body.mode-classe td, body.mode-classe th {
-    padding: 12px 14px;
-    font-size: 15px;
-}
-
-.btn-tablet-toggle {
-    position: fixed;
-    top: 15px;
-    right: 15px;
-    z-index: 1001;
-    background: #8e44ad;
-    color: white;
-    border: none;
-    padding: 8px 12px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-weight: bold;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-}
-
 /* Matrice des compétences */
 .matrice-table th {
     text-align: center;
@@ -420,21 +395,30 @@ body.mode-classe td, body.mode-classe th {
     border-radius: 4px;
 }
 
+/* Boutons jours de la semaine */
+.btn-jour {
+    padding: 4px 6px;
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    border: 1px solid #bdc3c7;
+    background: white;
+    border-radius: 3px;
+    transition: all 0.2s;
+}
+
 /* ==========================================
    RÈGLES D'IMPRESSION (CORRECTION ONGLET 2)
    ========================================== */
 @media print {
-    /* Masquer tous les éléments superflus de l'application lors de l'impression */
     body * {
         visibility: hidden;
     }
     
-    /* Rendre visible uniquement le conteneur des fiches d'impression et son contenu */
     #containerFichesImpression, #containerFichesImpression * {
         visibility: visible;
     }
     
-    /* Positionner proprement la zone d'impression en haut de la page */
     #containerFichesImpression {
         position: absolute;
         left: 0;
@@ -444,12 +428,10 @@ body.mode-classe td, body.mode-classe th {
         padding: 0;
     }
 
-    /* Masquer explicitement la barre de navigation, les boutons et les menus de sélection */
-    .navbar, .no-print, .student-bar, .modal-overlay, .btn-tablet-toggle, #btnScrollTop {
+    .navbar, .no-print, .student-bar, .modal-overlay, #btnScrollTop {
         display: none !important;
     }
 
-    /* Sauts de page propres pour chaque fiche élève */
     .plan-eleve-page {
         page-break-after: always;
         break-after: page;
