@@ -1,7 +1,7 @@
 {
   "name": "Gestion de Classe - Plans & Suivi",
   "short_name": "GestionClasse",
-  "description": "Application de gestion des plans de travail, ateliers et programmations par période.",
+  "description": "Application de gestion des plans de travail, ateliers, évaluations et programmations par période.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#faf6f2",
@@ -9,7 +9,7 @@
   "orientation": "any",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/3553/3553412.png",
+      "src": "[https://cdn-icons-png.flaticon.com/512/3553/3553412.png](https://cdn-icons-png.flaticon.com/512/3553/3553412.png)",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
