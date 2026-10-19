@@ -8,7 +8,7 @@
     <meta name="theme-color" content="#2c3e50">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3553/3553412.png">
     
-    <!-- SDK Firebase Temps Réel (Auth + Firestore) -->
+    <!-- SDK Firebase Temps Réel -->
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
@@ -49,22 +49,12 @@
                     <strong>💼 Classique (Origine)</strong><br>
                     <span style="font-size: 12px; color: #7f8c8d;">Couleurs franches et contrastées</span>
                 </div>
-                <div class="theme-preview-dots">
-                    <span class="theme-dot" style="background:#2c3e50;"></span>
-                    <span class="theme-dot" style="background:#2980b9;"></span>
-                    <span class="theme-dot" style="background:#27ae60;"></span>
-                </div>
             </div>
 
             <div class="theme-card active-theme" id="card_theme_pastel" onclick="appliquerThemeVisuel('pastel')">
                 <div>
                     <strong>🌸 Pastel Poudré</strong><br>
                     <span style="font-size: 12px; color: #7f8c8d;">Teintes douces macaron, lavande et menthe</span>
-                </div>
-                <div class="theme-preview-dots">
-                    <span class="theme-dot" style="background:#e8dff5;"></span>
-                    <span class="theme-dot" style="background:#a2d2ff;"></span>
-                    <span class="theme-dot" style="background:#ffcad4;"></span>
                 </div>
             </div>
 
@@ -73,22 +63,12 @@
                     <strong>✏️ Carnet Doodles & Pastel</strong><br>
                     <span style="font-size: 12px; color: #7f8c8d;">Couleurs pastelles + petits dessins d'école en fond</span>
                 </div>
-                <div class="theme-preview-dots">
-                    <span class="theme-dot" style="background:#fdfbf7;"></span>
-                    <span class="theme-dot" style="background:#b8c0ff;"></span>
-                    <span class="theme-dot" style="background:#a3e4d7;"></span>
-                </div>
             </div>
 
             <div class="theme-card" id="card_theme_nature" onclick="appliquerThemeVisuel('nature')">
                 <div>
                     <strong>🌿 Nature & Sauge</strong><br>
                     <span style="font-size: 12px; color: #7f8c8d;">Tons apaisants vert sauge, lin et bois</span>
-                </div>
-                <div class="theme-preview-dots">
-                    <span class="theme-dot" style="background:#cad2c5;"></span>
-                    <span class="theme-dot" style="background:#74c69d;"></span>
-                    <span class="theme-dot" style="background:#e9edc9;"></span>
                 </div>
             </div>
 
@@ -135,8 +115,7 @@
     <!-- MODALS PARAMÈTRES DE LA BASE -->
     <div id="modalTypes" class="modal-overlay no-print">
         <div class="modal-content" style="max-width: 650px;">
-            <h3 style="margin-top:0;">⚙️ Gérer les types & images (Manuel / Fichier Jaune)</h3>
-            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">Vous pouvez définir une image par défaut et une image dédiée au <strong>Fichier Jaune</strong> pour chaque type.</p>
+            <h3 style="margin-top:0;">⚙️ Gérer les types & images</h3>
             <div id="listeTypesModal" style="margin-bottom: 20px;"></div>
             <button type="button" onclick="fermerModal('modalTypes')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:5px; cursor:pointer;">Fermer</button>
         </div>
@@ -153,33 +132,31 @@
     <div id="modalSequences" class="modal-overlay no-print">
         <div class="modal-content" style="max-width: 650px;">
             <h3 style="margin-top:0;">📑 Gérer ou supprimer des Séquences</h3>
-            <p style="font-size:12px; color:#7f8c8d; margin-top:0;">Renommez vos séquences ou cliquez sur <strong>🗑️ Gérer / Supprimer</strong> pour choisir quoi faire de chaque atelier qu'elle contient.</p>
             <div id="listeSequencesModal" style="margin-bottom: 20px; max-height: 55vh; overflow-y: auto;"></div>
             <button type="button" onclick="fermerModal('modalSequences')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:5px; cursor:pointer;">Fermer</button>
         </div>
     </div>
 
-    <!-- NOUVELLE MODALE : SUPPRESSION / VENTILATION D'UNE SÉQUENCE -->
+    <!-- MODALE SUPPRESSION / VENTILATION D'UNE SÉQUENCE -->
     <div id="modalSupprimerSequence" class="modal-overlay no-print">
         <div class="modal-content" style="max-width: 850px; width: 95%;">
             <h3 style="margin-top:0; color: #c0392b;">🗑️ Supprimer la séquence : <span id="titreSeqASupprimer" style="color:#2c3e50;"></span></h3>
             <p style="font-size:13px; color:#555; margin-top:0;">
-                Cette séquence contient <strong id="nbAteliersSeqASupprimer">0</strong> atelier(s). Choisissez ci-dessous ce que vous souhaitez faire pour chaque atelier individuellement :
+                Cette séquence contient <strong id="nbAteliersSeqASupprimer">0</strong> atelier(s). Choisissez ce que vous souhaitez faire pour chaque atelier :
             </p>
             
-            <!-- Barre d'action rapide pour appliquer à tous les ateliers d'un coup -->
             <div style="background: #fdf2e9; border: 1px solid #f5b041; padding: 10px; border-radius: 6px; margin-bottom: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                <span style="font-size: 12px; font-weight: bold; color: #d35400;">⚡ Appliquer à toute la liste d'un coup :</span>
+                <span style="font-size: 12px; font-weight: bold; color: #d35400;">⚡ Appliquer à toute la liste :</span>
                 <button type="button" class="filter-btn" style="background:#e74c3c; color:white;" onclick="appliquerActionGlobaleSeq('supprimer')">🗑️ Tout supprimer</button>
-                <button type="button" class="filter-btn" style="background:#2980b9; color:white;" onclick="appliquerActionGlobaleSeq('existante')">📁 Tout déplacer (séquence existante)</button>
-                <button type="button" class="filter-btn" style="background:#27ae60; color:white;" onclick="appliquerActionGlobaleSeq('nouvelle')">➕ Tout déplacer (nouvelle séquence)</button>
-                <input type="text" id="inputGlobalNouvelleSeq" placeholder="Nom de la nouvelle séquence commune..." oninput="copierNomNouvelleSeqGlobale(this.value)" style="display:none; flex:1; min-width:180px; padding:5px; font-size:12px; border:1px solid #27ae60; border-radius:4px;">
+                <button type="button" class="filter-btn" style="background:#2980b9; color:white;" onclick="appliquerActionGlobaleSeq('existante')">📁 Tout déplacer (existante)</button>
+                <button type="button" class="filter-btn" style="background:#27ae60; color:white;" onclick="appliquerActionGlobaleSeq('nouvelle')">➕ Tout déplacer (nouvelle)</button>
+                <input type="text" id="inputGlobalNouvelleSeq" placeholder="Nom nouvelle séquence commune..." oninput="copierNomNouvelleSeqGlobale(this.value)" style="display:none; flex:1; min-width:180px; padding:5px; font-size:12px; border:1px solid #27ae60; border-radius:4px;">
             </div>
 
             <div id="listeAteliersSeqASupprimer" style="max-height: 50vh; overflow-y: auto; border: 1px solid #bdc3c7; border-radius: 6px; margin-bottom: 15px;"></div>
 
             <div style="display:flex; gap:10px;">
-                <button type="button" class="btn-valid" style="flex:2; padding:12px; font-size:14px;" onclick="validerSuppressionSequence()">✅ Appliquer ces choix et clôturer la séquence</button>
+                <button type="button" class="btn-valid" style="flex:2; padding:12px; font-size:14px;" onclick="validerSuppressionSequence()">✅ Appliquer ces choix et supprimer la séquence</button>
                 <button type="button" onclick="fermerModal('modalSupprimerSequence'); ouvrirModal('modalSequences'); afficherListeSequencesModal();" style="flex:1; background: #95a5a6; color: white; border: none; padding: 12px; font-weight: bold; border-radius:5px; cursor:pointer;">↩️ Retour</button>
             </div>
         </div>
@@ -202,7 +179,7 @@
                 <input type="text" id="editEleveNomInput" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;">
             </div>
             <div style="margin-bottom: 15px;">
-                <label style="display:block; font-size:13px; font-weight:bold; margin-bottom:5px;">Niveau scolaire officiel :</label>
+                <label style="display:block; font-size:13px; font-weight:bold; margin-bottom:5px;">Niveau :</label>
                 <select id="editEleveNiveauSelect" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px;">
                     <option value="CP">CP</option><option value="CE1">CE1</option><option value="CE2">CE2</option><option value="CM1">CM1</option><option value="CM2">CM2</option>
                 </select>
@@ -210,7 +187,7 @@
             <div style="margin-bottom: 15px; background: #fff9db; border: 1px solid #f1c40f; padding: 10px; border-radius: 6px;">
                 <label style="cursor:pointer; font-size:14px; font-weight:bold; color:#b7791f; display:flex; align-items:center; gap:8px;">
                     <input type="checkbox" id="editEleveFichierJauneInput" style="transform:scale(1.2);">
-                    📒 Utilise le Fichier Jaune (support adapté en Français CM)
+                    📒 Utilise le Fichier Jaune
                 </label>
             </div>
             <div style="display:flex; gap:10px;">
@@ -220,9 +197,7 @@
         </div>
     </div>
 
-    <!-- ==========================================
-         ONGLET 1 : PLAN & SUIVI ÉLÈVE
-         ========================================== -->
+    <!-- ONGLET 1 -->
     <div id="pageSuivi" class="page active">
         <div class="student-bar no-print">
             <strong>🧑‍🎓 Élève :</strong>
@@ -232,15 +207,15 @@
             <select id="nouvelEleveNiveau" style="padding: 6px; border-radius: 4px; border: 1px solid #bdc3c7;">
                 <option value="CP">CP</option><option value="CE1">CE1</option><option value="CE2">CE2</option><option value="CM1">CM1</option><option value="CM2">CM2</option>
             </select>
-            <label style="background:#fff9db; border:1px solid #f1c40f; padding:5px 8px; border-radius:5px; font-size:12px; font-weight:bold; color:#b7791f; cursor:pointer;" title="Cochez si cet élève travaille sur le Fichier Jaune au lieu du manuel standard">
+            <label style="background:#fff9db; border:1px solid #f1c40f; padding:5px 8px; border-radius:5px; font-size:12px; font-weight:bold; color:#b7791f; cursor:pointer;">
                 <input type="checkbox" id="nouvelEleveFichierJaune"> 📒 Fichier Jaune
             </label>
             <button type="button" onclick="creerEleve()" style="background: #27ae60; color: white; font-weight: bold;">➕ Créer</button>
-            <button type="button" onclick="ouvrirModalEditionEleve()" id="btnEditEleve" style="background: #f39c12; color: white; font-weight: bold; display: none;" title="Modifier le prénom, le niveau ou l'option Fichier Jaune">✏️ Modifier</button>
+            <button type="button" onclick="ouvrirModalEditionEleve()" id="btnEditEleve" style="background: #f39c12; color: white; font-weight: bold; display: none;">✏️ Modifier</button>
             <div style="margin-left: 5px; display: flex; align-items: center; gap: 5px;">
                 <label style="font-size: 12px;">Max :</label>
                 <input type="number" id="inputMaxAteliersEleve" min="1" max="25" value="15" onchange="modifierMaxAteliersEleve()" style="width: 45px; padding: 4px; text-align: center;">
-                <label style="font-size: 12px;" title="Quota max d'activités tablettes">Tab :</label>
+                <label style="font-size: 12px;">Tab :</label>
                 <input type="number" id="inputMaxTablettesEleve" min="0" max="10" value="2" onchange="modifierMaxTablettesEleve()" style="width: 42px; padding: 4px; text-align: center;">
             </div>
             <button type="button" onclick="ouvrirModalDuplication()" style="background: #8e44ad; color: white; font-weight: bold; margin-left: auto;">📋 Copier plan</button>
@@ -251,45 +226,44 @@
             <div style="background: #eaf2f8; border: 1px solid #a9cce3; padding: 12px 15px; border-radius: 8px; margin-bottom: 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
                 <strong>📅 Semaine affichée :</strong>
                 <select id="selectSemaineEleve" onchange="changerSemaineActive(this.value)" style="padding: 8px; border-radius: 5px; border: 1px solid #2980b9; font-weight: bold; color: #2c3e50;"></select>
-                <button type="button" onclick="ajouterSemaineAvance()" style="background: #2980b9; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold;">➕ Préparer une semaine d'avance</button>
-                <button type="button" id="btnSupprimerSemaine" onclick="supprimerSemaineActive()" style="background: #e74c3c; color: white; border: none; padding: 8px 10px; border-radius: 5px; cursor: pointer; font-weight: bold; display: none;" title="Supprimer cette semaine préparée">🗑️</button>
+                <button type="button" onclick="ajouterSemaineAvance()" style="background: #2980b9; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold;">➕ Semaine d'avance</button>
+                <button type="button" id="btnSupprimerSemaine" onclick="supprimerSemaineActive()" style="background: #e74c3c; color: white; border: none; padding: 8px 10px; border-radius: 5px; cursor: pointer; font-weight: bold; display: none;">🗑️</button>
                 
                 <div style="margin-left: auto; display: flex; align-items: center; gap: 8px; background: white; padding: 6px 12px; border-radius: 5px; border: 1px solid #bdc3c7;">
                     <label style="font-size: 13px; font-weight: bold;">Début :</label>
                     <input type="date" id="dateDebutSemaineInput" onchange="appliquerDateDebutSemaine(this.value)" style="padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
-                    <span style="font-size: 13px; color: #2980b9; font-weight: bold;" id="dateFinSemaineAffiche">➔ Vendredi : --/--</span>
+                    <span style="font-size: 13px; color: #2980b9; font-weight: bold;" id="dateFinSemaineAffiche">➔ --/--</span>
                 </div>
             </div>
 
-            <h3>Ajouter au plan de la semaine sélectionnée</h3>
+            <h3>Ajouter au plan de la semaine</h3>
             <div class="cascade-box">
                 <div class="cascade-item"><label>1. Niveau</label><select id="selectNiveau" onchange="majCascadeMatiere()"><option value="">-- Choix --</option></select></div>
-                <div class="cascade-item"><label>2. Période</label><select id="selectPeriode" onchange="majCascadeMatiere()"><option value="">-- Toutes les périodes --</option><option value="P1">Période 1</option><option value="P2">Période 2</option><option value="P3">Période 3</option><option value="P4">Période 4</option><option value="P5">Période 5</option></select></div>
+                <div class="cascade-item"><label>2. Période</label><select id="selectPeriode" onchange="majCascadeMatiere()"><option value="">-- Toutes --</option><option value="P1">Période 1</option><option value="P2">Période 2</option><option value="P3">Période 3</option><option value="P4">Période 4</option><option value="P5">Période 5</option></select></div>
                 <div class="cascade-item"><label>3. Matière</label><select id="selectMatiere" onchange="majCascadeSequence()" disabled><option value="">-- --</option></select></div>
                 <div class="cascade-item" style="flex-grow: 2;"><label>4. Séquence</label><select id="selectSequence" onchange="afficherRessourcesDisponibles()" disabled><option value="">-- --</option></select></div>
             </div>
 
             <div id="zoneRessources" class="list-ressources" style="display: none;">
-                <h4 style="margin-top: 0; color: #2980b9;">Activité(s) disponible(s) (Choisissez « Libre » ou un jour avant de cliquer sur ➕ Plan) :</h4>
+                <h4 style="margin-top: 0; color: #2980b9;">Activité(s) disponible(s) :</h4>
                 <div id="barreFiltreEtoilesDispo" style="display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap;">
-                    <span style="font-size:12px; font-weight:bold; color:#7f8c8d;">Filtrer par difficulté :</span>
+                    <span style="font-size:12px; font-weight:bold; color:#7f8c8d;">Difficulté :</span>
                     <button type="button" id="btn_etoile_dispo_0" class="filter-btn btn-filtre-etoile-dispo active" onclick="filtrerParEtoilesDispo(0)">Toutes</button>
-                    <button type="button" id="btn_etoile_dispo_1" class="filter-btn btn-filtre-etoile-dispo" onclick="filtrerParEtoilesDispo(1)">⭐ Niveau 1</button>
-                    <button type="button" id="btn_etoile_dispo_2" class="filter-btn btn-filtre-etoile-dispo" onclick="filtrerParEtoilesDispo(2)">⭐⭐ Niveau 2</button>
-                    <button type="button" id="btn_etoile_dispo_3" class="filter-btn btn-filtre-etoile-dispo" onclick="filtrerParEtoilesDispo(3)">⭐⭐⭐ Niveau 3</button>
+                    <button type="button" id="btn_etoile_dispo_1" class="filter-btn btn-filtre-etoile-dispo" onclick="filtrerParEtoilesDispo(1)">⭐</button>
+                    <button type="button" id="btn_etoile_dispo_2" class="filter-btn btn-filtre-etoile-dispo" onclick="filtrerParEtoilesDispo(2)">⭐⭐</button>
+                    <button type="button" id="btn_etoile_dispo_3" class="filter-btn btn-filtre-etoile-dispo" onclick="filtrerParEtoilesDispo(3)">⭐⭐⭐</button>
                 </div>
                 <table id="tableRessourcesDispo"></table>
             </div>
 
             <hr>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
-                <h3 style="margin:0;">📋 Plan de <span class="nomEleveAffiche">...</span> (<span id="labelSemaineTitre">Semaine 1</span>) - <span id="compteurAteliersEleve">0</span> / <span id="maxAteliersAffiche">15</span> (<span id="compteurTablettesEleve">0</span> tablettes)</h3>
+                <h3 style="margin:0;">📋 Plan de <span class="nomEleveAffiche">...</span> (<span id="labelSemaineTitre">Semaine 1</span>) - <span id="compteurAteliersEleve">0</span> / <span id="maxAteliersAffiche">15</span> (<span id="compteurTablettesEleve">0</span> tab.)</h3>
                 <div style="display: flex; gap: 10px;">
-                    <button type="button" onclick="commencerNouvelleSemaine()" style="background: #e67e22; color: white; font-weight: bold; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">🔄 Clôturer & Passer à la suivante</button>
-                    <button type="button" onclick="validerSelectionPlan()" style="background: #27ae60; color: white; font-weight: bold; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; font-size: 14px;">🏁 Marquer comme TERMINÉ</button>
+                    <button type="button" onclick="commencerNouvelleSemaine()" style="background: #e67e22; color: white; font-weight: bold; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer;">🔄 Clôturer la semaine</button>
+                    <button type="button" onclick="validerSelectionPlan()" style="background: #27ae60; color: white; font-weight: bold; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer;">🏁 Valider la sélection</button>
                 </div>
             </div>
-            <p style="font-size: 13px; color: #7f8c8d; margin-top:0;"><strong>Astuce :</strong> Les activités avec un jour imposé ont leur numéro <u>souligné</u>. Si l'élève est en mode <strong>📒 Fichier Jaune</strong>, le numéro d'exercice, la page et le visuel basculent automatiquement.</p>
             <table>
                 <thead>
                     <tr>
@@ -298,21 +272,21 @@
                         <th class="col-num">N°</th>
                         <th>Séquence / Leçon</th>
                         <th>Compétence</th>
-                        <th>Ressource, Page & Suivi</th>
-                        <th style="width: 110px; text-align:center;">Jour imposé</th>
-                        <th style="width: 130px;">Action ind.</th>
+                        <th>Ressource & Suivi</th>
+                        <th style="width: 110px; text-align:center;">Jour</th>
+                        <th style="width: 130px;">Action</th>
                     </tr>
                 </thead>
                 <tbody id="tableApercuPlan"></tbody>
             </table>
 
             <div class="history-box">
-                <h3 style="color: #8e44ad; margin-top: 0;">📚 Historique des compétences acquises</h3>
+                <h3 style="color: #8e44ad; margin-top: 0;">📚 Historique</h3>
                 <table>
-                    <thead><tr><th>Date</th><th>Niv.</th><th>Séquence</th><th>Compétence validée</th><th>Ressource</th><th>Action</th></tr></thead>
+                    <thead><tr><th>Date</th><th>Niv.</th><th>Séquence</th><th>Compétence</th><th>Ressource</th><th>Action</th></tr></thead>
                     <tbody id="tableHistorique"></tbody>
                 </table>
-                <h3 style="color: #d35400; margin-top: 40px;">🚫 Activités inadaptées (Masquées)</h3>
+                <h3 style="color: #d35400; margin-top: 40px;">🚫 Masquées</h3>
                 <table>
                     <thead><tr><th>Niveau</th><th>Séquence</th><th>Compétence</th><th>Ressource</th><th>Action</th></tr></thead>
                     <tbody id="tableMasquees"></tbody>
@@ -322,96 +296,75 @@
         <div id="messageSelectEleve" style="text-align: center; padding: 40px; color: #7f8c8d;"><h2>Veuillez sélectionner ou créer un élève.</h2></div>
     </div>
 
-    <!-- ==========================================
-         ONGLET 2 : IMPRESSION FICHE ÉLÈVE
-         ========================================== -->
+    <!-- ONGLET 2 : IMPRESSION -->
     <div id="pageImpression" class="page">
         <div class="panel no-print" style="background: #eaf2f8; border: 1px solid #a9cce3; display: flex; gap: 15px; align-items: center; flex-wrap: wrap; padding: 15px;">
             <div>
-                <strong>🧑‍🎓 Fiche à imprimer :</strong>
-                <select id="selectEleveImpression" onchange="changementEleveImpression()" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 1px solid #ccc; margin-left: 5px;"><option value="">-- Choisir un élève ou un groupe --</option></select>
+                <strong>🧑‍🎓 Fiche :</strong>
+                <select id="selectEleveImpression" onchange="changementEleveImpression()" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 1px solid #ccc;"><option value="">-- Choisir --</option></select>
             </div>
             <div id="blocSelectSemaineImpression" style="display: none; align-items: center; gap: 6px;">
                 <strong>📅 Semaine :</strong>
                 <select id="selectSemaineImpression" onchange="changerSemaineDepuisImpression(this.value)" style="padding: 8px; font-size: 14px; border-radius: 5px; border: 1px solid #2980b9; font-weight: bold;"></select>
             </div>
             <div style="display: flex; gap: 10px; align-items: center; background: white; padding: 6px 12px; border-radius: 5px; border: 1px solid #ccc;">
-                <strong>📅 Date de début :</strong>
+                <strong>📅 Date :</strong>
                 <input type="date" id="pdtDateDebutPicker" onchange="appliquerDateImpression(this.value)" style="padding: 5px; border: 1px solid #ccc; border-radius: 4px;">
                 <span id="pdtDateFinAffiche" style="font-size: 13px; font-weight: bold; color: #2980b9;">➔ au --/--</span>
             </div>
-            <div style="margin-left: auto; display: flex; gap: 10px;">
-                <button type="button" class="btn-action" onclick="window.print()" style="background: #2980b9; padding: 10px 15px;">🖨️ Imprimer (Portrait)</button>
-            </div>
+            <button type="button" class="btn-action" onclick="window.print()" style="background: #2980b9; padding: 10px 15px; margin-left:auto;">🖨️ Imprimer</button>
         </div>
-        <div id="containerFichesImpression"><div style="text-align: center; padding: 40px; color: #7f8c8d;" class="no-print"><h2>Veuillez sélectionner un élève ou un groupe ci-dessus.</h2></div></div>
+        <div id="containerFichesImpression"><div style="text-align: center; padding: 40px; color: #7f8c8d;" class="no-print"><h2>Sélectionnez un élève ou un groupe.</h2></div></div>
     </div>
 
-    <!-- ==========================================
-         ONGLET 3 : TABLEAU DE BORD
-         ========================================== -->
+    <!-- ONGLET 3 : TABLEAU DE BORD -->
     <div id="pageDashboard" class="page">
         <div class="panel">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                 <h2 style="color: #f39c12; margin:0;">📊 Tableau de bord & Évaluation rapide</h2>
-                <button type="button" class="btn-action" onclick="cloturerSemaineClasseGlobale()" style="background: #d35400; padding: 10px 15px;">🔄 Clôturer la semaine de TOUTE LA CLASSE</button>
+                <button type="button" class="btn-action" onclick="cloturerSemaineClasseGlobale()" style="background: #d35400; padding: 10px 15px;">🔄 Clôturer semaine toute la classe</button>
             </div>
             
             <div id="memoDashboardContainer" style="margin-bottom: 20px;">
-                <h3 style="color:#2c3e50; border-bottom: 2px solid #bdc3c7; padding-bottom:5px;">🧑‍🏫 Groupes de besoins & Ateliers dirigés (avec Page Guide du Maître)</h3>
+                <h3 style="color:#2c3e50; border-bottom: 2px solid #bdc3c7; padding-bottom:5px;">🧑‍🏫 Groupes de besoins & Ateliers dirigés</h3>
                 <div id="memoListContent"></div>
-
                 <div style="margin-top: 10px; display: flex; gap: 10px; align-items: center;" class="no-print">
-                    <button type="button" onclick="toggleAfficherArchives()" id="btnToggleArchives" style="background: #7f8c8d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">📂 Voir les archives (0)</button>
-                    <button type="button" onclick="viderArchives()" style="background: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">🗑️ Supprimer définitivement les archives</button>
+                    <button type="button" onclick="toggleAfficherArchives()" id="btnToggleArchives" style="background: #7f8c8d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">📂 Voir archives</button>
+                    <button type="button" onclick="viderArchives()" style="background: #c0392b; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;">🗑️ Vider archives</button>
                 </div>
-                <div id="zoneArchivesDashboard" style="display: none; background: #f8f9f9; border: 1px solid #bdc3c7; padding: 10px; border-radius: 5px; margin-top: 10px;">
-                    <h4 style="margin: 0 0 8px 0; color: #2c3e50; font-size: 13px;">Actions archivées (cliquez sur "Restaurer" en cas d'erreur) :</h4>
-                    <div id="listeArchivesContent"></div>
-                </div>
-
-                <h3 style="color:#2980b9; border-bottom: 2px solid #bdc3c7; padding-bottom:5px; margin-top: 25px;">💻 Ateliers Tablettes à préparer (Cumulés pour la classe)</h3>
+                <div id="zoneArchivesDashboard" style="display: none; background: #f8f9f9; border: 1px solid #bdc3c7; padding: 10px; border-radius: 5px; margin-top: 10px;"></div>
+                <h3 style="color:#2980b9; border-bottom: 2px solid #bdc3c7; padding-bottom:5px; margin-top: 25px;">💻 Ateliers Tablettes</h3>
                 <div id="tabletteListContent"></div>
             </div>
 
-            <h3 style="color:#2c3e50; border-bottom: 2px solid #bdc3c7; padding-bottom:5px;">📋 Liste des élèves et avancement</h3>
+            <h3 style="color:#2c3e50; border-bottom: 2px solid #bdc3c7; padding-bottom:5px;">📋 Élèves</h3>
             <table style="width: 100%;">
-                <thead>
-                    <tr>
-                        <th style="width: 25%;">Élève</th>
-                        <th style="width: 55%;">Progression du Plan Actif</th>
-                        <th style="width: 20%; text-align: center;">Actions</th>
-                    </tr>
-                </thead>
+                <thead><tr><th style="width: 25%;">Élève</th><th style="width: 55%;">Progression</th><th style="width: 20%; text-align: center;">Actions</th></tr></thead>
                 <tbody id="tableDashboard"></tbody>
             </table>
         </div>
     </div>
 
-    <!-- ==========================================
-         ONGLET 4 : BASE DE DONNÉES
-         ========================================== -->
+    <!-- ONGLET 4 : BASE DE DONNÉES -->
     <div id="pageBase" class="page">
         <div class="panel">
             <h2>📁 Inventaire (Base de données)</h2>
             
-            <!-- ACCÈS AU MODE SAISIE MULTIPLE -->
             <div class="no-print" style="margin-bottom: 15px; background: #eaf2f8; padding: 12px; border-radius: 8px; border: 1px solid #2980b9; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
                 <div>
-                    <h4 style="margin:0; color:#2980b9;">⚡ Mode Saisie en Rafale (Multi-exercices)</h4>
-                    <span style="font-size:12px; color:#555;">Idéal pour ajouter plusieurs exercices d'un coup pour une même séquence (avec leçons et compétences personnalisables).</span>
+                    <h4 style="margin:0; color:#2980b9;">⚡ Mode Saisie en Rafale</h4>
+                    <span style="font-size:12px; color:#555;">Ajouter plusieurs exercices en un clin d'œil.</span>
                 </div>
                 <button type="button" class="btn-action" onclick="toggleModeSaisieMultiple()" id="btnToggleModeSaisie" style="background: #2980b9;">🚀 Ouvrir la saisie multiple</button>
             </div>
 
-            <!-- CONTENEUR DU TABLEAU DE SAISIE MULTIPLE (Caché par défaut) -->
             <div id="blocSaisieMultiple" class="panel no-print" style="display: none; background: #fdfefe; border: 2px dashed #2980b9; margin-bottom: 20px;">
-                <h3 style="margin-top:0; color: #2980b9;">📝 Ajout groupé d'exercices (Séquence fixe)</h3>
+                <h3 style="margin-top:0; color: #2980b9;">📝 Ajout groupé d'exercices</h3>
                 
                 <div class="cascade-box" style="background: #f8f9f9; padding: 10px; margin-bottom: 10px;">
                     <div class="cascade-item"><label>Niveau commun</label><select id="multiNiveau"><option value="CP">CP</option><option value="CE1">CE1</option><option value="CE2">CE2</option><option value="CM1">CM1</option><option value="CM2">CM2</option></select></div>
-                    <div class="cascade-item"><label>Matière commune</label><input type="text" id="multiMatiere" placeholder="Ex: Français ou Mathématiques"></div>
-                    <div class="cascade-item"><label>Séquence commune</label><input type="text" id="multiSequence" placeholder="Ex: Séquence 3 - Les fractions"></div>
+                    <div class="cascade-item"><label>Matière commune</label><input type="text" id="multiMatiere" placeholder="Ex: Français"></div>
+                    <div class="cascade-item"><label>Séquence commune</label><input type="text" id="multiSequence" placeholder="Ex: Séquence 1"></div>
                 </div>
 
                 <div style="overflow-x: auto; max-height: 45vh; margin-bottom: 15px;">
@@ -420,9 +373,9 @@
                             <tr>
                                 <th style="width:70px;">Leçon</th>
                                 <th>Compétence</th>
-                                <th>Ressource / Exercice</th>
-                                <th>Page Manuel Standard</th>
-                                <th>Variante Fichier Jaune</th>
+                                <th>Ressource</th>
+                                <th>Manuel</th>
+                                <th>Fichier Jaune</th>
                                 <th style="width:90px; text-align:center;">Type</th>
                                 <th style="width:70px; text-align:center;">N° Atel.</th>
                                 <th style="width:40px;"></th>
@@ -433,8 +386,8 @@
                 </div>
 
                 <div style="display:flex; gap:10px;">
-                    <button type="button" class="btn-action" onclick="ajouterLigneSaisieMultiple()" style="background: #27ae60;">➕ Ajouter une ligne d'exercice</button>
-                    <button type="button" class="btn-action" onclick="enregistrerSaisieMultiple()" style="background: #2980b9; margin-left: auto;">💾 Enregistrer toute la liste</button>
+                    <button type="button" class="btn-action" onclick="ajouterLigneSaisieMultiple()" style="background: #27ae60;">➕ Ajouter une ligne</button>
+                    <button type="button" class="btn-action" onclick="enregistrerSaisieMultiple()" style="background: #2980b9; margin-left: auto;">💾 Enregistrer</button>
                     <button type="button" onclick="toggleModeSaisieMultiple()" style="background: #95a5a6; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">❌ Fermer</button>
                 </div>
             </div>
@@ -442,7 +395,7 @@
             <div id="boxFormulaireManuel" class="manual-add-box no-print">
                 <h3 id="titreFormulaireManuel" style="margin-top:0; color: #2980b9;">➕ Ajouter une activité unitaire</h3>
                 <div style="margin-bottom: 15px; background: white; padding: 10px; border-radius: 5px; border: 1px solid #ccc;">
-                    <label style="font-size: 13px; font-weight: bold; color: #7f8c8d; text-transform: uppercase; display: block; margin-bottom: 5px;">1. Niveau(x) concerné(s) (Cochez un ou plusieurs) :</label>
+                    <label style="font-size: 13px; font-weight: bold; color: #7f8c8d; text-transform: uppercase; display: block; margin-bottom: 5px;">1. Niveau(x) :</label>
                     <div style="display: flex; gap: 15px; flex-wrap: wrap;">
                         <label><input type="checkbox" class="cb-niveau-form" value="CP"> CP</label>
                         <label><input type="checkbox" class="cb-niveau-form" value="CE1"> CE1</label>
@@ -455,130 +408,108 @@
                     <div style="flex: 1; display: flex; gap: 5px; align-items: center; min-width: 200px;">
                         <select id="addMatiereSelect" onchange="surChangementMatiereForm(this.value)" style="flex: 1;"></select>
                         <button type="button" class="no-print" onclick="ouvrirModal('modalMatieres'); afficherListeMatieresModal();" style="background: #7f8c8d; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer;">⚙️</button>
-                        <input type="text" id="addMatiereCustom" placeholder="Nouvelle matière..." style="display: none; flex: 1;">
+                        <input type="text" id="addMatiereCustom" placeholder="Matière..." style="display: none; flex: 1;">
                     </div>
                     <div style="flex: 1; display: flex; gap: 5px; align-items: center; min-width: 200px;">
                         <select id="addSequenceSelect" onchange="surChangementSequenceForm(this.value)" style="flex: 1;"></select>
-                        <button type="button" class="no-print" onclick="ouvrirModal('modalSequences'); afficherListeSequencesModal();" style="background: #7f8c8d; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer;" title="Renommer ou supprimer des séquences">⚙️</button>
-                        <input type="text" id="addSequenceCustom" placeholder="Nouvelle séquence..." style="display: none; flex: 1;">
+                        <button type="button" class="no-print" onclick="ouvrirModal('modalSequences'); afficherListeSequencesModal();" style="background: #7f8c8d; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer;" title="Gérer ou supprimer des séquences">⚙️</button>
+                        <input type="text" id="addSequenceCustom" placeholder="Séquence..." style="display: none; flex: 1;">
                     </div>
-                    <input type="text" id="addLecon" placeholder="4. N° Leçon" style="flex: 1; min-width: 110px;">
+                    <input type="text" id="addLecon" placeholder="Leçon" style="flex: 1; min-width: 110px;">
                 </div>
                 <div class="form-row">
                     <div style="flex: 2; display: flex; gap: 5px; align-items: center;">
                         <select id="addCompetenceSelect" onchange="surChangementCompetenceForm(this.value)" style="flex: 1;"></select>
                         <button type="button" class="no-print" onclick="ouvrirModal('modalCompetences'); afficherListeCompetencesModal();" style="background: #7f8c8d; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer;">⚙️</button>
-                        <input type="text" id="addCompetenceCustom" placeholder="Nouvelle compétence..." style="display: none; flex: 1;">
+                        <input type="text" id="addCompetenceCustom" placeholder="Compétence..." style="display: none; flex: 1;">
                     </div>
-                    <input type="text" id="addRessource" placeholder="6. Ressource / Ex. Manuel (ex: Ex. 4)" style="flex: 1;">
+                    <input type="text" id="addRessource" placeholder="Ressource / Ex" style="flex: 1;">
                 </div>
 
-                <!-- SUIVI DES MANUELS & VARIANTE FICHIER JAUNE -->
                 <div class="form-row" style="background: #fdfefe; padding: 10px; border-radius: 6px; border: 1px solid #d5dbdb; align-items: center;">
-                    <div style="width:100%; font-size:12px; font-weight:bold; color:#d35400; margin-bottom:4px;">📚 Suivi des manuels & Différenciation automatique (Optionnel) :</div>
+                    <div style="width:100%; font-size:12px; font-weight:bold; color:#d35400; margin-bottom:4px;">📚 Manuels & Fichier Jaune :</div>
                     <div style="flex: 1; min-width: 170px;">
-                        <label style="display:block; font-size:11px; font-weight:bold; color:#2980b9; margin-bottom:3px;">📖 Page Manuel Élève (Standard) :</label>
-                        <input type="text" id="addPageManuel" placeholder="ex: p. 42 ou Ex 3 p. 42" style="width:100%;">
+                        <input type="text" id="addPageManuel" placeholder="📘 Manuel (ex: p. 28)" style="width:100%;">
                     </div>
                     <div style="flex: 1; min-width: 170px;">
-                        <label style="display:block; font-size:11px; font-weight:bold; color:#8e44ad; margin-bottom:3px;">📖 Page Guide du Maître (Pour vous) :</label>
-                        <input type="text" id="addPageGDM" placeholder="ex: GDM p. 88" style="width:100%;">
+                        <input type="text" id="addPageGDM" placeholder="📖 GDM (ex: p. 42)" style="width:100%;">
                     </div>
                     <div style="flex: 2; min-width: 280px; background: #fff9db; padding: 8px; border-radius: 6px; border: 1px dashed #f1c40f;">
-                        <label style="display:block; font-size:11px; font-weight:bold; color:#b7791f; margin-bottom:4px;">📒 Variante « Fichier Jaune » (auto pour les élèves concernés) :</label>
-                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                            <input type="text" id="addVarianteJaune" placeholder="Ex. & Page Fichier Jaune (ex: Fichier p. 18 ex. 2)" style="flex: 1; min-width: 140px; font-size:12px;">
-                        </div>
+                        <input type="text" id="addVarianteJaune" placeholder="📒 Fichier Jaune (ex: Fichier p. 12)" style="width: 100%; font-size:12px;">
                     </div>
                 </div>
 
                 <div class="form-row">
                     <div style="flex: 1; display: flex; gap: 5px; align-items: center; min-width: 200px;">
                         <select id="addTypeSelect" style="flex: 1;"></select>
-                        <button type="button" class="no-print" onclick="ouvrirModal('modalTypes'); afficherListeTypesModal();" style="background: #7f8c8d; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer;" title="Gérer les types et images">⚙️</button>
-                        <input type="text" id="addTypeCustom" placeholder="Nouveau type..." style="display: none; flex: 1;">
+                        <button type="button" class="no-print" onclick="ouvrirModal('modalTypes'); afficherListeTypesModal();" style="background: #7f8c8d; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer;">⚙️</button>
+                        <input type="text" id="addTypeCustom" placeholder="Type..." style="display: none; flex: 1;">
                     </div>
                     <div style="flex: 1; display: flex; gap: 5px;">
-                        <input type="text" id="addSymbole" placeholder="8. Numéro d'atelier (Standard)" style="flex: 1;">
-                        <select id="addDifficulte" style="flex: 1; font-weight: bold;" title="Niveau de difficulté de l'atelier">
-                            <option value="0">-- Difficulté (Aucune) --</option>
-                            <option value="1">⭐ Niveau 1 (Faible)</option>
-                            <option value="2">⭐⭐ Niveau 2 (Moyen)</option>
-                            <option value="3">⭐⭐⭐ Niveau 3 (Fort)</option>
+                        <input type="text" id="addSymbole" placeholder="N° Atelier" style="flex: 1;">
+                        <select id="addDifficulte" style="flex: 1; font-weight: bold;">
+                            <option value="0">-- Difficulté --</option>
+                            <option value="1">⭐ Niveau 1</option>
+                            <option value="2">⭐⭐ Niveau 2</option>
+                            <option value="3">⭐⭐⭐ Niveau 3</option>
                         </select>
                     </div>
                 </div>
                 <div style="margin-bottom: 15px; background: white; padding: 10px; border-radius: 5px; border: 1px solid #ccc;">
-                    <label style="font-size: 13px; font-weight: bold; color: #7f8c8d; text-transform: uppercase; display: block; margin-bottom: 5px;">9. Nombre de personne(s) :</label>
-                    <div style="display: flex; gap: 20px; flex-wrap: wrap; font-size: 16px;">
+                    <label style="font-size: 13px; font-weight: bold; color: #7f8c8d; display: block; margin-bottom: 5px;">Personne(s) :</label>
+                    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
                         <label><input type="checkbox" class="cb-pers-form" value="👤"> 👤 Seul</label>
-                        <label><input type="checkbox" class="cb-pers-form" value="👥"> 👥 Binôme/Petit groupe</label>
+                        <label><input type="checkbox" class="cb-pers-form" value="👥"> 👥 Binôme</label>
                         <label><input type="checkbox" class="cb-pers-form" value="👨‍👩‍👧"> 👨‍👩‍👧 Collectif</label>
                     </div>
                 </div>
                 <div class="form-row" style="background: white; padding: 10px; border-radius: 5px; align-items: center;">
-                    <label style="font-size: 14px; font-weight: bold; width: 100%; margin-bottom: 5px;">10. Visuel / Couleur (Standard) :</label>
-                    <div style="display: flex; gap: 8px; align-items: center; flex: 1; min-width: 280px;">
-                        <select id="selectCouleurRapide" style="flex: 1; font-weight: bold;"><option value="">-- Choisir une couleur rapide --</option></select>
-                        <input type="color" id="addColor" value="#ffffff" style="width: 45px; height: 38px; padding: 0; cursor: pointer; display: none;">
-                    </div>
-                    <span style="font-size: 14px; font-weight:bold; color: #7f8c8d; margin: 0 10px;"> OU </span>
-                    <input type="text" id="addImage" placeholder="Lien image auto ou URL perso..." style="flex: 2;">
+                    <select id="selectCouleurRapide" style="flex: 1; font-weight: bold;"><option value="">-- Couleur rapide --</option></select>
+                    <input type="text" id="addImage" placeholder="Lien image..." style="flex: 2;">
                     <label style="background: #fdedec; border: 1px solid #e74c3c; padding: 8px 15px; border-radius: 5px; font-weight: bold; cursor: pointer; color: #c0392b; margin: 0 15px;">
-                        <input type="checkbox" id="addIsEval" style="margin-right: 5px;"> 🎯 Évaluation
+                        <input type="checkbox" id="addIsEval" style="margin-right: 5px;"> 🎯 Éval.
                     </label>
-                    <button type="button" id="btnValiderForm" class="btn-action" style="flex: 1;" onclick="sauvegarderFormulaire()">➕ Ajouter l'activité</button>
-                    <button type="button" id="btnAnnulerForm" onclick="annulerEdition()" style="display:none; background: #95a5a6; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer; font-weight: bold;">❌ Annuler</button>
+                    <button type="button" id="btnValiderForm" class="btn-action" style="flex: 1;" onclick="sauvegarderFormulaire()">➕ Ajouter</button>
+                    <button type="button" id="btnAnnulerForm" onclick="annulerEdition()" style="display:none; background: #95a5a6; color: white; border: none; padding: 10px; border-radius: 5px; cursor: pointer;">❌ Annuler</button>
                 </div>
             </div>
 
             <div style="background: #f8f9f9; padding: 15px; border-radius: 8px; border: 1px solid #d5dbdb; margin-bottom: 15px;" class="no-print">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
-                    <div style="flex: 1; min-width: 250px;">
-                        <input type="text" id="searchBase" placeholder="🔍 Rechercher une ressource, page, séquence, compétence..." style="width: 100%; padding: 10px; border: 1px solid #3498db; border-radius: 20px;" oninput="afficherBase()">
-                    </div>
-                    <button type="button" onclick="viderBase()" style="background: #e74c3c; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;">🗑️ Vider la base</button>
+                    <input type="text" id="searchBase" placeholder="🔍 Rechercher..." style="width: 100%; padding: 10px; border: 1px solid #3498db; border-radius: 20px;" oninput="afficherBase()">
+                    <button type="button" onclick="viderBase()" style="background: #e74c3c; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;">🗑️ Vider base</button>
                 </div>
-                <div style="font-size: 12px; font-weight: bold; color: #7f8c8d; margin-bottom: 5px;">Filtrer par Niveau :</div>
                 <div id="dbFilters" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px;"></div>
-                <div style="font-size: 12px; font-weight: bold; color: #7f8c8d; margin-bottom: 5px;">Filtrer par Matière :</div>
                 <div id="dbMatiereFilters" style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;"></div>
-                <div style="font-size: 12px; font-weight: bold; color: #7f8c8d; margin-bottom: 5px;">Filtrer par Type :</div>
                 <div id="dbTypeFilters" style="display: flex; gap: 6px; flex-wrap: wrap;"></div>
             </div>
 
             <table style="font-size: 12px;">
-                <thead><tr><th>Niv.</th><th>Matière</th><th>Séquence</th><th>Compétence</th><th>Ressource, Pages & Variante Jaune</th><th>Type</th><th>Nb Pers.</th><th style="width: 130px; text-align: center;">Aperçu Étiquette</th><th style="width: 110px;">Action</th></tr></thead>
+                <thead><tr><th>Niv.</th><th>Matière</th><th>Séquence</th><th>Compétence</th><th>Ressource & Manuels</th><th>Type</th><th>Nb</th><th style="width: 130px; text-align: center;">Étiquette</th><th style="width: 110px;">Action</th></tr></thead>
                 <tbody id="tableBase"></tbody>
             </table>
         </div>
     </div>
 
-    <!-- ==========================================
-         ONGLET 5 : PROGRAMMATION ANNUELLE
-         ========================================== -->
+    <!-- ONGLET 5 : PROGRAMMATION -->
     <div id="pageProg" class="page">
         <div class="panel">
             <h2 style="color: #d35400; margin-top:0;">📅 Programmation Annuelle</h2>
-            <p style="font-size: 14px; color: #7f8c8d; margin-bottom: 20px;">
-                Associez vos compétences aux périodes de l'année (P1 à P5). Les ateliers correspondants s'afficheront automatiquement au bon moment dans le plan de travail.
-            </p>
             <div class="form-row" style="background: #fdfefe; padding: 15px; border-radius: 8px; border: 1px solid #d5dbdb; margin-bottom: 15px;">
-                <label style="font-weight: bold; margin-top: 8px;">Filtres d'affichage :</label>
-                <select id="progNiveau" onchange="afficherProgrammation()" style="flex: 1;"><option value="">-- Tous les niveaux --</option></select>
-                <select id="progMatiere" onchange="afficherProgrammation()" style="flex: 1;"><option value="">-- Toutes les matières --</option></select>
+                <select id="progNiveau" onchange="afficherProgrammation()" style="flex: 1;"><option value="">-- Tous --</option></select>
+                <select id="progMatiere" onchange="afficherProgrammation()" style="flex: 1;"><option value="">-- Toutes --</option></select>
             </div>
             <div style="overflow-x: auto; max-height: 60vh;">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead style="position: sticky; top: 0; background: #34495e; color: white;">
                         <tr>
-                            <th style="padding: 10px; background: #34495e; color: white;">Séquence</th>
-                            <th style="padding: 10px; background: #34495e; color: white;">Compétence</th>
-                            <th style="width: 50px; text-align: center; background: #34495e; color: white;">P1</th>
-                            <th style="width: 50px; text-align: center; background: #34495e; color: white;">P2</th>
-                            <th style="width: 50px; text-align: center; background: #34495e; color: white;">P3</th>
-                            <th style="width: 50px; text-align: center; background: #34495e; color: white;">P4</th>
-                            <th style="width: 50px; text-align: center; background: #34495e; color: white;">P5</th>
+                            <th style="padding: 10px;">Séquence</th>
+                            <th style="padding: 10px;">Compétence</th>
+                            <th style="width: 50px; text-align: center;">P1</th>
+                            <th style="width: 50px; text-align: center;">P2</th>
+                            <th style="width: 50px; text-align: center;">P3</th>
+                            <th style="width: 50px; text-align: center;">P4</th>
+                            <th style="width: 50px; text-align: center;">P5</th>
                         </tr>
                     </thead>
                     <tbody id="tableProg"></tbody>
@@ -587,119 +518,70 @@
         </div>
     </div>
 
-    <!-- ==========================================
-         ONGLET 6 : ÉTIQUETTES
-         ========================================== -->
+    <!-- ONGLET 6 : ÉTIQUETTES -->
     <div id="pageEtiquettes" class="page">
         <div class="panel no-print">
-            <h2 style="color: #8e44ad;">🏷️ Studio d'impression d'Étiquettes</h2>
+            <h2 style="color: #8e44ad;">🏷️ Étiquettes</h2>
             <div style="background: #f4f6f7; padding: 12px; border-radius: 8px; border: 1px solid #d5dbdb; margin-bottom: 15px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <label style="font-size: 13px; font-weight: bold; color: #7f8c8d;">Sélectionnez les Types à afficher :</label>
-                    <label style="font-size: 12px; font-weight: bold; cursor: pointer;"><input type="checkbox" id="toutCocherTypes" onchange="basculerTousTypes(this)"> Tout cocher / décocher</label>
-                </div>
                 <div id="etqTypeCheckboxes" style="display: flex; gap: 12px; flex-wrap: wrap;"></div>
             </div>
             <div style="display: flex; gap: 20px; flex-wrap: wrap;">
                 <div style="flex: 2; min-width: 300px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <h3 style="margin: 0;">1. Cochez et choisissez la quantité</h3>
-                        <label style="font-size: 13px; font-weight: bold; cursor: pointer;"><input type="checkbox" onchange="cocherToutesEtiquettes(this)"> Tout cocher</label>
-                    </div>
                     <div style="max-height: 400px; overflow-y: auto; border: 1px solid #bdc3c7; border-radius: 5px;">
                         <table style="margin: 0; font-size: 12px;">
-                            <thead><tr><th style="width: 30px; text-align: center;">✓</th><th>Niv.</th><th>Matière</th><th>Ressource / Type</th><th style="text-align: center; width: 60px;">Qté</th></tr></thead>
+                            <thead><tr><th style="width: 30px; text-align: center;">✓</th><th>Niv.</th><th>Matière</th><th>Ressource</th><th style="text-align: center; width: 60px;">Qté</th></tr></thead>
                             <tbody id="tableChoixEtiquettes"></tbody>
                         </table>
                     </div>
                 </div>
                 <div style="flex: 1; min-width: 300px; background: #f4f6f7; padding: 15px; border-radius: 8px; border: 1px solid #d5dbdb;">
-                    <h3 style="margin-top: 0;">2. Dimensions (en mm)</h3>
-                    <label style="display:block; font-size:13px; font-weight:bold;">Taille de l'étiquette</label>
+                    <h3 style="margin-top: 0;">Dimensions (mm)</h3>
                     <div class="form-row" style="margin-bottom: 15px;"><input type="number" id="etqWidth" value="50" oninput="genererApercuEtiquettes()"><input type="number" id="etqHeight" value="25" oninput="genererApercuEtiquettes()"></div>
-                    <label style="display:block; font-size:13px; font-weight:bold;">Texte & Espacement</label>
-                    <div class="form-row" style="margin-bottom: 15px;"><input type="number" id="etqFontSize" value="16" oninput="genererApercuEtiquettes()"><input type="number" id="etqGap" value="5" oninput="genererApercuEtiquettes()"></div>
-                    <label style="display:block; font-size:13px; font-weight:bold;">Marges (H / B / G / D)</label>
-                    <div class="form-row"><input type="number" id="etqMarginTop" value="15" oninput="genererApercuEtiquettes()"><input type="number" id="etqMarginBottom" value="15" oninput="genererApercuEtiquettes()"><input type="number" id="etqMarginLeft" value="15" oninput="genererApercuEtiquettes()"><input type="number" id="etqMarginRight" value="15" oninput="genererApercuEtiquettes()"></div>
-                    <button type="button" class="btn-valid" style="width: 100%; height: 50px; font-size: 16px; margin-top: 20px; background: #8e44ad;" onclick="lancerImpressionEtiquettes()">🖨️ Imprimer la planche</button>
+                    <button type="button" class="btn-valid" style="width: 100%; height: 50px; font-size: 16px; margin-top: 20px; background: #8e44ad;" onclick="lancerImpressionEtiquettes()">🖨️ Imprimer</button>
                 </div>
             </div>
         </div>
         <div id="printEtiquettesContainer" style="display: flex; flex-wrap: wrap; align-content: flex-start; background: white; border: 1px dashed #bdc3c7; min-height: 200px;"></div>
     </div>
 
-    <!-- ==========================================
-         ONGLET 7 : MATRICE DES COMPÉTENCES
-         ========================================== -->
+    <!-- ONGLET 7 : MATRICE -->
     <div id="pageMatrice" class="page">
         <div class="panel">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <h2 style="margin:0; color: #16a085;">🧮 Matrice des Compétences</h2>
-                <button type="button" class="btn-action" onclick="window.print()" style="background: #16a085; padding: 10px 15px;">🖨️ Imprimer la matrice</button>
+                <h2 style="margin:0; color: #16a085;">🧮 Matrice</h2>
+                <button type="button" class="btn-action" onclick="window.print()" style="background: #16a085; padding: 10px 15px;">🖨️ Imprimer</button>
             </div>
-            <p style="font-size: 13px; color: #7f8c8d;">Vue croisée des élèves et des compétences validées dans l'historique.</p>
-            <div style="overflow-x: auto; max-height: 70vh;">
-                <table class="matrice-table" id="tableMatrice"></table>
-            </div>
+            <div style="overflow-x: auto; max-height: 70vh;"><table class="matrice-table" id="tableMatrice"></table></div>
         </div>
     </div>
 
-    <!-- ==========================================
-         ONGLET 8 : BILANS ÉLÈVES
-         ========================================== -->
+    <!-- ONGLET 8 : BILANS -->
     <div id="pageBilan" class="page">
         <div class="panel no-print" style="margin-bottom: 20px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
-                <h2 style="margin:0; color: #9b59b6;">📝 Éditer un Bilan d'Élève (Évaluations & Positions A / PA / NA)</h2>
-                <button type="button" class="btn-action" onclick="exporterBilanEdulivret()" style="background: #27ae60; padding: 8px 12px; font-size: 13px;" title="Copier un résumé formaté pour Edulivret/LSU">📋 Copier résumé pour Edulivret / LSU</button>
+                <h2 style="margin:0; color: #9b59b6;">📝 Bilans</h2>
+                <button type="button" class="btn-action" onclick="exporterBilanEdulivret()" style="background: #27ae60; padding: 8px 12px; font-size: 13px;">📋 Copier pour Edulivret</button>
             </div>
-            <div style="display:flex; gap: 15px; align-items: center; flex-wrap: wrap;">
-                <select id="selectEleveBilan" onchange="genererBilanEleve()" style="padding: 8px; font-size: 14px;"><option value="">-- Choisir un élève --</option></select>
-                <button type="button" class="btn-action" onclick="window.print()" style="background: #9b59b6; padding: 10px 15px;">🖨️ Imprimer le bilan</button>
-            </div>
+            <select id="selectEleveBilan" onchange="genererBilanEleve()" style="padding: 8px; font-size: 14px;"><option value="">-- Choisir --</option></select>
         </div>
-        <div id="zoneBilanPrint" style="background: white; padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 400px;">
-            <h3 style="text-align: center; color: #7f8c8d; margin-top: 50px;">Sélectionnez un élève pour générer son bilan des évaluations.</h3>
-        </div>
+        <div id="zoneBilanPrint" style="background: white; padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 400px;"></div>
     </div>
 
-    <!-- ==========================================
-         ONGLET 9 : SAUVEGARDE & CLOUD FIREBASE
-         ========================================== -->
+    <!-- ONGLET 9 : SAUVEGARDE -->
     <div id="pageSave" class="page">
         <div class="panel">
-            <h2>💾 Sécurité & Synchronisation Cloud</h2>
-
-            <!-- 1. ESPACE DE STOCKAGE LOCAL -->
+            <h2>💾 Sauvegarde</h2>
             <div style="background: #fff3cd; border: 1px solid #f1c40f; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                <h3 style="margin-top:0; color: #d35400;">📊 Espace de stockage de l'appareil</h3>
+                <h3 style="margin-top:0; color: #d35400;">📊 Stockage local</h3>
                 <div class="jauge-container" style="height: 25px;"><div id="jaugeStockageFill" class="jauge-fill" style="width: 0%; background-color: #27ae60;"></div></div>
-                <div id="texteStockage" class="jauge-text" style="font-size: 13px; margin-top: 5px;">Calcul en cours...</div>
+                <div id="texteStockage" class="jauge-text" style="font-size: 13px; margin-top: 5px;">Calcul...</div>
             </div>
-
-            <!-- 2. SAUVEGARDE MANUELLE JSON -->
             <div style="background: #eaf2f8; border: 1px solid #3498db; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                <h3 style="margin-top:0; color: #2980b9;">📥 Sauvegarde Manuelle (Fichier sur l'appareil)</h3>
-                <button type="button" class="btn-action" onclick="exporterSauvegarde()" style="background: #2980b9;">📥 Télécharger le fichier JSON</button>
+                <button type="button" class="btn-action" onclick="exporterSauvegarde()" style="background: #2980b9;">📥 Télécharger JSON</button>
             </div>
-
-            <div style="background: #fdedec; border: 1px solid #e74c3c; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                <h3 style="margin-top:0; color: #c0392b;">📤 Restaurer une sauvegarde JSON</h3>
+            <div style="background: #fdedec; border: 1px solid #e74c3c; padding: 20px; border-radius: 8px;">
                 <input type="file" id="fileImport" accept=".json" style="background: white; width: 100%; padding:10px;">
-                <button type="button" class="btn-action" style="margin-top: 10px; background: #c0392b; color: white;" onclick="restaurerSauvegarde()">📤 Restaurer les données</button>
-            </div>
-
-            <!-- 3. SYNCHRONISATION GOOGLE DRIVE -->
-            <div style="background: #e8f8f5; border: 1px solid #1abc9c; padding: 15px 20px; border-radius: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap:wrap; gap:10px;">
-                    <h4 style="margin:0; color: #16a085;">☁️ Option secours : Synchronisation Google Drive</h4>
-                    <div>
-                        <button type="button" id="btnConnectDrive" class="btn-action" onclick="initialiserDrive()" style="background: #16a085; padding: 8px 14px; font-size: 13px;">☁️ Connecter Drive</button>
-                        <button type="button" class="btn-action" onclick="rechercherFichierSauvegarde(true)" style="background: #3498db; padding: 8px 14px; font-size: 13px;">🔄 Lire Drive</button>
-                        <button type="button" class="btn-action" onclick="sauvegarderVersDriveFichierUnique()" style="background: #27ae60; padding: 8px 14px; font-size: 13px;">⬆️ Écraser sur Drive</button>
-                    </div>
-                </div>
-                <div id="statutDrive" style="margin-top: 8px; font-weight: bold; font-size: 12px; color:#555;">Non connecté.</div>
+                <button type="button" class="btn-action" style="margin-top: 10px; background: #c0392b; color: white;" onclick="restaurerSauvegarde()">📤 Restaurer</button>
             </div>
         </div>
     </div>
