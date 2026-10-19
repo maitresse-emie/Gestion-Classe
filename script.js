@@ -276,6 +276,18 @@ function majSelectCouleursRapides(valeurForcee) {
     if (valeurForcee) select.value = valeurForcee;
 }
 
+function majListeTypesSelect() {
+    const selectType = document.getElementById('selectTypeRessource');
+    if (!selectType) return;
+    let html = '<option value="">-- Type --</option>';
+    if (imagesParType) {
+        Object.keys(imagesParType).forEach(t => {
+            html += `<option value="${escHTML(t)}">${escHTML(t)}</option>`;
+        });
+    }
+    selectType.innerHTML = html;
+}
+
 let idEleveCourant = null, idEleveImpressionCourant = null;
 let filtreCourantDB = 'Tous', filtreCourantMatiere = 'Toutes', filtreCourantTypeDB = 'Tous';
 let idEnCoursEdition = null, couleurManuelleModifiee = false;
@@ -434,8 +446,7 @@ function postEditGlobal() {
     if (typeof initProgFilters === 'function') initProgFilters(); 
     if (typeof afficherProgrammation === 'function') afficherProgrammation(); 
     if (typeof afficherBase === 'function') afficherBase(); 
-}
-function majBarreSemainesUI() {
+}function majBarreSemainesUI() {
     if (!idEleveCourant || !eleves[idEleveCourant]) return;
     let e = eleves[idEleveCourant]; assurerStructureSemaines(e); syncEleveVersSemaineActive(e);
     const sel = document.getElementById('selectSemaineEleve');
@@ -752,7 +763,7 @@ function changerOnglet(idPage, element) {
 document.addEventListener("DOMContentLoaded", function() {
     appliquerThemeVisuel(localStorage.getItem(KEY_THEME) || 'pastel');
     eliminerDoublonsHistoriques(); 
-    if(typeof majListeTypesSelect === 'function') majListeTypesSelect(); 
+    majListeTypesSelect(); 
     if(typeof initialiserSelectsFormulaire === 'function') initialiserSelectsFormulaire(); 
     trierBaseDonnees(); 
     majListeEleves(); 
