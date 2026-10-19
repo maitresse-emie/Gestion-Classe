@@ -167,13 +167,20 @@ function sauvegarderProgrammations() {
 }
 
 // ==========================================
-// GESTION FIREBASE CLOUD (TEMPS RÉEL)
+// GESTION FIREBASE CLOUD (TEMPS RÉEL - URL FIXE)
 // ==========================================
 let timerFirebaseSave;
-let firebaseConfig = JSON.parse(localStorage.getItem(KEY_FIREBASE_CFG)) || { dbUrl: "", apiKey: "", email: "", refreshToken: "", idToken: "" };
+const URL_FIREBASE_FIXE = "https://gestionclasse-cc401-default-rtdb.europe-west1.firebasedatabase.app";
+let firebaseConfig = JSON.parse(localStorage.getItem(KEY_FIREBASE_CFG)) || { dbUrl: URL_FIREBASE_FIXE, apiKey: "", email: "", refreshToken: "", idToken: "" };
+
+// Forcer l'URL fixe si elle n'était pas enregistrée
+if (!firebaseConfig.dbUrl) {
+    firebaseConfig.dbUrl = URL_FIREBASE_FIXE;
+    localStorage.setItem(KEY_FIREBASE_CFG, JSON.stringify(firebaseConfig));
+}
 
 function nettoyerUrlFirebase(url) {
-    if (!url) return "";
+    if (!url) return URL_FIREBASE_FIXE;
     return url.trim().replace(/\/+$/, "").replace(/\/classe_data\.json$/i, "");
 }
 
@@ -197,19 +204,18 @@ async function obtenirTokenFirebaseValide() {
 }
 
 async function connecterFirebase() {
-    let dbUrlField = document.getElementById('fbDbUrl');
     let apiKeyField = document.getElementById('fbApiKey');
     let emailField = document.getElementById('fbEmail');
     let passField = document.getElementById('fbPassword');
     
-    let dbUrl = nettoyerUrlFirebase(dbUrlField ? dbUrlField.value : firebaseConfig.dbUrl);
     let apiKey = apiKeyField ? apiKeyField.value.trim() : (firebaseConfig.apiKey || "");
     let email = emailField ? emailField.value.trim() : (firebaseConfig.email || "");
     let pass = passField ? passField.value.trim() : "";
     let statut = document.getElementById('statutFirebase');
 
-    if (!dbUrl) { showToast("Veuillez renseigner l'URL de la base Firebase.", "error"); return; }
-    firebaseConfig.dbUrl = dbUrl; firebaseConfig.apiKey = apiKey; firebaseConfig.email = email;
+    firebaseConfig.dbUrl = URL_FIREBASE_FIXE; 
+    firebaseConfig.apiKey = apiKey; 
+    firebaseConfig.email = email;
 
     if (apiKey && email && pass) {
         if (statut) statut.innerText = "⏳ Authentification en cours...";
@@ -234,28 +240,23 @@ async function connecterFirebase() {
     localStorage.setItem(KEY_FIREBASE_CFG, JSON.stringify(firebaseConfig));
     if (statut) { statut.innerText = "🔥 Connecté au Cloud"; statut.style.color = "#27ae60"; }
     showToast("Connexion Firebase enregistrée !", "success");
-    await chargerDepuisFirebase(false);
+    await chargerDepuisFirebase(true);
 }
 
 function deconnecterFirebase() {
-    firebaseConfig = { dbUrl: "", apiKey: "", email: "", refreshToken: "", idToken: "" };
-    localStorage.removeItem(KEY_FIREBASE_CFG);
+    firebaseConfig = { dbUrl: URL_FIREBASE_FIXE, apiKey: "", email: "", refreshToken: "", idToken: "" };
+    localStorage.setItem(KEY_FIREBASE_CFG, JSON.stringify(firebaseConfig));
     let statut = document.getElementById('statutFirebase');
-    if (statut) { statut.innerText = "Non connecté."; statut.style.color = "#7f8c8d"; }
-    showToast("Déconnecté de Firebase.", "success");
+    if (statut) { statut.innerText = "Prêt (URL fixe active)"; statut.style.color = "#27ae60"; }
+    showToast("Réinitialisé sur l'URL par défaut.", "success");
 }
 
 function declencherAutoSaveFirebase() {
-    if (!firebaseConfig || !firebaseConfig.dbUrl) return;
     clearTimeout(timerFirebaseSave);
     timerFirebaseSave = setTimeout(() => sauvegarderVersFirebase(), 1500);
 }
 
 async function sauvegarderVersFirebase() {
-    if (!firebaseConfig || !firebaseConfig.dbUrl) {
-        showToast("Veuillez d'abord configurer l'URL Firebase dans l'onglet Sauvegarde.", "error");
-        return;
-    }
     Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
     const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, theme: localStorage.getItem(KEY_THEME) || 'pastel', updatedAt: new Date().toISOString() };
     let authParam = "";
@@ -264,7 +265,7 @@ async function sauvegarderVersFirebase() {
         if (token) authParam = `?auth=${encodeURIComponent(token)}`;
     }
     try {
-        let res = await fetch(`${firebaseConfig.dbUrl}/classe_data.json${authParam}`, {
+        let res = await fetch(`${URL_FIREBASE_FIXE}/classe_data.json${authParam}`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
         });
         if (res.ok) {
@@ -279,21 +280,15 @@ async function sauvegarderVersFirebase() {
 }
 
 async function chargerDepuisFirebase(forcer = false) {
-    let dbUrlInput = document.getElementById('fbDbUrl');
-    if (dbUrlInput && dbUrlInput.value.trim()) {
-        firebaseConfig.dbUrl = nettoyerUrlFirebase(dbUrlInput.value);
-        localStorage.setItem(KEY_FIREBASE_CFG, JSON.stringify(firebaseConfig));
-    }
-    if (!firebaseConfig || !firebaseConfig.dbUrl) return;
     let statut = document.getElementById('statutFirebase');
-    if (statut) statut.innerText = "⏳ Vérification du Cloud...";
+    if (statut) statut.innerText = "⏳ Chargement depuis le Cloud...";
     let authParam = "";
     if (firebaseConfig.apiKey && firebaseConfig.refreshToken) {
         let token = await obtenirTokenFirebaseValide();
         if (token) authParam = `?auth=${encodeURIComponent(token)}`;
     }
     try {
-        let res = await fetch(`${firebaseConfig.dbUrl}/classe_data.json${authParam}`);
+        let res = await fetch(`${URL_FIREBASE_FIXE}/classe_data.json${authParam}`);
         if (!res.ok) throw new Error("HTTP " + res.status);
         let data = await res.json();
         if (data && (data.base || data.eleves)) {
@@ -310,7 +305,7 @@ async function chargerDepuisFirebase(forcer = false) {
                 localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
                 postEditGlobal(); majListeEleves(); initialiserSelectsFormulaire(); afficherChoixEtiquettes(); majSelectCouleursRapides(); rafraichirDashboard();
                 if (idEleveCourant) chargerEleve();
-                showToast("🔥 Données synchronisées depuis Firebase !", "success");
+                showToast("🔥 Données récupérées depuis Firebase !", "success");
             }
             if (statut) { statut.innerText = "🔥 Cloud Firebase actif"; statut.style.color = "#27ae60"; }
         } else {
@@ -323,18 +318,15 @@ async function chargerDepuisFirebase(forcer = false) {
 }
 
 function tenterConnexionAutoFirebase() {
-    if (firebaseConfig && firebaseConfig.dbUrl) {
-        let dbUrlInput = document.getElementById('fbDbUrl');
-        if (dbUrlInput) dbUrlInput.value = firebaseConfig.dbUrl;
-        let apiKeyInput = document.getElementById('fbApiKey');
-        if (apiKeyInput && firebaseConfig.apiKey) apiKeyInput.value = firebaseConfig.apiKey;
-        let emailInput = document.getElementById('fbEmail');
-        if (emailInput && firebaseConfig.email) emailInput.value = firebaseConfig.email;
-        
-        chargerDepuisFirebase(false);
-    }
-}
-function majBarreSemainesUI() {
+    let dbUrlInput = document.getElementById('fbDbUrl');
+    if (dbUrlInput) dbUrlInput.value = URL_FIREBASE_FIXE;
+    let apiKeyInput = document.getElementById('fbApiKey');
+    if (apiKeyInput && firebaseConfig.apiKey) apiKeyInput.value = firebaseConfig.apiKey;
+    let emailInput = document.getElementById('fbEmail');
+    if (emailInput && firebaseConfig.email) emailInput.value = firebaseConfig.email;
+    
+    chargerDepuisFirebase(false);
+}function majBarreSemainesUI() {
     if (!idEleveCourant || !eleves[idEleveCourant]) return;
     let e = eleves[idEleveCourant]; assurerStructureSemaines(e); syncEleveVersSemaineActive(e);
     const sel = document.getElementById('selectSemaineEleve');
