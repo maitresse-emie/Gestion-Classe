@@ -669,7 +669,7 @@ function supprimerSemaineActive() {
     if (confirm(`Supprimer la Semaine ${e.semaineIndex + 1} préparée pour ${e.nom} ?`)) {
         e.semaines.splice(e.semaineIndex, 1);
         let nouvIdx = Math.max(0, e.semaineIndex - 1), s = e.semaines[nouvIdx];
-        e.semaineIndex = nouvIdx; e.planHebdo = [...(s.planHebdo || [])]; e.priorites = [...(s.priorites || [])]; e.joursAssignes = { ...(s.joursAssignes || {}) }; e.valides = { ...(s.valides || {}) }; e.suivi = { ...(e.suivi || {}), ...(s.suivi || {}) }; e.dateDebutISO = s.dateDebutISO || ""; e.dateDebut = s.dateDebut || ""; e.dateFin = s.dateFin || "";
+        e.semaineIndex = nouvIdx; e.planHebdo = [...(s.planHebdo || [])]; e.priorites = [...(s.priorites || [])]; e.joursAssignes = { ...(s.joursAssignes || {}) }; e.valides = { ...(s.valides || {}) }; e.suivi = { ...(s.suivi || {}), ...(s.suivi || {}) }; e.dateDebutISO = s.dateDebutISO || ""; e.dateDebut = s.dateDebut || ""; e.dateFin = s.dateFin || "";
         sauvegarderEleves(); majBarreSemainesUI(); afficherPlanHebdo();
         if (document.getElementById('selectSequence') && document.getElementById('selectSequence').value) afficherRessourcesDisponibles();
         rafraichirDashboard(); showToast("Semaine supprimée.", "success");
@@ -1332,6 +1332,113 @@ function afficherBase() {
     }).join('');
 }
 
+// --- GESTION DE LA SAISIE MULTIPLE EN RAFALE ---
+function toggleModeSaisieMultiple() {
+    let bloc = document.getElementById('blocSaisieMultiple');
+    let btn = document.getElementById('btnToggleModeSaisie');
+    if (!bloc) return;
+    if (bloc.style.display === 'none' || !bloc.style.display) {
+        bloc.style.display = 'block';
+        btn.innerText = "Fermer la saisie multiple";
+        let tbody = document.getElementById('lignesSaisieMultipleBody');
+        if (tbody && tbody.children.length === 0) {
+            ajouterLigneSaisieMultiple();
+            ajouterLigneSaisieMultiple();
+            ajouterLigneSaisieMultiple();
+        }
+        window.scrollTo({ top: bloc.offsetTop - 50, behavior: 'smooth' });
+    } else {
+        bloc.style.display = 'none';
+        btn.innerText = "🚀 Ouvrir la saisie multiple";
+    }
+}
+
+function ajouterLigneSaisieMultiple() {
+    let tbody = document.getElementById('lignesSaisieMultipleBody');
+    if (!tbody) return;
+    let tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td><input type="text" class="multi-lecon" placeholder="Ex: L1" style="width:100%;"></td>
+        <td><input type="text" class="multi-competence" placeholder="Intitulé compétence..." style="width:100%;"></td>
+        <td><input type="text" class="multi-ressource" placeholder="Ex: Exercice 3 p. 45" style="width:100%;"></td>
+        <td><input type="text" class="multi-manuel" placeholder="Ex: p. 45 ex. 3" style="width:100%;"></td>
+        <td><input type="text" class="multi-jaune" placeholder="Ex: Fichier p. 18 ex. 2" style="width:100%; background:#fff9db;"></td>
+        <td>
+            <select class="multi-type" style="width:100%;">
+                <option value="Atelier">Atelier</option>
+                <option value="Jeu">Jeu</option>
+                <option value="Fichier jaune">Fichier jaune</option>
+                <option value="Vidéo">Vidéo</option>
+            </select>
+        </td>
+        <td><input type="text" class="multi-symbole" placeholder="N°" style="width:100%; text-align:center;"></td>
+        <td style="text-align:center;"><button type="button" onclick="this.closest('tr').remove()" style="background:none; border:none; color:red; cursor:pointer; font-size:16px;" title="Supprimer cette ligne">🗑️</button></td>
+    `;
+    tbody.appendChild(tr);
+}
+
+function enregistrerSaisieMultiple() {
+    let niveau = document.getElementById('multiNiveau').value;
+    let matiere = document.getElementById('multiMatiere').value.trim();
+    let sequence = document.getElementById('multiSequence').value.trim();
+
+    if (!matiere || !sequence) {
+        alert("Veuillez renseigner au moins la Matière et la Séquence communes.");
+        return;
+    }
+
+    let lignes = document.querySelectorAll('#lignesSaisieMultipleBody tr');
+    let countAjoutes = 0;
+
+    lignes.forEach(tr => {
+        let lecon = tr.querySelector('.multi-lecon').value.trim();
+        let competence = tr.querySelector('.multi-competence').value.trim();
+        let ressource = tr.querySelector('.multi-ressource').value.trim();
+        let pageManuel = tr.querySelector('.multi-manuel').value.trim();
+        let varianteJaune = tr.querySelector('.multi-jaune').value.trim();
+        let typeRes = tr.querySelector('.multi-type').value;
+        let symbole = tr.querySelector('.multi-symbole').value.trim();
+
+        if (ressource && competence) {
+            let visuel = calculerCouleurAutomatique(matiere, niveau, typeRes);
+            let objAct = {
+                id: 'act_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+                niveau: niveau,
+                matiere: matiere,
+                sequence: sequence,
+                lecon: lecon,
+                competence: competence,
+                ressource: ressource,
+                typeRes: typeRes,
+                symbole: symbole,
+                difficulte: 1,
+                pageGDM: "",
+                pageManuel: pageManuel,
+                varianteJaune: varianteJaune,
+                personnes: "👤",
+                visuel: visuel,
+                estEvaluation: false
+            };
+            baseDonnees.push(objAct);
+            countAjoutes++;
+        }
+    });
+
+    if (countAjoutes > 0) {
+        trierBaseDonnees();
+        sauvegarderBase();
+        initNiveaux();
+        initProgFilters();
+        afficherProgrammation();
+        afficherBase();
+        afficherChoixEtiquettes();
+        toggleModeSaisieMultiple();
+        showToast(`✅ ${countAjoutes} exercice(s) ajouté(s) avec succès !`, "success");
+    } else {
+        alert("Aucune ligne valide n'a été trouvée (Vérifiez que chaque ligne possède au moins une Compétence et un Exercice/Ressource).");
+    }
+}
+
 function afficherChoixEtiquettes() {
     const tbody = document.getElementById('tableChoixEtiquettes'); if(!tbody) return;
     let typesCochés = []; document.querySelectorAll('.cb-type-etq:checked').forEach(cb => typesCochés.push(cb.value.toLowerCase()));
@@ -1495,46 +1602,6 @@ function initialiserAmeliorationsUI() {
         lbl.title = 'Cochez si cet élève utilise le Fichier Jaune en Français au lieu du manuel';
         lbl.innerHTML = `<input type="checkbox" id="cbFichierJauneBar" onchange="toggleFichierJauneEleve(this.checked)"> 📒 Fichier Jaune`;
         btnEdit.insertAdjacentElement('afterend', lbl);
-    }
-    let boxForm = document.getElementById('boxFormulaireManuel');
-    if (boxForm && !document.getElementById('addPageGDM')) {
-        let rowManuels = document.createElement('div');
-        rowManuels.className = 'form-row';
-        rowManuels.style.cssText = 'background:#fffdf2; padding:10px; border-radius:6px; border:1px dashed #f1c40f; margin-bottom:12px;';
-        rowManuels.innerHTML = `
-            <div style="width:100%; font-size:12px; font-weight:bold; color:#d35400; margin-bottom:4px;">📚 Suivi des manuels & Différenciation automatique (Optionnel) :</div>
-            <input type="text" id="addPageGDM" placeholder="📖 Page Guide du Maître (ex: GDM p.42)" style="flex:1; min-width:180px;">
-            <input type="text" id="addPageManuel" placeholder="📘 Page/Ex. Manuel standard (ex: p.28 ex.3)" style="flex:1; min-width:180px;">
-            <input type="text" id="addVarianteJaune" placeholder="📒 Variante Fichier Jaune (ex: Fichier p.12 ex.1)" style="flex:1; min-width:200px; background:#fff9db; border-color:#f1c40f;">
-        `;
-        let rows = boxForm.querySelectorAll('.form-row');
-        if (rows.length >= 2) rows[1].insertAdjacentElement('afterend', rowManuels);
-        else boxForm.appendChild(rowManuels);
-    }
-    let pageSavePanel = document.querySelector('#pageSave .panel');
-    if (pageSavePanel && !document.getElementById('blocFirebaseCloud')) {
-        let divFb = document.createElement('div');
-        divFb.id = 'blocFirebaseCloud';
-        divFb.style.cssText = 'background:#fef5e7; border:1px solid #f39c12; padding:20px; border-radius:8px; margin-bottom:20px;';
-        divFb.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
-                <h3 style="margin:0; color:#d35400;">🔥 Synchronisation Cloud Temps Réel (Firebase - Sans expiration)</h3>
-                <button type="button" class="btn-action" onclick="chargerDepuisFirebase(true)" style="background:#e67e22;">🔄 Forcer la lecture Cloud</button>
-            </div>
-            <p style="font-size:13px; color:#555; margin-top:0;">Synchronisation instantanée entre tous vos appareils sans jamais expirer. Collez l'URL de votre <em>Realtime Database</em> Firebase (et optionnellement vos identifiants Email/Mot de passe Firebase Auth) :</p>
-            <div class="form-row">
-                <input type="text" id="fbDbUrl" placeholder="URL Firebase (ex: https://mon-ecole-default-rtdb.europe-west1.firebasedatabase.app)" value="${escHTML(firebaseConfig.dbUrl || '')}" style="flex:2; min-width:240px;">
-                <input type="text" id="fbApiKey" placeholder="Clé API Web Firebase (Optionnel)" value="${escHTML(firebaseConfig.apiKey || '')}" style="flex:1; min-width:160px;">
-            </div>
-            <div class="form-row">
-                <input type="email" id="fbEmail" placeholder="E-mail enseignant (Optionnel)" value="${escHTML(firebaseConfig.email || '')}" style="flex:1;">
-                <input type="password" id="fbPassword" placeholder="Mot de passe (Optionnel)" style="flex:1;">
-                <button type="button" class="btn-action" onclick="connecterFirebase()" style="background:#d35400;">🔥 Activer la synchro Cloud</button>
-                <button type="button" onclick="deconnecterFirebase()" style="background:#95a5a6; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Déconnecter</button>
-            </div>
-            <span id="statutFirebase" style="font-weight:bold; font-size:13px; color:${firebaseConfig.dbUrl ? '#27ae60' : '#7f8c8d'};">${firebaseConfig.dbUrl ? '🔥 Cloud configuré' : 'Non connecté.'}</span>
-        `;
-        pageSavePanel.insertBefore(divFb, pageSavePanel.children[2]);
     }
 }
 
