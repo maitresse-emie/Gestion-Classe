@@ -1,10 +1,10 @@
 {
-  "name": "GestionClasse",
+  "name": "GestionClasse - Plans de Travail",
   "short_name": "GestionClasse",
-  "description": "Application de gestion de classe et plans de travail pour l'école primaire",
+  "description": "Application de gestion de classe, plans de travail différenciés et évaluations",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#fcf3cf",
+  "background_color": "#faf6f2",
   "theme_color": "#2c3e50",
   "icons": [
     {
