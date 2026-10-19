@@ -302,122 +302,14 @@ function getElevesTries() {
     });
 }
 
-function appliquerThemeVisuel(nomTheme) {
-    document.body.classList.remove('theme-pastel', 'theme-doodles', 'theme-nature');
-    if (nomTheme === 'pastel') document.body.classList.add('theme-pastel');
-    if (nomTheme === 'doodles') document.body.classList.add('theme-doodles');
-    if (nomTheme === 'nature') document.body.classList.add('theme-nature');
-    localStorage.setItem(KEY_THEME, nomTheme || 'classique');
-}
-
-function showToast(message, type = 'success') {
-    const container = document.getElementById('toast-container'); if(!container) return;
-    const toast = document.createElement('div'); toast.className = `toast ${type}`; toast.innerText = message;
-    container.appendChild(toast); setTimeout(() => toast.remove(), 3000);
-}
-
-window.addEventListener('scroll', () => {
-    const btn = document.getElementById('btnScrollTop'); if(!btn) return;
-    btn.style.display = (document.body.scrollTop > 200 || document.documentElement.scrollTop > 200) ? "block" : "none";
-});
-
-function formaterLienImage(url) {
-    if (!url) return ""; url = url.trim();
-    let matchFileD = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/), matchOpenId = url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-    let fileId = matchFileD ? matchFileD[1] : (matchOpenId ? matchOpenId[1] : null);
-    return fileId ? `https://lh3.googleusercontent.com/d/${fileId}` : url;
-}
-
-function isDarkColor(hex) {
-    if(!hex || !hex.startsWith('#')) return false;
-    let c = hex.substring(1); if (c.length === 3) c = c.split('').map(x => x + x).join('');
-    let rgb = parseInt(c, 16);
-    return (0.2126 * ((rgb >> 16) & 0xff) + 0.7152 * ((rgb >> 8) & 0xff) + 0.0722 * (rgb & 0xff)) < 128;
-}
-
-function calculerCouleurAutomatique(matiere, niveauxStr, typeRes) {
-    if (!matiere || !niveauxStr) return "#ffffff";
-    let typeKey = ""; 
-    if (imagesParType) { for (let k in imagesParType) { if (k.trim().toLowerCase() === (typeRes || "").trim().toLowerCase()) { typeKey = k; break; } } }
-    if (typeKey && imagesParType[typeKey] && typeof imagesParType[typeKey] === 'object' && imagesParType[typeKey].appliquerCouleur === false) return "#ffffff";
-    let mat = matiere.trim().toLowerCase(), nivs = niveauxStr.toUpperCase();
-    let ordreNivs = ["CP", "CE1", "CE2", "CM1", "CM2"], niveauPlusBas = "";
-    for (let n of ordreNivs) { if (nivs.includes(n)) { niveauPlusBas = n; break; } }
-    if (mat.includes('math')) { if (niveauPlusBas === 'CP') return "#ffe599"; if (niveauPlusBas === 'CE1' || niveauPlusBas === 'CE2') return "#f6b26b"; if (niveauPlusBas === 'CM1' || niveauPlusBas === 'CM2') return "#ea9999"; } 
-    else if (mat.includes('français') || mat.includes('francais')) { if (niveauPlusBas === 'CP') return "#d5a6bd"; if (niveauPlusBas === 'CE1' || niveauPlusBas === 'CE2') return "#b6d7a8"; if (niveauPlusBas === 'CM1' || niveauPlusBas === 'CM2') return "#9fc5e8"; }
-    return "#ffffff";
-}
-
-function calculTailleStockage() {
-    let _lsTotal = 0, _xLen, _x;
-    for (_x in localStorage) { if (!localStorage.hasOwnProperty(_x)) continue; _xLen = ((localStorage[_x].length + _x.length) * 2); _lsTotal += _xLen; }
-    let megaBytes = (_lsTotal / (1024 * 1024)).toFixed(2), pct = Math.min(100, (megaBytes / 5) * 100);
-    let texteSto = document.getElementById('texteStockage'); if(texteSto) texteSto.innerText = `${megaBytes} Mo utilisés sur environ 5.00 Mo`;
-    let jauge = document.getElementById('jaugeStockageFill');
-    if(jauge) { jauge.style.width = pct + "%"; jauge.style.backgroundColor = pct > 80 ? "#e74c3c" : (pct > 50 ? "#f39c12" : "#27ae60"); }
-}
-
-function toggleFichierJauneEleve(isChecked) {
-    if (!idEleveCourant || !eleves[idEleveCourant]) return;
-    eleves[idEleveCourant].fichierJaune = Boolean(isChecked);
-    sauvegarderEleves(); majListeEleves(); afficherPlanHebdo(); afficherRessourcesDisponibles();
-    showToast(isChecked ? "📒 Mode Fichier Jaune activé !" : "📘 Mode Manuel Standard activé !");
-}
-
-function majListeEleves() {
-    const select = document.getElementById('selectEleveProfile'), selectImp = document.getElementById('selectEleveImpression'), selectBilan = document.getElementById('selectEleveBilan');
-    let optHtml = '<option value="">-- Sélectionner un élève --</option>'; 
-    let optImp = '<option value="">-- Choisir un élève ou un groupe --</option><option value="TOUS_ELEVES">📚 TOUS les élèves</option><option value="NIVEAU_CP">📘 CP</option><option value="NIVEAU_CE1">📘 CE1</option><option value="NIVEAU_CE2">📘 CE2</option><option value="NIVEAU_CM1">📘 CM1</option><option value="NIVEAU_CM2">📘 CM2</option>';
-    let optBilan = '<option value="">-- Choisir un élève --</option>';
-
-    getElevesTries().forEach(e => { 
-        let tagJaune = e.fichierJaune ? " 📒" : "";
-        let labelNiv = `[${e.niveau || "CP"}] ${e.nom}${tagJaune}`;
-        optHtml += `<option value="${e.id}">${escHTML(labelNiv)}</option>`; 
-        optImp += `<option value="${e.id}">${escHTML(labelNiv)}</option>`; 
-        optBilan += `<option value="${e.id}">${escHTML(labelNiv)}</option>`; 
-    });
-    if (select) select.innerHTML = optHtml; if (selectImp) selectImp.innerHTML = optImp; if (selectBilan) selectBilan.innerHTML = optBilan;
-    
-    let btnEdit = document.getElementById('btnEditEleve');
-    if(idEleveCourant && eleves[idEleveCourant]) { 
-        if (select) select.value = idEleveCourant; if (btnEdit) btnEdit.style.display = "inline-block";
-    } else {
-        if (btnEdit) btnEdit.style.display = "none";
-    }
-    if(idEleveCourant && !idEleveImpressionCourant) idEleveImpressionCourant = idEleveCourant;
-    if(idEleveImpressionCourant) { if (selectImp) selectImp.value = idEleveImpressionCourant; if (selectBilan && eleves[idEleveImpressionCourant]) selectBilan.value = idEleveImpressionCourant; }
-}
-
-function modifierMaxAteliersEleve() { if(!idEleveCourant) return; let val = Math.min(25, Math.max(1, parseInt(document.getElementById('inputMaxAteliersEleve').value) || 15)); eleves[idEleveCourant].maxAteliers = val; sauvegarderEleves(); let maxAff = document.getElementById('maxAteliersAffiche'); if(maxAff) maxAff.innerText = val; }
-function modifierMaxTablettesEleve() { if(!idEleveCourant) return; let val = Math.min(10, Math.max(0, parseInt(document.getElementById('inputMaxTablettesEleve').value) || 0)); eleves[idEleveCourant].maxTablettes = val; sauvegarderEleves(); if(idEleveCourant) afficherPlanHebdo(); }
-
-function creerEleve() { 
-    const nomInput = document.getElementById('nouvelEleveNom'), nivSelect = document.getElementById('nouvelEleveNiveau'), cbJauneNew = document.getElementById('nouvelEleveFichierJaune'); if(!nomInput) return;
-    const nom = nomInput.value.trim(); if(!nom) return; const niveau = nivSelect ? nivSelect.value : "CP"; const id = 'eleve_' + Date.now(); 
-    eleves[id] = { id: id, nom: nom, niveau: niveau, fichierJaune: Boolean(cbJauneNew && cbJauneNew.checked), planHebdo: [], enAttente: [], historique: [], masquees: [], priorites: [], maxAteliers: 15, maxTablettes: 2, suivi: {}, valides: {}, bilanEvaluations: {}, joursAssignes: {}, dateDebutISO: "", dateDebut: "", dateFin: "" }; 
-    assurerStructureSemaines(eleves[id]); sauvegarderEleves(); nomInput.value = ''; if(cbJauneNew) cbJauneNew.checked = false; majListeInstantaneeEleve(id); rafraichirDashboard(); 
-}
-
-function majListeInstantaneeEleve(newId) { majListeEleves(); let sel = document.getElementById('selectEleveProfile'); if(sel) sel.value = newId; chargerEleve(); }
-
-function ouvrirModalEditionEleve() {
-    if(!idEleveCourant || !eleves[idEleveCourant]) return; let e = eleves[idEleveCourant];
-    document.getElementById('editEleveNomInput').value = e.nom; document.getElementById('editEleveNiveauSelect').value = e.niveau || "CP";
-    let cbEditJaune = document.getElementById('editEleveFichierJauneInput'); if (cbEditJaune) cbEditJaune.checked = Boolean(e.fichierJaune);
-    ouvrirModal('modalEditEleve');
-}
-
-function validerEditionEleve() {
-    if(!idEleveCourant || !eleves[idEleveCourant]) return;
-    let nouveauNom = document.getElementById('editEleveNomInput').value.trim(), nouveauNiveau = document.getElementById('editEleveNiveauSelect').value;
-    if(!nouveauNom) { showToast("Le prénom ne peut pas être vide.", "error"); return; }
-    eleves[idEleveCourant].nom = nouveauNom; eleves[idEleveCourant].niveau = nouveauNiveau;
-    let cbEditJaune = document.getElementById('editEleveFichierJauneInput'); if (cbEditJaune) eleves[idEleveCourant].fichierJaune = cbEditJaune.checked;
-    sauvegarderEleves(); fermerModal('modalEditEleve'); majListeEleves(); chargerEleve(); rafraichirDashboard(); showToast("Élève mis à jour !", "success");
-}
-
-function supprimerEleve() { if(!idEleveCourant) return; if(confirm("Supprimer définitivement cet élève ?")) { delete eleves[idEleveCourant]; idEleveCourant = null; idEleveImpressionCourant = null; sauvegarderEleves(); majListeEleves(); chargerEleve(); rafraichirDashboard(); } }function majBarreSemainesUI() {
+function postEditGlobal() { 
+    trierBaseDonnees(); 
+    sauvegarderBase(); 
+    initNiveaux(); 
+    initProgFilters(); 
+    afficherProgrammation(); 
+    afficherBase(); 
+}function majBarreSemainesUI() {
     if (!idEleveCourant || !eleves[idEleveCourant]) return;
     let e = eleves[idEleveCourant]; assurerStructureSemaines(e); syncEleveVersSemaineActive(e);
     const sel = document.getElementById('selectSemaineEleve');
