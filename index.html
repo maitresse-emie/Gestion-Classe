@@ -4,428 +4,499 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GestionClasse - Plans de Travail & Suivi</title>
-    <link rel="stylesheet" href="style.css?v=20261020">
+    <link rel="stylesheet" href="style.css?v=20261022">
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#1b4f72">
+    <meta name="theme-color" content="#2c3e50">
 </head>
 <body class="theme-pastel">
 
     <!-- Conteneur pour les notifications Toast -->
     <div id="toast-container"></div>
 
-    <!-- En-tête et navigation principale -->
-    <header class="main-header no-print">
-        <div class="header-top">
-            <h1>🏫 GestionClasse</h1>
-            <div class="header-Theme-Quick">
-                <select id="selectThemeHeader" onchange="appliquerThemeVisuel(this.value)" title="Changer le thème visuel">
-                    <option value="pastel">🎨 Thème Pastel</option>
-                    <option value="doodles">✏️ Thème Doodles</option>
-                    <option value="nature">🌿 Thème Nature</option>
-                    <option value="classique">📘 Thème Classique</option>
-                </select>
-            </div>
-        </div>
-        <nav class="nav-bar">
-            <button class="nav-btn active" onclick="changerOnglet('pageDashboard', this)">📊 1. Tableau de bord</button>
-            <button class="nav-btn" onclick="changerOnglet('pageSuivi', this)">⭐ 2. Suivi Élèves</button>
-            <button class="nav-btn" onclick="changerOnglet('pageBase', this)">📚 3. Base Ateliers</button>
-            <button class="nav-btn" onclick="changerOnglet('pageProg', this)">📅 4. Programmations</button>
-            <button class="nav-btn" onclick="changerOnglet('pageEtiquettes', this)">🏷️ 5. Étiquettes</button>
-            <button class="nav-btn" onclick="changerOnglet('pageImpression', this)">🖨️ 6. Fiches Plans</button>
-            <button class="nav-btn" onclick="changerOnglet('pageMatrice', this)">📈 7. Matrice</button>
-            <button class="nav-btn" onclick="changerOnglet('pageBilan', this)">📋 8. Bilan</button>
-            <button class="nav-btn" onclick="changerOnglet('pageSave', this)">💾 9. Sauvegarde</button>
-        </nav>
-    </header>
+    <!-- Barre de navigation principale dans l'ordre logique d'origine -->
+    <div class="navbar no-print">
+        <button class="nav-btn active" onclick="changerOnglet('pageSuivi', this)">🧑‍🎓 1. Plan & Suivi</button>
+        <button class="nav-btn" onclick="changerOnglet('pageImpression', this)">🖨️ 2. Fiche Élève</button>
+        <button class="nav-btn" onclick="changerOnglet('pageDashboard', this)" style="background:#f39c12;">📊 3. Tableau de bord</button>
+        <button class="nav-btn" onclick="changerOnglet('pageBase', this)">📁 4. Base de données</button>
+        <button class="nav-btn" onclick="changerOnglet('pageProg', this)" style="background:#d35400;">📅 5. Programmation</button>
+        <button class="nav-btn" onclick="changerOnglet('pageEtiquettes', this)" style="background:#8e44ad;">🏷️ 6. Étiquettes</button>
+        <button class="nav-btn" onclick="changerOnglet('pageMatrice', this)" style="background:#16a085;">🧮 7. Matrice</button>
+        <button class="nav-btn" onclick="changerOnglet('pageBilan', this)" style="background:#9b59b6;">📝 8. Bilans</button>
+        <button class="nav-btn" onclick="changerOnglet('pageSave', this)" style="background:#c0392b;">💾 9. Sauvegarde</button>
+        <button class="btn-theme-config no-print" onclick="ouvrirModal('modalDesign')" title="Personnaliser le graphisme de l'application">🎨 Design</button>
+    </div>
 
     <main class="container">
 
         <!-- ========================================== -->
-        <!-- 1. TABLEAU DE BORD                         -->
+        <!-- 1. PLAN & SUIVI ÉLÈVES                     -->
         <!-- ========================================== -->
-        <section id="pageDashboard" class="page active">
-            <div class="page-header-flex">
-                <h2>📊 Tableau de bord de la classe</h2>
-                <div class="toolbar-actions">
-                    <button type="button" class="filter-btn" id="btnToggleArchivesDash" onclick="toggleAfficherArchives()">👁️ Voir les éléments archivés</button>
-                    <button type="button" class="btn-action" onclick="rafraichirDashboard()">🔄 Actualiser</button>
-                </div>
-            </div>
-            <div id="dashboardContent"></div>
-        </section>
+        <div id="pageSuivi" class="page active">
+            <div class="panel">
+                <h2>🧑‍🎓 1. Plan de travail & Suivi individualisé</h2>
 
-        <!-- ========================================== -->
-        <!-- 2. SUIVI ÉLÈVES & PLANS DE TRAVAIL         -->
-        <!-- ========================================== -->
-        <section id="pageSuivi" class="page">
-            <h2>⭐ Suivi individualisé et Plans de travail</h2>
-
-            <!-- Barre d'ajout et sélection d'élève -->
-            <div class="card-panel" style="margin-bottom: 20px;">
-                <div class="selection-eleve-bar">
-                    <select id="selectEleveProfile" onchange="chargerEleve()">
-                        <option value="">-- Sélectionner un élève --</option>
-                    </select>
-                    <button type="button" class="btn-action" id="btnEditEleve" style="display:none;" onclick="ouvrirModalEditionEleve()">✏️ Modifier l'élève</button>
-                    <button type="button" class="btn-danger" id="btnSupprEleve" style="display:none;" onclick="supprimerEleve()">🗑️ Supprimer</button>
-                </div>
-
-                <div class="ajout-eleve-bar">
-                    <strong>➕ Nouvel élève :</strong>
-                    <input type="text" id="nouvelEleveNom" placeholder="Prénom de l'élève">
-                    <select id="nouvelEleveNiveau">
-                        <option value="CP">CP</option>
-                        <option value="CE1">CE1</option>
-                        <option value="CE2">CE2</option>
-                        <option value="CM1">CM1</option>
-                        <option value="CM2">CM2</option>
-                    </select>
-                    <label style="cursor:pointer; font-size:13px;">
-                        <input type="checkbox" id="nouvelEleveFichierJaune"> 📒 Fichier Jaune
-                    </label>
-                    <button type="button" class="btn-valid" onclick="creerEleve()">Ajouter l'élève</button>
-                </div>
-            </div>
-
-            <div id="messageSelectEleve" class="empty-state">
-                <h3>👆 Sélectionnez un élève ci-dessus (ou créez-en un) pour gérer son plan de travail.</h3>
-            </div>
-
-            <div id="zoneTravail" style="display: none;">
-                <!-- Barre de gestion des semaines -->
-                <div class="panel-semaines">
-                    <div class="semaines-flex">
-                        <div>
-                            <strong id="labelSemaineTitre" style="font-size:16px; color:#1b4f72;">Semaine 1</strong>
-                            <select id="selectSemaineEleve" onchange="changerSemaineActive(this.value)" style="margin-left:10px; padding:6px; border-radius:6px;"></select>
-                        </div>
-                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                            <label>Début (Lundi) : <input type="date" id="dateDebutSemaineInput" onchange="appliquerDateDebutSemaine(this.value)"></label>
-                            <span id="dateFinSemaineAffiche" style="font-weight:bold; color:#1b4f72;">➔ Vendredi : --/--</span>
-                        </div>
-                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                            <button type="button" class="btn-action" onclick="ajouterSemaineAvance()">➕ Semaine d'avance</button>
-                            <button type="button" class="btn-danger" id="btnSupprimerSemaine" onclick="supprimerSemaineActive()" style="display:none;">🗑️ Suppr. Semaine</button>
-                            <button type="button" class="btn-valid" onclick="commencerNouvelleSemaine()">🏁 Clôturer & Suivante</button>
-                        </div>
+                <div class="card-panel" style="margin-bottom: 18px;">
+                    <div class="selection-eleve-bar">
+                        <select id="selectEleveProfile" onchange="chargerEleve()">
+                            <option value="">-- Sélectionner un élève --</option>
+                        </select>
+                        <button type="button" class="btn-action" id="btnEditEleve" style="display:none;" onclick="ouvrirModalEditionEleve()">✏️ Modifier l'élève</button>
+                        <button type="button" class="btn-danger" id="btnSupprEleve" style="display:none;" onclick="supprimerEleve()">🗑️ Supprimer</button>
                     </div>
-                </div>
 
-                <!-- Quotas et options de l'élève -->
-                <div class="quotas-bar">
-                    <div style="display:flex; gap:18px; align-items:center; flex-wrap:wrap;">
-                        <span class="badge-quota">📌 Ateliers : <strong id="compteurAteliersEleve">0</strong> / <span id="maxAteliersAffiche">15</span></span>
-                        <label style="font-size:13px;">Limite ateliers : <input type="number" id="inputMaxAteliersEleve" min="1" max="25" value="15" onchange="modifierMaxAteliersEleve()" style="width:55px;"></label>
-                        <span class="badge-quota tablette">📱 Tablettes : <strong id="compteurTablettesEleve">0/2</strong></span>
-                        <label style="font-size:13px;">Limite tablettes : <input type="number" id="inputMaxTablettesEleve" min="0" max="10" value="2" onchange="modifierMaxTablettesEleve()" style="width:55px;"></label>
-                    </div>
-                    <div>
-                        <label class="badge-jaune-toggle">
-                            <input type="checkbox" id="cbFichierJauneEleve" onchange="toggleFichierJauneEleve(this.checked)"> 📒 Mode Fichier Jaune
+                    <div class="ajout-eleve-bar">
+                        <strong>➕ Nouvel élève :</strong>
+                        <input type="text" id="nouvelEleveNom" placeholder="Prénom de l'élève">
+                        <select id="nouvelEleveNiveau">
+                            <option value="CP">CP</option>
+                            <option value="CE1">CE1</option>
+                            <option value="CE2">CE2</option>
+                            <option value="CM1">CM1</option>
+                            <option value="CM2">CM2</option>
+                        </select>
+                        <label style="cursor:pointer; font-size:13px;">
+                            <input type="checkbox" id="nouvelEleveFichierJaune"> 📒 Fichier Jaune
                         </label>
+                        <button type="button" class="btn-valid" onclick="creerEleve()">Ajouter l'élève</button>
                     </div>
                 </div>
 
-                <!-- Sélecteur de ressources pour ajouter au plan -->
-                <div class="card-panel" style="margin-bottom:20px; background:#f8fbff; border:1px solid #d6eaf8;">
-                    <h3 style="margin-bottom:12px; color:#1b4f72;">➕ Ajouter des activités au plan de <span class="nomEleveAffiche"></span></h3>
-                    <div class="filtres-ajout-plan">
-                        <select id="selectPeriodeDispo" onchange="afficherRessourcesDisponibles()">
-                            <option value="Toutes">📅 Toutes les périodes</option>
-                            <option value="P1">Période 1</option>
-                            <option value="P2">Période 2</option>
-                            <option value="P3">Période 3</option>
-                            <option value="P4">Période 4</option>
-                            <option value="P5">Période 5</option>
-                        </select>
-                        <select id="selectMatiere" onchange="changementMatiereSelection()">
-                            <option value="">-- 1. Choisir une matière --</option>
-                        </select>
-                        <select id="selectSequence" onchange="afficherRessourcesDisponibles()">
-                            <option value="">-- 2. Choisir une séquence (ou Toutes) --</option>
-                        </select>
-                        <div class="etoiles-filter">
-                            <span>Difficulté :</span>
-                            <button type="button" class="filter-btn active" id="btnEtoile0" onclick="filtrerEtoilesDispo(0)">Toutes</button>
-                            <button type="button" class="filter-btn" id="btnEtoile1" onclick="filtrerEtoilesDispo(1)">⭐</button>
-                            <button type="button" class="filter-btn" id="btnEtoile2" onclick="filtrerEtoilesDispo(2)">⭐⭐</button>
-                            <button type="button" class="filter-btn" id="btnEtoile3" onclick="filtrerEtoilesDispo(3)">⭐⭐⭐</button>
+                <div id="messageSelectEleve" class="empty-state">
+                    <h3>👆 Sélectionnez un élève ci-dessus (ou créez-en un) pour gérer son plan de travail.</h3>
+                </div>
+
+                <div id="zoneTravail" style="display: none;">
+                    <!-- Barre de gestion des semaines -->
+                    <div class="panel-semaines">
+                        <div class="semaines-flex">
+                            <div>
+                                <strong id="labelSemaineTitre" style="font-size:16px; color:#1b4f72;">Semaine 1</strong>
+                                <select id="selectSemaineEleve" onchange="changerSemaineActive(this.value)" style="margin-left:10px; padding:6px; border-radius:6px;"></select>
+                            </div>
+                            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                <label>Début (Lundi) : <input type="date" id="dateDebutSemaineInput" onchange="appliquerDateDebutSemaine(this.value)"></label>
+                                <span id="dateFinSemaineAffiche" style="font-weight:bold; color:#1b4f72;">➔ Vendredi : --/--</span>
+                            </div>
+                            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                <button type="button" class="btn-action" onclick="ajouterSemaineAvance()">➕ Semaine d'avance</button>
+                                <button type="button" class="btn-danger" id="btnSupprimerSemaine" onclick="supprimerSemaineActive()" style="display:none;">🗑️ Suppr. Semaine</button>
+                                <button type="button" class="btn-valid" onclick="commencerNouvelleSemaine()">🏁 Clôturer & Suivante</button>
+                            </div>
                         </div>
                     </div>
-                    <div id="zoneRessourcesDispo" style="max-height:280px; overflow-y:auto; margin-top:10px;">
+
+                    <!-- Quotas et options de l'élève -->
+                    <div class="quotas-bar">
+                        <div style="display:flex; gap:18px; align-items:center; flex-wrap:wrap;">
+                            <span class="badge-quota">📌 Ateliers : <strong id="compteurAteliersEleve">0</strong> / <span id="maxAteliersAffiche">15</span></span>
+                            <label style="font-size:13px;">Max Ateliers : <input type="number" id="inputMaxAteliersEleve" min="1" max="25" value="15" onchange="modifierMaxAteliersEleve()" style="width:55px;"></label>
+                            <span class="badge-quota tablette">📱 Tablettes : <strong id="compteurTablettesEleve">0/2</strong></span>
+                            <label style="font-size:13px;">Max Tablettes : <input type="number" id="inputMaxTablettesEleve" min="0" max="10" value="2" onchange="modifierMaxTablettesEleve()" style="width:55px;"></label>
+                        </div>
+                        <div>
+                            <label class="badge-jaune-toggle">
+                                <input type="checkbox" id="cbFichierJauneEleve" onchange="toggleFichierJauneEleve(this.checked)"> 📒 Mode Fichier Jaune
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Sélecteur de ressources pour ajouter au plan -->
+                    <div class="card-panel" style="margin-bottom:20px;">
+                        <h3 style="margin-bottom:12px; color:#1b4f72;">➕ Choisir des activités pour <span class="nomEleveAffiche"></span></h3>
+                        <div class="filtres-ajout-plan">
+                            <select id="selectPeriodeDispo" onchange="afficherRessourcesDisponibles()">
+                                <option value="Toutes">📅 Toutes les périodes</option>
+                                <option value="P1">Période 1</option>
+                                <option value="P2">Période 2</option>
+                                <option value="P3">Période 3</option>
+                                <option value="P4">Période 4</option>
+                                <option value="P5">Période 5</option>
+                            </select>
+                            <select id="selectMatiere" onchange="changementMatiereSelection()">
+                                <option value="">-- 1. Choisir une matière --</option>
+                            </select>
+                            <select id="selectSequence" onchange="afficherRessourcesDisponibles()">
+                                <option value="">-- 2. Choisir une séquence (ou Toutes) --</option>
+                            </select>
+                            <div class="etoiles-filter">
+                                <span>Difficulté :</span>
+                                <button type="button" class="filter-btn active" id="btnEtoile0" onclick="filtrerEtoilesDispo(0)">Toutes</button>
+                                <button type="button" class="filter-btn" id="btnEtoile1" onclick="filtrerEtoilesDispo(1)">⭐</button>
+                                <button type="button" class="filter-btn" id="btnEtoile2" onclick="filtrerEtoilesDispo(2)">⭐⭐</button>
+                                <button type="button" class="filter-btn" id="btnEtoile3" onclick="filtrerEtoilesDispo(3)">⭐⭐⭐</button>
+                            </div>
+                        </div>
+                        <div id="zoneRessourcesDispo" style="max-height:290px; overflow-y:auto; margin-top:10px;">
+                            <table class="table-classique">
+                                <thead>
+                                    <tr>
+                                        <th style="width:70px;">Niv. / Pér.</th>
+                                        <th style="width:160px;">Séquence / Leçon</th>
+                                        <th>Compétence</th>
+                                        <th>Ressource & Support</th>
+                                        <th style="width:110px;">Jour</th>
+                                        <th style="width:185px;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tableRessourcesDispo">
+                                    <tr><td colspan="6" style="text-align:center; color:#7f8c8d;">Sélectionnez une matière ci-dessus pour afficher les activités disponibles.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Tableau du Plan Hebdomadaire -->
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:10px;">
+                        <h3>📋 Plan de travail en cours (<span class="nomEleveAffiche"></span>)</h3>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                            <button type="button" class="btn-valid" onclick="validerSelectionPlan()">✅ Valider les cases cochées</button>
+                            <button type="button" class="btn-action" onclick="ouvrirModalDuplication()">📋 Dupliquer ce plan vers d'autres élèves</button>
+                        </div>
+                    </div>
+
+                    <table class="table-classique">
+                        <thead>
+                            <tr>
+                                <th style="width:36px; text-align:center;"><input type="checkbox" onchange="cocherToutPlan(this)" title="Tout cocher"></th>
+                                <th style="width:40px; text-align:center;">Prio</th>
+                                <th style="width:50px; text-align:center;">N°</th>
+                                <th style="width:170px;">Matière / Séquence</th>
+                                <th>Compétence</th>
+                                <th>Ressource & Suivi</th>
+                                <th style="width:115px;">Jour</th>
+                                <th style="width:130px;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableApercuPlan"></tbody>
+                    </table>
+
+                    <!-- File d'attente (enAttente) pour la semaine suivante -->
+                    <div id="blocEnAttenteEleve" style="margin-top:20px; display:none;">
+                        <h3 style="color:#d35400; margin-bottom:8px;">⏳ Activités en réserve pour la semaine suivante (<span id="compteurAttenteEleve">0</span>)</h3>
                         <table class="table-classique">
                             <thead>
                                 <tr>
-                                    <th style="width:70px;">Niv. / Pér.</th>
-                                    <th style="width:160px;">Séquence / Leçon</th>
+                                    <th style="width:170px;">Matière / Séquence</th>
                                     <th>Compétence</th>
-                                    <th>Ressource & Support</th>
-                                    <th style="width:110px;">Jour</th>
-                                    <th style="width:150px;">Actions</th>
+                                    <th>Ressource</th>
+                                    <th style="width:180px;">Actions</th>
                                 </tr>
                             </thead>
-                            <tbody id="tableRessourcesDispo">
-                                <tr><td colspan="6" style="text-align:center; color:#7f8c8d;">Sélectionnez une matière ci-dessus pour afficher les activités disponibles.</td></tr>
-                            </tbody>
+                            <tbody id="tableEnAttente"></tbody>
                         </table>
                     </div>
-                </div>
 
-                <!-- Tableau du Plan Hebdomadaire -->
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:10px;">
-                    <h3>📋 Plan de travail en cours (<span class="nomEleveAffiche"></span>)</h3>
-                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                        <button type="button" class="btn-valid" onclick="validerSelectionPlan()">✅ Valider les cases cochées</button>
-                        <button type="button" class="btn-action" onclick="ouvrirModalDuplication()">📋 Dupliquer ce plan vers d'autres élèves</button>
-                    </div>
-                </div>
-
-                <table class="table-classique">
-                    <thead>
-                        <tr>
-                            <th style="width:36px; text-align:center;"><input type="checkbox" onchange="cocherToutPlan(this)" title="Tout cocher"></th>
-                            <th style="width:40px; text-align:center;">Prio</th>
-                            <th style="width:50px; text-align:center;">N°</th>
-                            <th style="width:170px;">Matière / Séquence</th>
-                            <th>Compétence</th>
-                            <th>Ressource & Suivi</th>
-                            <th style="width:115px;">Jour</th>
-                            <th style="width:130px;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableApercuPlan"></tbody>
-                </table>
-
-                <!-- Historique et activités masquées -->
-                <div class="grid-2-cols" style="margin-top:30px;">
-                    <div>
-                        <h3>✅ Historique des activités validées</h3>
-                        <div style="max-height:260px; overflow-y:auto;">
-                            <table class="table-classique">
-                                <thead>
-                                    <tr>
-                                        <th style="width:85px;">Date</th>
-                                        <th style="width:55px;">Niv.</th>
-                                        <th>Matière / Séquence</th>
-                                        <th>Ressource</th>
-                                        <th style="width:50px;">Rest.</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tableHistorique"></tbody>
-                            </table>
+                    <!-- Historique et activités masquées -->
+                    <div class="grid-2-cols" style="margin-top:30px;">
+                        <div>
+                            <h3>✅ Historique des activités validées</h3>
+                            <div style="max-height:260px; overflow-y:auto;">
+                                <table class="table-classique">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:85px;">Date</th>
+                                            <th style="width:55px;">Niv.</th>
+                                            <th>Matière / Séquence</th>
+                                            <th>Compétence</th>
+                                            <th>Ressource</th>
+                                            <th style="width:50px;">Rest.</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tableHistorique"></tbody>
+                                </table>
+                            </div>
                         </div>
-                    </div>
-                    <div>
-                        <h3>🙈 Activités masquées pour cet élève</h3>
-                        <div style="max-height:260px; overflow-y:auto;">
-                            <table class="table-classique">
-                                <thead>
-                                    <tr>
-                                        <th style="width:55px;">Niv.</th>
-                                        <th>Matière / Séquence</th>
-                                        <th>Compétence</th>
-                                        <th>Ressource</th>
-                                        <th style="width:50px;">Rest.</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tableMasquees"></tbody>
-                            </table>
+                        <div>
+                            <h3>🙈 Activités masquées pour cet élève</h3>
+                            <div style="max-height:260px; overflow-y:auto;">
+                                <table class="table-classique">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:55px;">Niv.</th>
+                                            <th>Matière / Séquence</th>
+                                            <th>Compétence</th>
+                                            <th>Ressource</th>
+                                            <th style="width:50px;">Rest.</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tableMasquees"></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </section>
+        </div>
 
         <!-- ========================================== -->
-        <!-- 3. BASE DE DONNÉES DES ATELIERS            -->
+        <!-- 2. FICHE ÉLÈVE (IMPRESSION PLANS)          -->
         <!-- ========================================== -->
-        <section id="pageBase" class="page">
-            <h2>📚 Base de données des activités et ateliers</h2>
-
-            <!-- Formulaire Ajout / Édition d'une activité -->
-            <div class="card-panel" style="margin-bottom:20px;">
-                <h3 id="titreFormulaireBase" style="margin-bottom:12px; color:#1b4f72;">➕ Ajouter ou modifier une activité</h3>
-                <div class="form-grid-base">
-                    <div>
-                        <label>Matière :</label>
-                        <input type="text" id="inputMatiere" list="listeMatieresConnues" placeholder="Ex: Français, Mathématiques, Sciences...">
-                        <datalist id="listeMatieresConnues">
-                            <option value="Français">
-                            <option value="Mathématiques">
-                            <option value="Histoire-Géographie">
-                            <option value="Sciences et technologie">
-                            <option value="Anglais">
-                            <option value="Arts">
-                            <option value="EPS">
-                            <option value="EMC">
-                        </datalist>
-                    </div>
-                    <div>
-                        <label>Séquence / Domaine :</label>
-                        <input type="text" id="inputSequence" placeholder="Ex: Numération 1, Grammaire...">
-                    </div>
-                    <div>
-                        <label>Leçon (optionnel) :</label>
-                        <input type="text" id="inputLecon" placeholder="Ex: N1, G2...">
-                    </div>
-                    <div>
-                        <label>Compétence :</label>
-                        <input type="text" id="inputCompetence" placeholder="Ex: Dénombrer jusqu'à 100">
-                    </div>
-                    <div>
-                        <label>Nom de la ressource / Atelier :</label>
-                        <input type="text" id="inputRessource" placeholder="Ex: Cartes à pinces N1">
-                    </div>
-                    <div>
-                        <label>Type de support :</label>
-                        <select id="selectTypeRessource"></select>
-                    </div>
-                    <div>
-                        <label>Page / Ex. Manuel standard (📘) :</label>
-                        <input type="text" id="inputPageManuel" placeholder="Ex: p. 24 ex 2">
-                    </div>
-                    <div>
-                        <label>Variante Fichier Jaune (📒) :</label>
-                        <input type="text" id="inputVarianteJaune" placeholder="Ex: Fichier p. 18">
-                    </div>
-                    <div>
-                        <label>Période :</label>
-                        <select id="selectPeriodeForm">
-                            <option value="">-- Sans période --</option>
-                            <option value="P1">Période 1</option>
-                            <option value="P2">Période 2</option>
-                            <option value="P3">Période 3</option>
-                            <option value="P4">Période 4</option>
-                            <option value="P5">Période 5</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label>Difficulté (Étoiles) :</label>
-                        <select id="selectDifficulte">
-                            <option value="0">Aucune étoile</option>
-                            <option value="1">⭐ (Niveau 1)</option>
-                            <option value="2">⭐⭐ (Niveau 2)</option>
-                            <option value="3">⭐⭐⭐ (Niveau 3)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label>Couleur étiquette :</label>
-                        <select id="selectCouleurRapide"></select>
-                    </div>
-                    <div>
-                        <label>Lien image (optionnel) :</label>
-                        <input type="text" id="inputImageAct" placeholder="URL de l'image ou lien Drive">
-                    </div>
-                </div>
-
-                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px; margin-top:15px; padding-top:12px; border-top:1px dashed #ccc;">
+        <div id="pageImpression" class="page">
+            <div class="panel no-print">
+                <h2>🖨️ 2. Fiche Élève — Impression des Plans de Travail</h2>
+                <div class="card-panel" style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
                     <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-                        <strong>Niveaux :</strong>
-                        <label><input type="checkbox" class="cb-niveau-form" value="CP" checked> CP</label>
-                        <label><input type="checkbox" class="cb-niveau-form" value="CE1"> CE1</label>
-                        <label><input type="checkbox" class="cb-niveau-form" value="CE2"> CE2</label>
-                        <label><input type="checkbox" class="cb-niveau-form" value="CM1"> CM1</label>
-                        <label><input type="checkbox" class="cb-niveau-form" value="CM2"> CM2</label>
-                        <label style="margin-left:15px; background:#fcf3cf; padding:4px 8px; border-radius:4px; border:1px solid #f1c40f;">
-                            <input type="checkbox" id="cbEstEvaluation"> 🎯 Est une Évaluation
+                        <label><strong>Élève ou Groupe :</strong>
+                            <select id="selectEleveImpression" onchange="changementEleveImpression()"></select>
+                        </label>
+                        <label id="labelSelectSemaineImp"><strong>Semaine :</strong>
+                            <select id="selectSemaineImpression" onchange="changerSemaineDepuisImpression(this.value)">
+                                <option value="0">Semaine 1 [En cours]</option>
+                            </select>
+                        </label>
+                        <label><strong>Date Lundi :</strong>
+                            <input type="date" id="dateImpressionInput" onchange="appliquerDateImpression(this.value)">
+                        </label>
+                        <label><strong>Format :</strong>
+                            <select id="selectFormatImpression" onchange="rafraichirFicheImpression()">
+                                <option value="A4">📄 A4 Complet (1 élève / page)</option>
+                                <option value="A5">📑 A5 Compact (2 élèves côte-à-côte)</option>
+                            </select>
                         </label>
                     </div>
                     <div style="display:flex; gap:8px;">
-                        <button type="button" class="btn-remove" id="btnAnnulerEditBase" style="display:none;" onclick="annulerEditionBase()">Annuler</button>
-                        <button type="button" class="btn-valid" id="btnSubmitBase" onclick="enregistrerActiviteBase()">💾 Enregistrer l'activité</button>
+                        <button type="button" class="btn-action" onclick="rafraichirFicheImpression()">🔄 Actualiser</button>
+                        <button type="button" class="btn-valid" onclick="window.print()">🖨️ Imprimer</button>
                     </div>
                 </div>
             </div>
+            <div id="zoneFichesImpression"></div>
+        </div>
 
-            <!-- Gestion des types de supports (Icônes & Quota Tablette) -->
-            <details class="card-panel" style="margin-bottom:20px;">
-                <summary style="cursor:pointer; font-weight:bold; color:#1b4f72;">⚙️ Gérer les types de supports (Icônes, Tablettes Anton/Scratch, Couleurs)</summary>
-                <div style="margin-top:12px;">
-                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
-                        <input type="text" id="inputNouveauTypeNom" placeholder="Nom du type (ex: Anton, Jeu...)">
-                        <input type="text" id="inputNouveauTypeImg" placeholder="URL icône image (optionnel)" style="flex:1;">
-                        <label><input type="checkbox" id="cbNouveauTypeTablette"> 📱 Compte comme Tablette</label>
-                        <label><input type="checkbox" id="cbNouveauTypeCouleur" checked> 🎨 Colorer l'étiquette</label>
-                        <button type="button" class="btn-action" onclick="ajouterOuModifierType()">➕ Ajouter / Mettre à jour ce type</button>
-                    </div>
-                    <div id="listeTypesConfig" style="display:flex; gap:10px; flex-wrap:wrap;"></div>
-                </div>
-            </details>
-
-            <!-- Filtres de la base -->
-            <div class="card-panel" style="margin-bottom:15px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                    <div id="barreFiltresNiveauxBase" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
-                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                        <select id="selectFiltreMatiereBase" onchange="filtrerBaseMatiere(this.value)"></select>
-                        <select id="selectFiltreTypeBase" onchange="filtrerBaseType(this.value)"></select>
-                        <input type="text" id="inputRechercheBase" placeholder="🔍 Rechercher..." oninput="afficherBase()">
+        <!-- ========================================== -->
+        <!-- 3. TABLEAU DE BORD                         -->
+        <!-- ========================================== -->
+        <div id="pageDashboard" class="page">
+            <div class="panel">
+                <div class="page-header-flex">
+                    <h2>📊 3. Tableau de bord de la classe</h2>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button type="button" class="btn-valid" onclick="cloturerSemaineClasseGlobale()">🏁 Clôturer la semaine pour TOUTE la classe</button>
+                        <button type="button" class="filter-btn" id="btnToggleArchivesDash" onclick="toggleAfficherArchives()">👁️ Voir les archives</button>
+                        <button type="button" class="filter-btn" onclick="viderArchives()">🗑️ Vider les archives</button>
+                        <button type="button" class="btn-action" onclick="rafraichirDashboard()">🔄 Actualiser</button>
                     </div>
                 </div>
+                <div id="dashboardContent"></div>
             </div>
-
-            <p style="margin-bottom:8px; font-size:13px; color:#555;">Total affiché : <strong id="compteurBaseAffichee">0</strong> activité(s)</p>
-            <table class="table-classique">
-                <thead>
-                    <tr>
-                        <th style="width:70px;">Niveau</th>
-                        <th style="width:65px;">Période</th>
-                        <th style="width:170px;">Matière / Séquence</th>
-                        <th>Compétence</th>
-                        <th>Ressource & Support</th>
-                        <th style="width:160px;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="tableBaseDonnees"></tbody>
-            </table>
-        </section>
+        </div>
 
         <!-- ========================================== -->
-        <!-- 4. PROGRAMMATIONS PAR PÉRIODES (P1 à P5)   -->
+        <!-- 4. BASE DE DONNÉES DES ATELIERS            -->
         <!-- ========================================== -->
-        <section id="pageProg" class="page">
-            <h2>📅 Programmations annuelles par périodes (P1 à P5)</h2>
-            <div class="card-panel" style="margin-bottom:15px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-                <label>Niveau :
-                    <select id="selectNiveauProg" onchange="afficherProgrammation()">
-                        <option value="Tous">Tous les niveaux</option>
-                        <option value="CP">CP</option>
-                        <option value="CE1">CE1</option>
-                        <option value="CE2">CE2</option>
-                        <option value="CM1">CM1</option>
-                        <option value="CM2">CM2</option>
-                    </select>
-                </label>
-                <label>Matière :
-                    <select id="selectMatiereProg" onchange="afficherProgrammation()">
-                        <option value="Toutes">Toutes les matières</option>
-                    </select>
-                </label>
-                <label>Filtrer Période :
-                    <select id="selectPeriodeProg" onchange="afficherProgrammation()">
-                        <option value="Toutes">Toutes (P1 à P5)</option>
-                        <option value="P1">Période 1</option>
-                        <option value="P2">Période 2</option>
-                        <option value="P3">Période 3</option>
-                        <option value="P4">Période 4</option>
-                        <option value="P5">Période 5</option>
-                        <option value="Non_affecte">Non affectées</option>
-                    </select>
-                </label>
+        <div id="pageBase" class="page">
+            <div class="panel">
+                <div class="page-header-flex">
+                    <h2>📁 4. Base de données des activités et ateliers</h2>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button type="button" class="filter-btn" onclick="ouvrirModalGestionMatieres()">⚙️ Matières</button>
+                        <button type="button" class="filter-btn" onclick="ouvrirModalGestionSequences()">⚙️ Séquences</button>
+                        <button type="button" class="filter-btn" onclick="ouvrirModalGestionCompetences()">⚙️ Compétences</button>
+                        <button type="button" class="filter-btn" onclick="ouvrirModalGestionTypes()">⚙️ Types & Logos</button>
+                    </div>
+                </div>
+
+                <!-- Barre de bascule Saisie Simple / Saisie Multiple en rafale -->
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+                    <div style="display:flex; gap:8px;">
+                        <button type="button" class="btn-action" id="btnToggleSaisieMulti" onclick="toggleModeSaisieMultiple()">⚡ Passer en mode Saisie Multiple (plusieurs exercices d'un coup)</button>
+                    </div>
+                    <button type="button" class="btn-danger" onclick="viderBase()" style="font-size:12px;">🗑️ Vider toute la base</button>
+                </div>
+
+                <!-- MODE 1 : FORMULAIRE DE SAISIE SIMPLE -->
+                <div id="blocSaisieSimpleBase" class="card-panel" style="margin-bottom:20px;">
+                    <h3 id="titreFormulaireBase" style="margin-bottom:12px; color:#1b4f72;">➕ Ajouter ou modifier une activité</h3>
+                    <div class="form-grid-base">
+                        <div>
+                            <label>Matière :</label>
+                            <input type="text" id="inputMatiere" list="listeMatieresConnues" placeholder="Ex: Français, Mathématiques...">
+                            <datalist id="listeMatieresConnues"></datalist>
+                        </div>
+                        <div>
+                            <label>Séquence / Sous-matière :</label>
+                            <input type="text" id="inputSequence" list="listeSequencesConnues" placeholder="Ex: Numération, Grammaire...">
+                            <datalist id="listeSequencesConnues"></datalist>
+                        </div>
+                        <div>
+                            <label>Leçon (optionnel) :</label>
+                            <input type="text" id="inputLecon" placeholder="Ex: N1, G2...">
+                        </div>
+                        <div>
+                            <label>Compétence :</label>
+                            <input type="text" id="inputCompetence" list="listeCompetencesConnues" placeholder="Ex: Dénombrer jusqu'à 100">
+                            <datalist id="listeCompetencesConnues"></datalist>
+                        </div>
+                        <div>
+                            <label>Nom de la ressource / Exercice :</label>
+                            <input type="text" id="inputRessource" placeholder="Ex: Ex 1 p.24 ou Cartes N1">
+                        </div>
+                        <div>
+                            <label>Type de support :</label>
+                            <select id="selectTypeRessource"></select>
+                        </div>
+                        <div>
+                            <label>Page / Détail Manuel (📘) :</label>
+                            <input type="text" id="inputPageManuel" placeholder="Ex: p. 24 ex 2">
+                        </div>
+                        <div>
+                            <label>Variante Fichier Jaune (📒) :</label>
+                            <input type="text" id="inputVarianteJaune" placeholder="Ex: Fichier p. 18">
+                        </div>
+                        <div>
+                            <label>Période :</label>
+                            <select id="selectPeriodeForm">
+                                <option value="">-- Sans période --</option>
+                                <option value="P1">Période 1</option>
+                                <option value="P2">Période 2</option>
+                                <option value="P3">Période 3</option>
+                                <option value="P4">Période 4</option>
+                                <option value="P5">Période 5</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Difficulté (Étoiles) :</label>
+                            <select id="selectDifficulte">
+                                <option value="0">Aucune étoile</option>
+                                <option value="1">⭐ (Niveau 1)</option>
+                                <option value="2">⭐⭐ (Niveau 2)</option>
+                                <option value="3">⭐⭐⭐ (Niveau 3)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Couleur étiquette :</label>
+                            <select id="selectCouleurRapide"></select>
+                        </div>
+                        <div>
+                            <label>Lien image spécifique :</label>
+                            <input type="text" id="inputImageAct" placeholder="URL image ou lien Google Drive">
+                        </div>
+                    </div>
+
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px; margin-top:15px; padding-top:12px; border-top:1px dashed #ccc;">
+                        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                            <strong>Niveaux :</strong>
+                            <label><input type="checkbox" class="cb-niveau-form" value="CP" checked> CP</label>
+                            <label><input type="checkbox" class="cb-niveau-form" value="CE1"> CE1</label>
+                            <label><input type="checkbox" class="cb-niveau-form" value="CE2"> CE2</label>
+                            <label><input type="checkbox" class="cb-niveau-form" value="CM1"> CM1</label>
+                            <label><input type="checkbox" class="cb-niveau-form" value="CM2"> CM2</label>
+                            <label style="margin-left:15px; background:#fcf3cf; padding:4px 8px; border-radius:4px; border:1px solid #f1c40f; cursor:pointer;">
+                                <input type="checkbox" id="cbEstEvaluation"> 🎯 Est une Évaluation
+                            </label>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <button type="button" class="btn-remove" id="btnAnnulerEditBase" style="display:none;" onclick="annulerEditionBase()">Annuler</button>
+                            <button type="button" class="btn-valid" id="btnSubmitBase" onclick="enregistrerActiviteBase()">💾 Enregistrer l'activité</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MODE 2 : SAISIE MULTIPLE D'EXERCICES POUR UNE MÊME SÉQUENCE -->
+                <div id="blocSaisieMultipleBase" class="card-panel" style="margin-bottom:20px; display:none; border:2px solid #2980b9; background:#f8fbff;">
+                    <h3 style="color:#1b4f72; margin-bottom:10px;">⚡ Saisie multiple d'exercices pour une même séquence</h3>
+                    <p style="font-size:13px; color:#555; margin-bottom:12px;">Définissez les paramètres communs (Niveau, Matière, Séquence) ci-dessous, puis saisissez tous vos exercices à la suite dans le tableau.</p>
+
+                    <div class="form-grid-base" style="margin-bottom:14px; padding-bottom:12px; border-bottom:1px dashed #bdc3c7;">
+                        <div>
+                            <label><strong>1. Niveaux communs :</strong></label>
+                            <div style="display:flex; gap:8px; padding-top:5px; flex-wrap:wrap;">
+                                <label><input type="checkbox" class="cb-niveau-multi" value="CP" checked> CP</label>
+                                <label><input type="checkbox" class="cb-niveau-multi" value="CE1"> CE1</label>
+                                <label><input type="checkbox" class="cb-niveau-multi" value="CE2"> CE2</label>
+                                <label><input type="checkbox" class="cb-niveau-multi" value="CM1"> CM1</label>
+                                <label><input type="checkbox" class="cb-niveau-multi" value="CM2"> CM2</label>
+                            </div>
+                        </div>
+                        <div>
+                            <label><strong>2. Matière commune :</strong></label>
+                            <input type="text" id="multiMatiere" list="listeMatieresConnues" placeholder="Ex: Mathématiques, Français...">
+                        </div>
+                        <div>
+                            <label><strong>3. Séquence commune :</strong></label>
+                            <input type="text" id="multiSequence" list="listeSequencesConnues" placeholder="Ex: Séquence 1, Numération...">
+                        </div>
+                        <div>
+                            <label><strong>4. Période commune (optionnel) :</strong></label>
+                            <select id="multiPeriode">
+                                <option value="">-- Sans période --</option>
+                                <option value="P1">Période 1</option>
+                                <option value="P2">Période 2</option>
+                                <option value="P3">Période 3</option>
+                                <option value="P4">Période 4</option>
+                                <option value="P5">Période 5</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="overflow-x:auto;">
+                        <table class="table-classique">
+                            <thead>
+                                <tr>
+                                    <th style="width:90px;">Leçon</th>
+                                    <th>Compétence</th>
+                                    <th>Nom de l'exercice / Ressource *</th>
+                                    <th style="width:125px;">Support</th>
+                                    <th style="width:115px;">📘 Page Manuel</th>
+                                    <th style="width:115px;">📒 Var. Jaune</th>
+                                    <th style="width:85px;">Étoiles</th>
+                                    <th style="width:55px; text-align:center;">🎯 Éval</th>
+                                    <th style="width:45px;"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodySaisieMultiple"></tbody>
+                        </table>
+                    </div>
+
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; flex-wrap:wrap; gap:10px;">
+                        <div style="display:flex; gap:8px;">
+                            <button type="button" class="btn-action" onclick="ajouterLigneSaisieMultiple(1)">➕ Ajouter 1 ligne</button>
+                            <button type="button" class="filter-btn" onclick="ajouterLigneSaisieMultiple(5)">➕ Ajouter 5 lignes</button>
+                        </div>
+                        <button type="button" class="btn-valid" onclick="enregistrerSaisieMultiple()" style="padding:10px 20px; font-size:14px;">💾 Enregistrer tous ces exercices d'un coup</button>
+                    </div>
+                </div>
+
+                <!-- Filtres de la base -->
+                <div class="card-panel" style="margin-bottom:15px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                        <div id="barreFiltresNiveauxBase" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                            <select id="selectFiltreMatiereBase" onchange="filtrerBaseMatiere(this.value)"></select>
+                            <select id="selectFiltreTypeBase" onchange="filtrerBaseType(this.value)"></select>
+                            <input type="text" id="inputRechercheBase" placeholder="🔍 Rechercher..." oninput="afficherBase()">
+                        </div>
+                    </div>
+                </div>
+
+                <p style="margin-bottom:8px; font-size:13px; color:#555;">Total affiché : <strong id="compteurBaseAffichee">0</strong> activité(s)</p>
+                <table class="table-classique">
+                    <thead>
+                        <tr>
+                            <th style="width:70px;">Niveau</th>
+                            <th style="width:65px;">Période</th>
+                            <th style="width:170px;">Matière / Séquence</th>
+                            <th>Compétence</th>
+                            <th>Ressource & Support</th>
+                            <th style="width:95px;">Visuel</th>
+                            <th style="width:150px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBaseDonnees"></tbody>
+                </table>
             </div>
-            <div id="contenuProgrammation"></div>
-        </section>
+        </div>
 
         <!-- ========================================== -->
-        <!-- 5. GÉNÉRATEUR D'ÉTIQUETTES                 -->
+        <!-- 5. PROGRAMMATION (P1 à P5)                 -->
         <!-- ========================================== -->
-        <section id="pageEtiquettes" class="page">
-            <div class="no-print">
-                <h2>🏷️ Générateur d'étiquettes d'ateliers</h2>
-                <div class="card-panel" style="margin-bottom:15px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                        <select id="selectNiveauEtiquettes" onchange="afficherChoixEtiquettes()">
+        <div id="pageProg" class="page">
+            <div class="panel">
+                <h2>📅 5. Programmation annuelle par périodes (P1 à P5)</h2>
+                <div class="card-panel" style="margin-bottom:15px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                    <label><strong>Niveau :</strong>
+                        <select id="selectNiveauProg" onchange="afficherProgrammation()">
                             <option value="Tous">Tous les niveaux</option>
                             <option value="CP">CP</option>
                             <option value="CE1">CE1</option>
@@ -433,142 +504,309 @@
                             <option value="CM1">CM1</option>
                             <option value="CM2">CM2</option>
                         </select>
-                        <select id="selectMatiereEtiquettes" onchange="afficherChoixEtiquettes()">
+                    </label>
+                    <label><strong>Matière :</strong>
+                        <select id="selectMatiereProg" onchange="afficherProgrammation()">
                             <option value="Toutes">Toutes les matières</option>
                         </select>
-                        <button type="button" class="filter-btn" onclick="cocherToutesEtiquettes(true)">✅ Tout cocher</button>
-                        <button type="button" class="filter-btn" onclick="cocherToutesEtiquettes(false)">❌ Tout décocher</button>
-                    </div>
-                    <div style="display:flex; gap:8px;">
-                        <button type="button" class="btn-action" onclick="genererEtiquettesAImprimer()">🔄 Générer l'aperçu</button>
-                        <button type="button" class="btn-valid" onclick="window.print()">🖨️ Imprimer les étiquettes</button>
-                    </div>
+                    </label>
+                    <label><strong>Filtrer Période :</strong>
+                        <select id="selectPeriodeProg" onchange="afficherProgrammation()">
+                            <option value="Toutes">Toutes (P1 à P5)</option>
+                            <option value="P1">Période 1</option>
+                            <option value="P2">Période 2</option>
+                            <option value="P3">Période 3</option>
+                            <option value="P4">Période 4</option>
+                            <option value="P5">Période 5</option>
+                            <option value="Non_affecte">Non affectées</option>
+                        </select>
+                    </label>
                 </div>
-                <div id="listeChoixEtiquettes" style="max-height:220px; overflow-y:auto; margin-bottom:20px; border:1px solid #ddd; border-radius:6px; padding:10px; background:#fff;"></div>
+                <div id="contenuProgrammation"></div>
             </div>
-            <div id="zoneApercuEtiquettes" class="etiquettes-grid-print"></div>
-        </section>
+        </div>
 
         <!-- ========================================== -->
-        <!-- 6. IMPRESSION DES FICHES PLANS DE TRAVAIL  -->
+        <!-- 6. ÉTIQUETTES (STUDIO D'IMPRESSION)        -->
         <!-- ========================================== -->
-        <section id="pageImpression" class="page">
-            <div class="no-print">
-                <h2>🖨️ Impression des Fiches Plans de Travail</h2>
-                <div class="card-panel" style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-                    <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-                        <label>Élève ou Groupe :
-                            <select id="selectEleveImpression" onchange="changementEleveImpression()"></select>
-                        </label>
-                        <label>Format :
-                            <select id="selectFormatImpression" onchange="changementEleveImpression()">
-                                <option value="A4">📄 A4 Complet (1 élève / page)</option>
-                                <option value="A5">📑 A5 Compact (2 élèves / page)</option>
+        <div id="pageEtiquettes" class="page">
+            <div class="panel no-print">
+                <h2 style="color: #8e44ad;">🏷️ 6. Studio d'impression d'Étiquettes</h2>
+                <div class="card-panel" style="margin-bottom:15px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                            <select id="selectNiveauEtiquettes" onchange="afficherChoixEtiquettes()">
+                                <option value="Tous">Tous les niveaux</option>
+                                <option value="CP">CP</option>
+                                <option value="CE1">CE1</option>
+                                <option value="CE2">CE2</option>
+                                <option value="CM1">CM1</option>
+                                <option value="CM2">CM2</option>
                             </select>
-                        </label>
+                            <select id="selectMatiereEtiquettes" onchange="afficherChoixEtiquettes()">
+                                <option value="Toutes">Toutes les matières</option>
+                            </select>
+                            <select id="selectTypeEtiquettes" onchange="afficherChoixEtiquettes()">
+                                <option value="Tous">Tous les supports</option>
+                            </select>
+                            <button type="button" class="filter-btn" onclick="cocherToutesEtiquettes(true)">✅ Tout cocher</button>
+                            <button type="button" class="filter-btn" onclick="cocherToutesEtiquettes(false)">❌ Tout décocher</button>
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <button type="button" class="btn-action" onclick="genererApercuEtiquettes()">🔄 Générer l'aperçu</button>
+                            <button type="button" class="btn-valid" onclick="lancerImpressionEtiquettes()">🖨️ Imprimer les étiquettes</button>
+                        </div>
                     </div>
-                    <button type="button" class="btn-valid" onclick="window.print()">🖨️ Lancer l'impression</button>
+
+                    <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; font-size:13px; padding-top:10px; border-top:1px dashed #ccc;">
+                        <label>Largeur (px) : <input type="number" id="etiqLargeurInput" value="220" min="120" max="450" style="width:65px;" onchange="genererApercuEtiquettes()"></label>
+                        <label>Hauteur min (px) : <input type="number" id="etiqHauteurInput" value="95" min="50" max="300" style="width:65px;" onchange="genererApercuEtiquettes()"></label>
+                        <label>Police (px) : <input type="number" id="etiqFontInput" value="14" min="10" max="26" style="width:55px;" onchange="genererApercuEtiquettes()"></label>
+                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowComp" checked onchange="genererApercuEtiquettes()"> Afficher la compétence</label>
+                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowImg" checked onchange="genererApercuEtiquettes()"> Afficher les logos/images</label>
+                    </div>
                 </div>
+                <div id="listeChoixEtiquettes" style="max-height:210px; overflow-y:auto; margin-bottom:20px; border:1px solid #ddd; border-radius:6px; padding:10px; background:#fff;"></div>
             </div>
-            <div id="zoneFichesImpression"></div>
-        </section>
+            <div id="printEtiquettesContainer" class="etiquettes-grid-print"></div>
+        </div>
 
         <!-- ========================================== -->
         <!-- 7. MATRICE DES COMPÉTENCES                 -->
         <!-- ========================================== -->
-        <section id="pageMatrice" class="page">
-            <h2>📈 Matrice de suivi des compétences</h2>
-            <div class="card-panel" style="margin-bottom:15px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-                <label>Niveau :
-                    <select id="selectNiveauMatrice" onchange="genererMatriceCompetences()">
-                        <option value="CP">CP</option>
-                        <option value="CE1">CE1</option>
-                        <option value="CE2">CE2</option>
-                        <option value="CM1">CM1</option>
-                        <option value="CM2">CM2</option>
-                    </select>
-                </label>
-                <label>Matière :
-                    <select id="selectMatiereMatrice" onchange="genererMatriceCompetences()">
-                        <option value="Toutes">Toutes les matières</option>
-                    </select>
-                </label>
+        <div id="pageMatrice" class="page">
+            <div class="panel">
+                <div class="page-header-flex no-print">
+                    <h2>🧮 7. Matrice des Compétences</h2>
+                    <button type="button" class="btn-valid" onclick="window.print()">🖨️ Imprimer la matrice</button>
+                </div>
+                <div class="card-panel no-print" style="margin-bottom:15px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                    <label><strong>Niveau :</strong>
+                        <select id="selectNiveauMatrice" onchange="genererMatriceCompetences()">
+                            <option value="CP">CP</option>
+                            <option value="CE1">CE1</option>
+                            <option value="CE2">CE2</option>
+                            <option value="CM1">CM1</option>
+                            <option value="CM2">CM2</option>
+                        </select>
+                    </label>
+                    <label><strong>Matière :</strong>
+                        <select id="selectMatiereMatrice" onchange="genererMatriceCompetences()">
+                            <option value="Toutes">Toutes les matières</option>
+                        </select>
+                    </label>
+                </div>
+                <div id="conteneurMatrice" style="overflow-x:auto;"></div>
             </div>
-            <div id="conteneurMatrice" style="overflow-x:auto;"></div>
-        </section>
+        </div>
 
         <!-- ========================================== -->
-        <!-- 8. BILAN DES ÉVALUATIONS (LSU)             -->
+        <!-- 8. BILANS & EXPORT EDULIVRET / LSU         -->
         <!-- ========================================== -->
-        <section id="pageBilan" class="page">
-            <div class="page-header-flex no-print">
-                <h2>📋 Bilan individuel des compétences et évaluations</h2>
-                <div style="display:flex; gap:10px; align-items:center;">
-                    <select id="selectEleveBilan" onchange="genererBilanEleve()"></select>
-                    <button type="button" class="btn-valid" onclick="window.print()">🖨️ Imprimer le bilan</button>
+        <div id="pageBilan" class="page">
+            <div class="panel">
+                <div class="page-header-flex no-print">
+                    <h2>📝 8. Bilans individuels & Export Edulivret / LSU</h2>
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                        <select id="selectEleveBilan" onchange="genererBilanEleve()"></select>
+                        <button type="button" class="btn-action" onclick="exporterBilanEdulivret()">📋 Exporter pour Edulivret / LSU</button>
+                        <button type="button" class="btn-valid" onclick="window.print()">🖨️ Imprimer le bilan</button>
+                    </div>
                 </div>
+                <div id="zoneExportEdulivret" class="card-panel no-print" style="display:none; margin-bottom:18px; background:#f8fbff; border:1px solid #2980b9;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <strong style="color:#1b4f72;">📋 Texte formaté prêt à coller dans Edulivret / LSU :</strong>
+                        <button type="button" class="filter-btn" onclick="document.getElementById('zoneExportEdulivret').style.display='none'">✖ Fermer</button>
+                    </div>
+                    <textarea id="textareaExportLSU" rows="7" style="width:100%; padding:10px; border-radius:6px; border:1px solid #bdc3c7; font-size:13px;"></textarea>
+                </div>
+                <div id="conteneurBilanEleve"></div>
             </div>
-            <div id="conteneurBilanEleve"></div>
-        </section>
+        </div>
 
         <!-- ========================================== -->
         <!-- 9. SAUVEGARDE, RESTAURATION & CLOUD        -->
         <!-- ========================================== -->
-        <section id="pageSave" class="page">
-            <h2>💾 Sauvegarde, Restauration & Synchronisation Cloud</h2>
+        <div id="pageSave" class="page">
+            <div class="panel">
+                <h2>💾 9. Sauvegarde, Restauration & Synchronisation Cloud</h2>
 
-            <!-- 1. Restauration Fichier JSON -->
-            <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #27ae60;">
-                <h3 style="color:#1e8449; margin-bottom:8px;">📤 1. Restaurer vos données depuis un fichier JSON</h3>
-                <p style="font-size:14px; margin-bottom:12px;">Sélectionnez votre fichier `.json` de sauvegarde. La restauration se lance automatiquement dès la sélection (ou en cliquant sur le bouton ci-dessous).</p>
-                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                    <input type="file" id="inputFichierJson" onchange="restaurerFichierJSON(event)" accept=".json,application/json" style="padding:10px; border:2px dashed #27ae60; border-radius:6px; flex:1; background:#f9fffb;">
-                    <button type="button" class="btn-valid" onclick="restaurerSauvegarde()" style="padding:12px 20px; font-size:15px;">🔄 Restaurer les données du fichier</button>
+                <!-- 1. Restauration Fichier JSON -->
+                <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #27ae60;">
+                    <h3 style="color:#1e8449; margin-bottom:8px;">📤 1. Restaurer vos données depuis un fichier JSON</h3>
+                    <p style="font-size:14px; margin-bottom:12px;">Sélectionnez votre fichier `.json` de sauvegarde. La restauration se lance dès la sélection ou en cliquant sur le bouton.</p>
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                        <input type="file" id="inputFichierJson" onchange="restaurerFichierJSON(event)" accept=".json,application/json" style="padding:10px; border:2px dashed #27ae60; border-radius:6px; flex:1; background:#f9fffb;">
+                        <button type="button" class="btn-valid" onclick="restaurerSauvegarde()" style="padding:12px 20px; font-size:15px;">🔄 Restaurer les données</button>
+                    </div>
+                </div>
+
+                <!-- 2. Restauration de secours par Copier-Coller direct -->
+                <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #e67e22;">
+                    <h3 style="color:#d35400; margin-bottom:8px;">📋 2. Restauration directe par Copier-Coller</h3>
+                    <p style="font-size:13px; margin-bottom:8px;">Collez ici le texte JSON de votre sauvegarde et cliquez sur <strong>Importer le texte collé</strong> :</p>
+                    <textarea id="textareaJsonSecours" rows="4" placeholder='Collez ici le contenu de votre sauvegarde (ex: {"base":[...], "eleves":{...}})' style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-family:monospace; font-size:12px; margin-bottom:8px;"></textarea>
+                    <button type="button" class="btn-action" onclick="restaurerDepuisTexteColle()" style="background:#e67e22;">⚡ Importer le texte collé maintenant</button>
+                </div>
+
+                <!-- 3. Export Sauvegarde Locale -->
+                <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #2980b9;">
+                    <h3 style="color:#1b4f72; margin-bottom:8px;">📥 3. Télécharger une sauvegarde complète (.json)</h3>
+                    <p style="font-size:14px; margin-bottom:12px;">Enregistrez une copie complète de vos élèves, plans de travail, ateliers et programmations sur votre ordinateur.</p>
+                    <button type="button" class="btn-action" onclick="exporterSauvegardeJSON()">💾 Télécharger ma sauvegarde (.json)</button>
+                </div>
+
+                <!-- 4. Synchronisation Firebase Cloud -->
+                <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #8e44ad;">
+                    <h3 style="color:#6c3483; margin-bottom:8px;">🔥 4. Synchronisation Cloud Firebase</h3>
+                    <p id="statutFirebase" style="font-weight:bold; color:#f39c12; margin-bottom:12px;">⏳ Vérification du Cloud...</p>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                        <button type="button" class="btn-valid" onclick="chargerDepuisFirebase(true)">⬇️ Récupérer les données depuis Firebase</button>
+                        <button type="button" class="btn-action" onclick="sauvegarderVersFirebase(true)">⬆️ Forcer l'envoi vers Firebase</button>
+                        <button type="button" class="filter-btn" onclick="inspecterToutesBranchesFirebase()">🔍 Chercher des sauvegardes sur tout le Cloud Firebase</button>
+                    </div>
+                </div>
+
+                <!-- 5. Stockage & Nettoyage du Cache -->
+                <div class="card-panel">
+                    <h3 style="margin-bottom:8px;">⚙️ 5. Stockage local & Réparation du cache</h3>
+                    <p id="texteStockage">Calcul en cours...</p>
+                    <div style="background:#e0e0e0; border-radius:6px; height:18px; width:100%; overflow:hidden; margin:10px 0 15px 0;">
+                        <div id="jaugeStockageFill" style="background:#27ae60; height:100%; width:0%;"></div>
+                    </div>
+                    <button type="button" class="filter-btn" onclick="viderCacheApplication()">🧹 Purger le cache hors-ligne (Service Worker) et recharger</button>
                 </div>
             </div>
-
-            <!-- 2. Restauration de secours par Copier-Coller direct -->
-            <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #e67e22;">
-                <h3 style="color:#d35400; margin-bottom:8px;">📋 2. Restauration directe par Copier-Coller (Secours 100 % infaillible)</h3>
-                <p style="font-size:13px; margin-bottom:8px;">Si votre fichier bloque ou si vous avez copié le texte de vos données depuis Firebase, collez simplement tout le texte JSON ci-dessous et cliquez sur <strong>Importer le texte collé</strong> :</p>
-                <textarea id="textareaJsonSecours" rows="4" placeholder='Collez ici le contenu de votre sauvegarde (ex: {"base":[...], "eleves":{...}})' style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-family:monospace; font-size:12px; margin-bottom:8px;"></textarea>
-                <button type="button" class="btn-action" onclick="restaurerDepuisTexteColle()" style="background:#e67e22;">⚡ Importer le texte collé maintenant</button>
-            </div>
-
-            <!-- 3. Export Sauvegarde Locale -->
-            <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #2980b9;">
-                <h3 style="color:#1b4f72; margin-bottom:8px;">📥 3. Télécharger une sauvegarde complète (.json)</h3>
-                <p style="font-size:14px; margin-bottom:12px;">Enregistrez une copie complète de vos élèves, plans de travail, ateliers et programmations sur votre ordinateur.</p>
-                <button type="button" class="btn-action" onclick="exporterSauvegardeJSON()">💾 Télécharger ma sauvegarde (.json)</button>
-            </div>
-
-            <!-- 4. Synchronisation Firebase Cloud -->
-            <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #8e44ad;">
-                <h3 style="color:#6c3483; margin-bottom:8px;">🔥 4. Synchronisation Cloud Firebase</h3>
-                <p id="statutFirebase" style="font-weight:bold; color:#f39c12; margin-bottom:12px;">⏳ Vérification du Cloud...</p>
-                <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                    <button type="button" class="btn-valid" onclick="chargerDepuisFirebase(true)">⬇️ Récupérer les données depuis Firebase</button>
-                    <button type="button" class="btn-action" onclick="sauvegarderVersFirebase(true)">⬆️ Forcer l'envoi vers Firebase</button>
-                    <button type="button" class="filter-btn" onclick="inspecterToutesBranchesFirebase()">🔍 Chercher des sauvegardes sur tout le Cloud Firebase</button>
-                </div>
-            </div>
-
-            <!-- 5. Stockage & Nettoyage du Cache -->
-            <div class="card-panel">
-                <h3 style="margin-bottom:8px;">⚙️ 5. Stockage local & Réparation du cache</h3>
-                <p id="texteStockage">Calcul en cours...</p>
-                <div style="background:#e0e0e0; border-radius:6px; height:18px; width:100%; overflow:hidden; margin:10px 0 15px 0;">
-                    <div id="jaugeStockageFill" style="background:#27ae60; height:100%; width:0%;"></div>
-                </div>
-                <button type="button" class="filter-btn" onclick="viderCacheApplication()">🧹 Purger le cache hors-ligne (Service Worker) et recharger</button>
-            </div>
-        </section>
+        </div>
 
     </main>
 
     <!-- ========================================== -->
-    <!-- FENÊTRES MODALES                           -->
+    <!-- TOUTES LES FENÊTRES MODALES                -->
     <!-- ========================================== -->
+
+    <!-- Modale Design -->
+    <div id="modalDesign" class="modal-overlay no-print" style="display:none;">
+        <div class="modal-content">
+            <h3 style="margin-top:0; color: #2c3e50;">🎨 Personnaliser le graphisme</h3>
+            <p style="font-size: 13px; color: #7f8c8d; margin-bottom: 15px;">Choisissez l'ambiance visuelle de votre application (l'impression des fiches restera toujours sur fond blanc).</p>
+            
+            <div class="theme-card" id="card_theme_classique" onclick="appliquerThemeVisuel('classique')">
+                <div>
+                    <strong>💼 Classique (Origine)</strong><br>
+                    <span style="font-size: 12px; color: #7f8c8d;">Couleurs franches et onglets colorés contrastés</span>
+                </div>
+                <div class="theme-preview-dots">
+                    <span class="theme-dot" style="background:#2c3e50;"></span>
+                    <span class="theme-dot" style="background:#2980b9;"></span>
+                    <span class="theme-dot" style="background:#27ae60;"></span>
+                </div>
+            </div>
+
+            <div class="theme-card active-theme" id="card_theme_pastel" onclick="appliquerThemeVisuel('pastel')">
+                <div>
+                    <strong>🌸 Pastel Poudré</strong><br>
+                    <span style="font-size: 12px; color: #7f8c8d;">Teintes douces macaron, lavande et menthe</span>
+                </div>
+                <div class="theme-preview-dots">
+                    <span class="theme-dot" style="background:#e8dff5;"></span>
+                    <span class="theme-dot" style="background:#a2d2ff;"></span>
+                    <span class="theme-dot" style="background:#ffcad4;"></span>
+                </div>
+            </div>
+
+            <div class="theme-card" id="card_theme_doodles" onclick="appliquerThemeVisuel('doodles')">
+                <div>
+                    <strong>✏️ Pastel + Doodles École</strong><br>
+                    <span style="font-size: 12px; color: #7f8c8d;">Ambiance pastel avec petits motifs d'école en fond</span>
+                </div>
+                <div class="theme-preview-dots">
+                    <span class="theme-dot" style="background:#faf6f2; border:1px solid #d8c8e8;"></span>
+                    <span class="theme-dot" style="background:#b8c0ff;"></span>
+                    <span class="theme-dot" style="background:#b7e4c7;"></span>
+                </div>
+            </div>
+
+            <div class="theme-card" id="card_theme_nature" onclick="appliquerThemeVisuel('nature')">
+                <div>
+                    <strong>🌿 Nature & Sauge</strong><br>
+                    <span style="font-size: 12px; color: #7f8c8d;">Tons apaisants vert sauge, lin et forêt</span>
+                </div>
+                <div class="theme-preview-dots">
+                    <span class="theme-dot" style="background:#cad2c5;"></span>
+                    <span class="theme-dot" style="background:#84a98c;"></span>
+                    <span class="theme-dot" style="background:#52796f;"></span>
+                </div>
+            </div>
+
+            <button onclick="fermerModal('modalDesign')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:8px; cursor:pointer; margin-top: 10px;">Fermer</button>
+        </div>
+    </div>
+
+    <!-- Modale Gestion des Matières -->
+    <div id="modalMatieres" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:650px;">
+            <h3>⚙️ Gérer et renommer les Matières</h3>
+            <p style="font-size:12.5px; color:#666; margin-bottom:10px;">Renommer une matière ici mettra automatiquement à jour toutes les activités associées.</p>
+            <div id="listeMatieresModalContainer" style="max-height:320px; overflow-y:auto; margin:12px 0; border:1px solid #ddd; padding:10px; border-radius:6px;"></div>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" class="btn-remove" onclick="fermerModal('modalMatieres')">Fermer</button>
+                <button type="button" class="btn-valid" onclick="sauvegarderToutesMatieres()">💾 Enregistrer les modifications</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale Gestion des Séquences -->
+    <div id="modalSequences" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:680px;">
+            <h3>⚙️ Gérer et renommer les Séquences / Sous-matières</h3>
+            <div style="margin:10px 0;">
+                <label>Filtrer par matière : <select id="filtreMatiereModalSeq" onchange="afficherListeSequencesModal()"></select></label>
+            </div>
+            <div id="listeSequencesModalContainer" style="max-height:320px; overflow-y:auto; margin:12px 0; border:1px solid #ddd; padding:10px; border-radius:6px;"></div>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" class="btn-remove" onclick="fermerModal('modalSequences')">Fermer</button>
+                <button type="button" class="btn-valid" onclick="sauvegarderToutesSequences()">💾 Enregistrer les modifications</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale Gestion des Compétences -->
+    <div id="modalCompetences" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:720px;">
+            <h3>⚙️ Gérer et renommer les Compétences</h3>
+            <div style="margin:10px 0;">
+                <label>Filtrer par matière : <select id="filtreMatiereModalComp" onchange="afficherListeCompetencesModal()"></select></label>
+            </div>
+            <div id="listeCompetencesModalContainer" style="max-height:320px; overflow-y:auto; margin:12px 0; border:1px solid #ddd; padding:10px; border-radius:6px;"></div>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" class="btn-remove" onclick="fermerModal('modalCompetences')">Fermer</button>
+                <button type="button" class="btn-valid" onclick="sauvegarderToutesCompetences()">💾 Enregistrer les modifications</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale Gestion des Types de supports & Logos -->
+    <div id="modalTypes" class="modal" style="display:none;">
+        <div class="modal-content" style="max-width:760px;">
+            <h3>⚙️ Gérer les Types de supports, Logos & Quotas Tablettes</h3>
+            <div style="background:#f8f9fa; padding:10px; border-radius:6px; margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                <input type="text" id="inputNouveauTypeNom" placeholder="Nouveau type (ex: Anton)">
+                <input type="text" id="inputNouveauTypeImg" placeholder="URL image/logo (optionnel)" style="flex:1;">
+                <label style="font-size:12px;"><input type="checkbox" id="cbNouveauTypeRempNum"> Logo remplace N°</label>
+                <label style="font-size:12px;"><input type="checkbox" id="cbNouveauTypeCouleur" checked> Colorer</label>
+                <label style="font-size:12px;"><input type="checkbox" id="cbNouveauTypeTablette"> 📱 Tablette</label>
+                <button type="button" class="btn-action" onclick="ajouterOuModifierType()">➕ Ajouter</button>
+            </div>
+            <div id="listeTypesModalContainer" style="max-height:300px; overflow-y:auto; margin:10px 0; border:1px solid #ddd; padding:10px; border-radius:6px;"></div>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" class="btn-remove" onclick="fermerModal('modalTypes')">Fermer</button>
+                <button type="button" class="btn-valid" onclick="sauvegarderTousLesTypes()">💾 Enregistrer tous les types</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modale Dupliquer -->
     <div id="modalDupliquer" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>📋 Dupliquer le plan de <span id="nomEleveSourceDupli"></span></h3>
@@ -580,6 +818,7 @@
         </div>
     </div>
 
+    <!-- Modale Assigner -->
     <div id="modalAssigner" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>📌 Assigner l'activité : <span id="nomActiviteAssign"></span></h3>
@@ -602,6 +841,7 @@
         </div>
     </div>
 
+    <!-- Modale Éditer Élève -->
     <div id="modalEditEleve" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>✏️ Modifier l'élève</h3>
@@ -631,16 +871,6 @@
 
     <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" style="display:none; position:fixed; bottom:20px; right:20px; z-index:99; background:#1b4f72; color:#fff; border:none; padding:12px 16px; border-radius:50%; cursor:pointer; font-size:16px; box-shadow:0 3px 8px rgba(0,0,0,0.2);">⬆️</button>
 
-    <!-- Purge automatique des anciens Service Workers bloquants + chargement du script -->
-    <script>
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-          for (let registration of registrations) {
-            registration.update();
-          }
-        });
-      }
-    </script>
-    <script src="script.js?v=20261020"></script>
+    <script src="script.js?v=20261022"></script>
 </body>
 </html>
