@@ -370,8 +370,53 @@
     <div id="pageBase" class="page">
         <div class="panel">
             <h2>📁 Inventaire (Base de données)</h2>
+            
+            <!-- ACCÈS AU MODE SAISIE MULTIPLE -->
+            <div class="no-print" style="margin-bottom: 15px; background: #eaf2f8; padding: 12px; border-radius: 8px; border: 1px solid #2980b9; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                <div>
+                    <h4 style="margin:0; color:#2980b9;">⚡ Mode Saisie en Rafale (Multi-exercices)</h4>
+                    <span style="font-size:12px; color:#555;">Idéal pour ajouter plusieurs exercices d'un coup pour une même séquence (avec leçons et compétences personnalisables).</span>
+                </div>
+                <button type="button" class="btn-action" onclick="toggleModeSaisieMultiple()" id="btnToggleModeSaisie" style="background: #2980b9;">🚀 Ouvrir la saisie multiple</button>
+            </div>
+
+            <!-- CONTENEUR DU TABLEAU DE SAISIE MULTIPLE (Caché par défaut) -->
+            <div id="blocSaisieMultiple" class="panel no-print" style="display: none; background: #fdfefe; border: 2px dashed #2980b9; margin-bottom: 20px;">
+                <h3 style="margin-top:0; color: #2980b9;">📝 Ajout groupé d'exercices (Séquence fixe)</h3>
+                
+                <div class="cascade-box" style="background: #f8f9f9; padding: 10px; margin-bottom: 10px;">
+                    <div class="cascade-item"><label>Niveau commun</label><select id="multiNiveau"><option value="CP">CP</option><option value="CE1">CE1</option><option value="CE2">CE2</option><option value="CM1">CM1</option><option value="CM2">CM2</option></select></div>
+                    <div class="cascade-item"><label>Matière commune</label><input type="text" id="multiMatiere" placeholder="Ex: Français ou Mathématiques"></div>
+                    <div class="cascade-item"><label>Séquence commune</label><input type="text" id="multiSequence" placeholder="Ex: Séquence 3 - Les fractions"></div>
+                </div>
+
+                <div style="overflow-x: auto; max-height: 45vh; margin-bottom: 15px;">
+                    <table style="width:100%; font-size:12px;">
+                        <thead>
+                            <tr>
+                                <th style="width:70px;">Leçon</th>
+                                <th>Compétence</th>
+                                <th>Ressource / Exercice</th>
+                                <th>Page Manuel Standard</th>
+                                <th>Variante Fichier Jaune</th>
+                                <th style="width:90px; text-align:center;">Type</th>
+                                <th style="width:70px; text-align:center;">N° Atel.</th>
+                                <th style="width:40px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="lignesSaisieMultipleBody"></tbody>
+                    </table>
+                </div>
+
+                <div style="display:flex; gap:10px;">
+                    <button type="button" class="btn-action" onclick="ajouterLigneSaisieMultiple()" style="background: #27ae60;">➕ Ajouter une ligne d'exercice</button>
+                    <button type="button" class="btn-action" onclick="enregistrerSaisieMultiple()" style="background: #2980b9; margin-left: auto;">💾 Enregistrer toute la liste</button>
+                    <button type="button" onclick="toggleModeSaisieMultiple()" style="background: #95a5a6; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-weight:bold;">❌ Fermer</button>
+                </div>
+            </div>
+
             <div id="boxFormulaireManuel" class="manual-add-box no-print">
-                <h3 id="titreFormulaireManuel" style="margin-top:0; color: #2980b9;">➕ Ajouter une ou plusieurs activités</h3>
+                <h3 id="titreFormulaireManuel" style="margin-top:0; color: #2980b9;">➕ Ajouter une activité unitaire</h3>
                 <div style="margin-bottom: 15px; background: white; padding: 10px; border-radius: 5px; border: 1px solid #ccc;">
                     <label style="font-size: 13px; font-weight: bold; color: #7f8c8d; text-transform: uppercase; display: block; margin-bottom: 5px;">1. Niveau(x) concerné(s) (Cochez un ou plusieurs) :</label>
                     <div style="display: flex; gap: 15px; flex-wrap: wrap;">
@@ -404,22 +449,21 @@
                     <input type="text" id="addRessource" placeholder="6. Ressource / Ex. Manuel (ex: Ex. 4)" style="flex: 1;">
                 </div>
 
-                <!-- SUIVI DES MANUELS & VARIANTE FICHIER JAUNE (AMÉLIORATION 3) -->
+                <!-- SUIVI DES MANUELS & VARIANTE FICHIER JAUNE -->
                 <div class="form-row" style="background: #fdfefe; padding: 10px; border-radius: 6px; border: 1px solid #d5dbdb; align-items: center;">
+                    <div style="width:100%; font-size:12px; font-weight:bold; color:#d35400; margin-bottom:4px;">📚 Suivi des manuels & Différenciation automatique (Optionnel) :</div>
                     <div style="flex: 1; min-width: 170px;">
                         <label style="display:block; font-size:11px; font-weight:bold; color:#2980b9; margin-bottom:3px;">📖 Page Manuel Élève (Standard) :</label>
                         <input type="text" id="addPageManuel" placeholder="ex: p. 42 ou Ex 3 p. 42" style="width:100%;">
                     </div>
                     <div style="flex: 1; min-width: 170px;">
-                        <label style="display:block; font-size:11px; font-weight:bold; color:#8e44ad; margin-bottom:3px;">👩‍🏫 Page Guide du Maître (Pour vous) :</label>
-                        <input type="text" id="addPageGuide" placeholder="ex: GDM p. 88" style="width:100%;">
+                        <label style="display:block; font-size:11px; font-weight:bold; color:#8e44ad; margin-bottom:3px;">📖 Page Guide du Maître (Pour vous) :</label>
+                        <input type="text" id="addPageGDM" placeholder="ex: GDM p. 88" style="width:100%;">
                     </div>
                     <div style="flex: 2; min-width: 280px; background: #fff9db; padding: 8px; border-radius: 6px; border: 1px dashed #f1c40f;">
                         <label style="display:block; font-size:11px; font-weight:bold; color:#b7791f; margin-bottom:4px;">📒 Variante « Fichier Jaune » (auto pour les élèves concernés) :</label>
                         <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                            <input type="text" id="addRessourceJaune" placeholder="Ex. & Page Fichier Jaune (ex: Ex 2 p. 18)" style="flex: 1; min-width: 140px; font-size:12px;">
-                            <input type="text" id="addSymboleJaune" placeholder="N° Atelier / Code Jaune" style="width: 110px; font-size:12px;">
-                            <input type="text" id="addVisuelJaune" placeholder="Lien image Fichier Jaune (optionnel)" style="flex: 1; min-width: 140px; font-size:12px;">
+                            <input type="text" id="addVarianteJaune" placeholder="Ex. & Page Fichier Jaune (ex: Fichier p. 18 ex. 2)" style="flex: 1; min-width: 140px; font-size:12px;">
                         </div>
                     </div>
                 </div>
@@ -596,7 +640,7 @@
     </div>
 
     <!-- ==========================================
-         ONGLET 9 : SAUVEGARDE & CLOUD FIREBASE (AMÉLIORATION 7)
+         ONGLET 9 : SAUVEGARDE & CLOUD FIREBASE
          ========================================== -->
     <div id="pageSave" class="page">
         <div class="panel">
@@ -646,7 +690,7 @@
                 <div id="texteStockage" class="jauge-text" style="font-size: 13px; margin-top: 5px;">Calcul en cours...</div>
             </div>
 
-            <!-- 3. SAUVEGARDE MANUELLE JSON (ORDINATEUR / TABLETTE) -->
+            <!-- 3. SAUVEGARDE MANUELLE JSON -->
             <div style="background: #eaf2f8; border: 1px solid #3498db; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
                 <h3 style="margin-top:0; color: #2980b9;">📥 Sauvegarde Manuelle (Fichier sur l'appareil)</h3>
                 <button type="button" class="btn-action" onclick="exporterSauvegarde()" style="background: #2980b9;">📥 Télécharger le fichier JSON</button>
@@ -658,7 +702,7 @@
                 <button type="button" class="btn-action" style="margin-top: 10px; background: #c0392b; color: white;" onclick="restaurerSauvegarde()">📤 Restaurer les données</button>
             </div>
 
-            <!-- 4. SYNCHRONISATION GOOGLE DRIVE (OPTION SECOURS) -->
+            <!-- 4. SYNCHRONISATION GOOGLE DRIVE -->
             <div style="background: #e8f8f5; border: 1px solid #1abc9c; padding: 15px 20px; border-radius: 8px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap:wrap; gap:10px;">
                     <h4 style="margin:0; color: #16a085;">☁️ Option secours : Synchronisation Google Drive</h4>
