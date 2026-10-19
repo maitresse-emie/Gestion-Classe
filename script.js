@@ -171,11 +171,17 @@ function sauvegarderProgrammations() {
 // ==========================================
 function restaurerFichierJSON(event) {
     let fichier = event.target.files[0];
-    if (!fichier) return;
+    if (!fichier) {
+        console.log("Aucun fichier sélectionné.");
+        return;
+    }
+    console.log("Fichier sélectionné :", fichier.name);
     let lecteur = new FileReader();
     lecteur.onload = function(e) {
         try {
             let data = JSON.parse(e.target.result);
+            console.log("Données JSON parsées avec succès :", data);
+            
             if (data && (data.base || data.eleves)) {
                 baseDonnees = Array.isArray(data.base) ? data.base : [];
                 eleves = data.eleves || {};
@@ -193,15 +199,26 @@ function restaurerFichierJSON(event) {
                 showToast("✅ Données restaurées avec succès !", "success");
                 setTimeout(() => location.reload(), 1500);
             } else {
-                showToast("Format de fichier invalide.", "error");
+                console.warn("Le fichier JSON ne contient pas les clés 'base' ou 'eleves'.");
+                showToast("Format de fichier invalide (clés manquantes).", "error");
             }
         } catch (err) {
-            console.error("Erreur lecture JSON:", err);
-            showToast("Erreur lors de la lecture du fichier JSON.", "error");
+            console.error("Erreur de parsing JSON:", err);
+            showToast("Erreur : le fichier n'est pas un JSON valide.", "error");
         }
         event.target.value = "";
     };
     lecteur.readAsText(fichier);
+}
+
+// Fonction passerelle pour éviter toute erreur si le bouton appelle "restaurerSauvegarde"
+function restaurerSauvegarde() {
+    let input = document.getElementById('inputFichierJson');
+    if (input && input.files[0]) {
+        restaurerFichierJSON({ target: input });
+    } else {
+        showToast("Veuillez d'abord sélectionner un fichier JSON.", "error");
+    }
 }
 
 let timerFirebaseSave;
@@ -278,6 +295,7 @@ function tenterConnexionAutoFirebase() {
     if (dbUrlInput) dbUrlInput.value = URL_FIREBASE_FIXE;
     chargerDepuisFirebase(false);
 }
+
 function nettoyerNomPourTri(str) { return (!str) ? "" : str.replace(/^[^a-zA-ZÀ-ÿ0-9]+/, "").trim().toLowerCase(); }
 function formaterEtoiles(nb) { let n = parseInt(nb) || 0; return n <= 0 ? "" : `<span style="color:#f39c12; font-size:12px; margin-right:4px;" title="Difficulté : ${n} étoile(s)">${"⭐".repeat(n)}</span>`; }
 
@@ -656,7 +674,7 @@ function commencerNouvelleSemaine() {
             let nextIdx = Math.min(eleve.semaineIndex, eleve.semaines.length - 1), s = eleve.semaines[nextIdx];
             eleve.semaineIndex = nextIdx; if (!s.priorites) s.priorites = [];
             aTransferer.forEach(idAct => { if (!s.planHebdo.includes(idAct)) s.planHebdo.unshift(idAct); if (!s.priorites.includes(idAct)) s.priorites.push(idAct); });
-            eleve.planHebdo = [...s.planHebdo]; eleve.priorites = [...s.priorites]; eleve.joursAssignes = { ...(s.joursAssignes || {}) }; eleve.valides = { ...(s.valides || {}) }; eleve.suivi = { ...(s.suivi || {}), ...(s.suivi || {}) }; eleve.dateDebutISO = s.dateDebutISO || ""; eleve.dateDebut = s.dateDebut || ""; eleve.dateFin = s.dateFin || "";
+            eleve.planHebdo = [...s.planHebdo]; eleve.priorites = [...s.priorites]; eleve.joursAssignes = { ...(s.joursAssignes || {}) }; eleve.valides = { ...(s.valides || {}) }; eleve.suivi = { ...(eleve.suivi || {}), ...(s.suivi || {}) }; eleve.dateDebutISO = s.dateDebutISO || ""; eleve.dateDebut = s.dateDebut || ""; eleve.dateFin = s.dateFin || "";
         } else {
             let nextISO = "", nextDeb = "", nextFin = "";
             if (eleve.dateDebutISO) { let c = calculerVendrediDepuisISO(eleve.dateDebutISO); if (c.lundiSuivantISO) { nextISO = c.lundiSuivantISO; let c2 = calculerVendrediDepuisISO(nextISO); nextDeb = c2.debutFR; nextFin = c2.finFR; } }
