@@ -567,21 +567,54 @@
         <div id="zoneBilanPrint" style="background: white; padding: 20px; border: 1px solid #ccc; border-radius: 8px; min-height: 400px;"></div>
     </div>
 
-    <!-- ONGLET 9 : SAUVEGARDE -->
+    <!-- ONGLET 9 : SAUVEGARDE & CLOUD FIREBASE -->
     <div id="pageSave" class="page">
         <div class="panel">
-            <h2>💾 Sauvegarde</h2>
+            <h2>💾 Sécurité & Synchronisation Cloud</h2>
+
+            <!-- 1. CONNEXION CLOUD FIREBASE SANS EXPIRATION -->
+            <div style="background: #f0fdf4; border: 2px solid #22c55e; padding: 20px; border-radius: 12px; margin-bottom: 20px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
+                    <h3 style="margin:0; color: #15803d;">🔥 Synchronisation Cloud Temps Réel (Firebase)</h3>
+                    <span id="statutFirebase" style="font-weight:bold; font-size:13px; color:#15803d;">Non configuré</span>
+                </div>
+                <p style="font-size: 13px; color: #374151; margin-top:0;">
+                    Synchronisation instantanée et permanente entre tous vos appareils sans jamais expirer. Collez l'URL de votre base Realtime Database Firebase :
+                </p>
+
+                <div class="form-row" style="margin-bottom: 10px;">
+                    <input type="text" id="fbDbUrl" placeholder="URL Firebase (ex: https://mon-ecole-default-rtdb.europe-west1.firebasedatabase.app)" style="flex:2; min-width:240px;">
+                    <input type="text" id="fbApiKey" placeholder="Clé API Web (Optionnel)" style="flex:1; min-width:140px;">
+                </div>
+                <div class="form-row" style="align-items:center; margin-bottom:10px;">
+                    <input type="email" id="fbEmail" placeholder="E-mail enseignant (Optionnel)" style="flex:1; min-width:160px;">
+                    <input type="password" id="fbPassword" placeholder="Mot de passe (Optionnel)" style="flex:1; min-width:140px;">
+                    <button type="button" class="btn-action" onclick="connecterFirebase()" style="background:#16a34a;">🔥 Activer / Connecter</button>
+                    <button type="button" onclick="deconnecterFirebase()" style="background:#95a5a6; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer;">Déconnecter</button>
+                </div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button type="button" class="btn-action" onclick="sauvegarderVersFirebase()" style="background:#15803d; font-size:12px; padding:6px 12px;">⬆️ Forcer l'envoi vers le Cloud</button>
+                    <button type="button" class="btn-action" onclick="chargerDepuisFirebase(true)" style="background:#2563eb; font-size:12px; padding:6px 12px;">🔄 Récupérer depuis le Cloud</button>
+                </div>
+            </div>
+
+            <!-- 2. ESPACE DE STOCKAGE LOCAL -->
             <div style="background: #fff3cd; border: 1px solid #f1c40f; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                <h3 style="margin-top:0; color: #d35400;">📊 Stockage local</h3>
+                <h3 style="margin-top:0; color: #d35400;">📊 Espace de stockage de l'appareil</h3>
                 <div class="jauge-container" style="height: 25px;"><div id="jaugeStockageFill" class="jauge-fill" style="width: 0%; background-color: #27ae60;"></div></div>
-                <div id="texteStockage" class="jauge-text" style="font-size: 13px; margin-top: 5px;">Calcul...</div>
+                <div id="texteStockage" class="jauge-text" style="font-size: 13px; margin-top: 5px;">Calcul en cours...</div>
             </div>
+
+            <!-- 3. SAUVEGARDE MANUELLE JSON -->
             <div style="background: #eaf2f8; border: 1px solid #3498db; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-                <button type="button" class="btn-action" onclick="exporterSauvegarde()" style="background: #2980b9;">📥 Télécharger JSON</button>
+                <h3 style="margin-top:0; color: #2980b9;">📥 Sauvegarde Manuelle (Fichier sur l'appareil)</h3>
+                <button type="button" class="btn-action" onclick="exporterSauvegarde()" style="background: #2980b9;">📥 Télécharger le fichier JSON</button>
             </div>
+
             <div style="background: #fdedec; border: 1px solid #e74c3c; padding: 20px; border-radius: 8px;">
+                <h3 style="margin-top:0; color: #c0392b;">📤 Restaurer une sauvegarde JSON</h3>
                 <input type="file" id="fileImport" accept=".json" style="background: white; width: 100%; padding:10px;">
-                <button type="button" class="btn-action" style="margin-top: 10px; background: #c0392b; color: white;" onclick="restaurerSauvegarde()">📤 Restaurer</button>
+                <button type="button" class="btn-action" style="margin-top: 10px; background: #c0392b; color: white;" onclick="restaurerSauvegarde()">📤 Restaurer les données</button>
             </div>
         </div>
     </div>
