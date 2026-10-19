@@ -14,11 +14,22 @@ const KEY_ARCHIVES_TODO = 'dashboardArchives_Finale';
 const KEY_PROG = 'mesProgrammations_Finale';
 const KEY_THEME = 'monThemeVisuel_Finale';
 const KEY_FIREBASE_CFG = 'maConfigFirebase_Finale';
+const KEY_PRINT_CFG = 'maConfigImpression_Finale';
 
 let dashboardExpanded = new Set();
 let dashboardArchives = JSON.parse(localStorage.getItem(KEY_ARCHIVES_TODO)) || [];
 let afficherArchivesMode = false;
 let programmations = JSON.parse(localStorage.getItem(KEY_PROG)) || {};
+
+let printConfig = JSON.parse(localStorage.getItem(KEY_PRINT_CFG)) || {
+    titre: "Plan de travail",
+    consigne: "",
+    meteo: "meteo",
+    afficherCompteur: true,
+    afficherSignature: true,
+    afficherCommentaire: false,
+    afficherColBilan: true
+};
 
 let dateGlobaleDebutISO = "", dateGlobaleDebutFR = "", dateGlobaleFinFR = "";
 let filtreEtoilesDispo = 0;
@@ -190,6 +201,7 @@ function importerDonneesUniversel(rawData) {
     let nouvImages = parseSiString(data.images || data.imagesParType || data[KEY_IMAGES]);
     let nouvProg = parseSiString(data.programmations || data[KEY_PROG]);
     let nouvArchives = parseSiString(data.archives || data.dashboardArchives || data[KEY_ARCHIVES_TODO]);
+    let nouvPrintCfg = parseSiString(data.printConfig || data[KEY_PRINT_CFG]);
 
     if (!Array.isArray(nouvBase) && (!nouvEleves || typeof nouvEleves !== 'object')) {
         showToast("⚠️ Format non reconnu : ni ateliers ni élèves trouvés.", "error");
@@ -205,10 +217,11 @@ function importerDonneesUniversel(rawData) {
     if (nouvImages && typeof nouvImages === 'object') { imagesParType = nouvImages; localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType)); }
     if (nouvProg && typeof nouvProg === 'object') { programmations = nouvProg; localStorage.setItem(KEY_PROG, JSON.stringify(programmations)); }
     if (Array.isArray(nouvArchives)) { dashboardArchives = nouvArchives; localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); }
+    if (nouvPrintCfg && typeof nouvPrintCfg === 'object') { printConfig = { ...printConfig, ...nouvPrintCfg }; localStorage.setItem(KEY_PRINT_CFG, JSON.stringify(printConfig)); }
     if (data.theme) appliquerThemeVisuel(data.theme);
 
     rafraichirToutApresImport();
-    showToast(`✅ Restauration réussie (${baseDonnees.length} ateliers, ${Object.keys(eleves).length} élèves) !`, "success");
+    showToast(`✅ Restauration réussie (${baseDonnees.length} ateliers,${Object.keys(eleves).length} élèves) !`, "success");
     return true;
 }
 
@@ -220,6 +233,7 @@ function rafraichirToutApresImport() {
     majListeEleves();
     initNiveaux();
     initProgFilters();
+    chargerConfigImpressionUI();
     afficherProgrammation();
     afficherBase();
     afficherChoixEtiquettes();
@@ -269,7 +283,7 @@ function restaurerDepuisTexteColle() {
 
 function exporterSauvegardeJSON() {
     Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
-    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, theme: localStorage.getItem(KEY_THEME) || 'pastel', exportedAt: new Date().toISOString() };
+    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, printConfig: printConfig, theme: localStorage.getItem(KEY_THEME) || 'pastel', exportedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -293,12 +307,12 @@ const URL_FIREBASE_FIXE = "https://gestionclasse-cc401-default-rtdb.europe-west1
 async function sauvegarderVersFirebase(forcerManuellement = false) {
     if (!forcerManuellement && baseDonnees.length === 0 && Object.keys(eleves).length === 0) return;
     Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
-    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, theme: localStorage.getItem(KEY_THEME) || 'pastel', updatedAt: new Date().toISOString() };
+    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, printConfig: printConfig, theme: localStorage.getItem(KEY_THEME) || 'pastel', updatedAt: new Date().toISOString() };
     try {
         let res = await fetch(`${URL_FIREBASE_FIXE}/classe_data.json`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         let statut = document.getElementById('statutFirebase');
-        if (statut) { statut.innerText = `🔥 Synchro Cloud OK (${new Date().toLocaleTimeString()} — ${baseDonnees.length} ateliers, ${Object.keys(eleves).length} élèves)`; statut.style.color = "#27ae60"; }
+        if (statut) { statut.innerText = `🔥 Synchro Cloud OK (${new Date().toLocaleTimeString()} — ${baseDonnees.length} ateliers,${Object.keys(eleves).length} élèves)`; statut.style.color = "#27ae60"; }
         if (forcerManuellement) showToast("⬆️ Données envoyées sur Firebase !", "success");
     } catch (e) {
         if (forcerManuellement) showToast("Erreur Firebase : " + e.message, "error");
@@ -317,12 +331,12 @@ async function chargerDepuisFirebase(forcer = false) {
 
         if (data && (nbBaseCloud > 0 || nbElevesCloud > 0)) {
             let localEstVide = (baseDonnees.length === 0 && Object.keys(eleves).length === 0);
-            if (forcer || localEstVide || confirm(`Cloud Firebase trouvé (${nbBaseCloud} ateliers, ${nbElevesCloud} élèves). Charger ces données ?`)) {
+            if (forcer || localEstVide || confirm(`Cloud Firebase trouvé (${nbBaseCloud} ateliers,${nbElevesCloud} élèves). Charger ces données ?`)) {
                 importerDonneesUniversel(data);
             }
-            if (statut) { statut.innerText = `🔥 Cloud Firebase connecté (${nbBaseCloud} ateliers, ${nbElevesCloud} élèves)`; statut.style.color = "#27ae60"; }
+            if (statut) { statut.innerText = `🔥 Cloud Firebase connecté (${nbBaseCloud} ateliers,${nbElevesCloud} élèves)`; statut.style.color = "#27ae60"; }
         } else {
-            if (statut) { statut.innerText = "ℹ️ Cloud vide ou prêt. Vos données locales sont conservées."; statut.style.color = "#2980b9"; }
+            if (statut) { statut.innerText = "ℹ️ Cloud prêt. Vos données locales sont conservées."; statut.style.color = "#2980b9"; }
             if (baseDonnees.length > 0 || Object.keys(eleves).length > 0) sauvegarderVersFirebase(false);
         }
     } catch (e) {
@@ -484,13 +498,13 @@ function calculTailleStockage() {
     let _lsTotal = 0, _xLen, _x;
     for (_x in localStorage) { if (!localStorage.hasOwnProperty(_x)) continue; _xLen = ((localStorage[_x].length + _x.length) * 2); _lsTotal += _xLen; }
     let megaBytes = (_lsTotal / (1024 * 1024)).toFixed(2), pct = Math.min(100, (megaBytes / 5) * 100);
-    let texteSto = document.getElementById('texteStockage'); if (texteSto) texteSto.innerText = `${megaBytes} Mo utilisés sur environ 5.00 Mo (${baseDonnees.length} ateliers, ${Object.keys(eleves).length} élèves en mémoire)`;
+    let texteSto = document.getElementById('texteStockage'); if (texteSto) texteSto.innerText = `${megaBytes} Mo utilisés sur environ 5.00 Mo (${baseDonnees.length} ateliers,${Object.keys(eleves).length} élèves en mémoire)`;
     let jauge = document.getElementById('jaugeStockageFill');
     if (jauge) { jauge.style.width = pct + "%"; jauge.style.backgroundColor = pct > 80 ? "#e74c3c" : (pct > 50 ? "#f39c12" : "#27ae60"); }
 }
 
 // ==========================================
-// 4. ONGLET 1 : PLAN & SUIVI ÉLÈVES (+ FILE D'ATTENTE & ÉVALS)
+// 4. ONGLET 1 : PLAN & SUIVI ÉLÈVES
 // ==========================================
 function toggleFichierJauneEleve(isChecked) {
     if (!idEleveCourant || !eleves[idEleveCourant]) return;
@@ -601,7 +615,7 @@ function majBarreSemainesUI() {
     if (sel) {
         let html = '';
         e.semaines.forEach((s, idx) => {
-            let datesTxt = (s.dateDebut && s.dateFin) ? ` (du ${s.dateDebut} au ${s.dateFin})` : '';
+            let datesTxt = (s.dateDebut && s.dateFin) ? ` (du ${s.dateDebut} au${s.dateFin})` : '';
             html += `<option value="${idx}">Semaine ${idx + 1}${datesTxt} — ${s.planHebdo.length} act.${idx === 0 ? ' [En cours]' : ' [D\'avance]'}</option>`;
         });
         sel.innerHTML = html; sel.value = e.semaineIndex;
@@ -740,7 +754,7 @@ function afficherRessourcesDisponibles() {
         if (nivAct && !nivAct.includes(nivEleve) && nivAct !== "TOUS") return false;
         if (mat !== 'TOUTES_MATIERES' && (a.matiere || "").trim() !== mat) return false;
         if (seq && seq !== 'TOUTES_SEQUENCES' && (a.sequence || "").trim() !== seq) return false;
-        let cleCompProg = `${a.matiere}||${a.sequence}||${a.competence}`;
+        let cleCompProg = `${a.matiere}||${a.sequence}\vert{}\vert{}${a.competence}`;
         let perAct = programmations[a.id] || programmations[cleCompProg] || a.periode || "";
         if (per !== 'Toutes' && !perAct.includes(per)) return false;
         if (filtreEtoilesDispo > 0 && (parseInt(a.difficulte) || 0) !== filtreEtoilesDispo) return false;
@@ -762,9 +776,9 @@ function afficherRessourcesDisponibles() {
         let perAct = programmations[a.id] || a.periode || "-";
         html += `<tr>
             <td><strong>${escHTML(a.niveau)}</strong><br><small style="color:#7f8c8d;">${escHTML(perAct)}</small></td>
-            <td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${coul.bg}; margin-right:4px;"></span><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
+            <td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${coul.bg}; margin-right:4px;"></span><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
             <td>${escHTML(a.competence)}</td>
-            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infos.badgeLivre} ${a.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : ''}</td>
+            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infos.badgeLivre}${a.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : ''}</td>
             <td>
                 <select id="jour_dispo_${a.id}" style="width:100%; padding:4px; font-size:12px;">
                     <option value="">-- Libre --</option>
@@ -951,7 +965,6 @@ function estActiviteTablette(act) {
     for (let k in imagesParType) { if (k.trim().toLowerCase() === tName) return Boolean(imagesParType[k] && imagesParType[k].isTablette); } return false;
 }
 
-// Restaure la validation automatique de toute la compétence si c'est une Évaluation
 function marquerCommeValideSansRafraichir(idActivite, eleve) {
     const act = baseDonnees.find(b => b.id === idActivite); if (!act) return; const dateValid = new Date().toLocaleDateString('fr-FR');
     if (!eleve.valides) eleve.valides = {}; eleve.valides[idActivite] = dateValid;
@@ -1069,7 +1082,6 @@ function afficherPlanHebdo() {
     });
     if (eleve.planHebdo.length === 0) tbodyApercu.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#7f8c8d; padding:20px;">Plan vide.</td></tr>';
 
-    // Affichage de la file d'attente (enAttente)
     const blocAtt = document.getElementById('blocEnAttenteEleve'), tbodyAtt = document.getElementById('tableEnAttente'), cptAtt = document.getElementById('compteurAttenteEleve');
     if (blocAtt && tbodyAtt) {
         let attList = (eleve.enAttente || []).map(id => baseDonnees.find(b => b.id === id)).filter(Boolean);
@@ -1100,8 +1112,41 @@ function afficherHistorique() {
 }
 
 // ==========================================
-// 5. ONGLET 2 : IMPRESSION FICHES ÉLÈVES (A4/A5, LOGOS & SEMAINES)
+// 5. ONGLET 2 : IMPRESSION FICHES ÉLÈVES & PERSONNALISATION EN-TÊTE
 // ==========================================
+function chargerConfigImpressionUI() {
+    let t = document.getElementById('printInputTitre'); if (t) t.value = printConfig.titre || "Plan de travail";
+    let c = document.getElementById('printInputConsigne'); if (c) c.value = printConfig.consigne || "";
+    let m = document.getElementById('printSelectMeteo'); if (m) m.value = printConfig.meteo || "meteo";
+    let cbCpt = document.getElementById('printCbCompteur'); if (cbCpt) cbCpt.checked = printConfig.afficherCompteur !== false;
+    let cbSig = document.getElementById('printCbSignature'); if (cbSig) cbSig.checked = printConfig.afficherSignature !== false;
+    let cbCom = document.getElementById('printCbCommentaire'); if (cbCom) cbCom.checked = Boolean(printConfig.afficherCommentaire);
+    let cbBil = document.getElementById('printCbColBilan'); if (cbBil) cbBil.checked = printConfig.afficherColBilan !== false;
+}
+
+function sauvegarderConfigImpression() {
+    let t = document.getElementById('printInputTitre');
+    let c = document.getElementById('printInputConsigne');
+    let m = document.getElementById('printSelectMeteo');
+    let cbCpt = document.getElementById('printCbCompteur');
+    let cbSig = document.getElementById('printCbSignature');
+    let cbCom = document.getElementById('printCbCommentaire');
+    let cbBil = document.getElementById('printCbColBilan');
+
+    printConfig = {
+        titre: t ? t.value : "Plan de travail",
+        consigne: c ? c.value : "",
+        meteo: m ? m.value : "meteo",
+        afficherCompteur: cbCpt ? cbCpt.checked : true,
+        afficherSignature: cbSig ? cbSig.checked : true,
+        afficherCommentaire: cbCom ? cbCom.checked : false,
+        afficherColBilan: cbBil ? cbBil.checked : true
+    };
+    localStorage.setItem(KEY_PRINT_CFG, JSON.stringify(printConfig));
+    declencherAutoSaveFirebase();
+    rafraichirFicheImpression();
+}
+
 function changementEleveImpression() {
     const sel = document.getElementById('selectEleveImpression');
     const selSem = document.getElementById('selectSemaineImpression');
@@ -1158,16 +1203,35 @@ function genererHtmlFicheEleve(e, format = 'A4') {
         parMatiere[m].push({ act, num: idx + 1 });
     });
 
+    let titreFiche = (printConfig && printConfig.titre) ? printConfig.titre.trim() : "Plan de travail";
+    let consigneSem = (printConfig && printConfig.consigne) ? printConfig.consigne.trim() : "";
+    let showColBilan = !printConfig || printConfig.afficherColBilan !== false;
+
+    let blocsDroite = [];
+    if (!printConfig || printConfig.afficherCompteur !== false) {
+        blocsDroite.push(`<span>Ateliers réussis : <strong>___ / ${planObjs.length}</strong></span>`);
+    }
+    if (!printConfig || printConfig.meteo !== 'aucun') {
+        let iconeBilan = "☀️ ⛅ 🌧️";
+        if (printConfig && printConfig.meteo === 'smileys') iconeBilan = "😊 😐 😟";
+        if (printConfig && printConfig.meteo === 'etoiles') iconeBilan = "⭐ ⭐ ⭐";
+        blocsDroite.push(`<span>Mon bilan : ${iconeBilan}</span>`);
+    }
+    if (!printConfig || printConfig.afficherSignature !== false) {
+        blocsDroite.push(`<span>Signature : ____________</span>`);
+    }
+
     let html = `<div class="fiche-plan-print ${format === 'A4' ? 'a4-page' : ''}">
-        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1b4f72; padding-bottom:6px; margin-bottom:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; border-bottom:2px solid #1b4f72; padding-bottom:6px; margin-bottom:8px;">
             <div>
-                <h2 style="margin:0; border:none; padding:0; font-size:18px; color:#1b4f72;">Plan de travail — ${escHTML(e.nom)} (${escHTML(e.niveau)})</h2>
+                <h2 style="margin:0; border:none; padding:0; font-size:18px; color:#1b4f72;">${escHTML(titreFiche)} — ${escHTML(e.nom)} (${escHTML(e.niveau)})</h2>
                 <span style="font-size:12.5px; color:#444; font-weight:bold;">Semaine ${(e.semaineIndex || 0) + 1} ${(e.dateDebut && e.dateFin) ? `du ${e.dateDebut} au ${e.dateFin}` : ''}</span>
             </div>
-            <div style="font-size:12px; text-align:right;">
-                Bilan : ☀️ ⛅ 🌧️ &nbsp;|&nbsp; Signature : ____________
+            <div style="font-size:12px; text-align:right; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                ${blocsDroite.join(' &nbsp;|&nbsp; ')}
             </div>
-        </div>`;
+        </div>
+        ${consigneSem ? `<div style="background:#f8f9fa; border-left:4px solid #1b4f72; padding:5px 10px; font-size:12.5px; font-style:italic; margin-bottom:8px; border-radius:4px;">📌 ${escHTML(consigneSem)}</div>` : ''}`;
 
     Object.keys(parMatiere).forEach(mat => {
         let coul = getCouleurMatiereBandeau(mat);
@@ -1181,7 +1245,7 @@ function genererHtmlFicheEleve(e, format = 'A4') {
                     <th>Activité / Support</th>
                     <th style="width:75px; text-align:center;">Jour</th>
                     <th style="width:45px; text-align:center;">Fait</th>
-                    <th style="width:65px; text-align:center;">Bilan</th>
+                    ${showColBilan ? `<th style="width:65px; text-align:center;">Bilan</th>` : ''}
                 </tr>
             </thead>
             <tbody>`;
@@ -1211,11 +1275,18 @@ function genererHtmlFicheEleve(e, format = 'A4') {
                 <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infos.badgeLivre} ${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''} ${imgSpec}</td>
                 <td style="text-align:center; font-weight:bold;">${escHTML(jour)}</td>
                 <td style="text-align:center; font-size:15px;">${estFait ? '☑️' : '⬜'}</td>
-                <td style="text-align:center; font-size:11px;">🟢 🟠 🔴</td>
+                ${showColBilan ? `<td style="text-align:center; font-size:11px;">🟢 🟠 🔴</td>` : ''}
             </tr>`;
         });
         html += `</tbody></table>`;
     });
+
+    if (printConfig && printConfig.afficherCommentaire) {
+        html += `<div style="margin-top:8px; border:1px dashed #7f8c8d; border-radius:6px; padding:6px 10px; font-size:12px; min-height:38px;">
+            <strong>💬 Mot de l'enseignante :</strong>
+        </div>`;
+    }
+
     html += `</div>`;
     return html;
 }
@@ -1254,7 +1325,7 @@ function rafraichirFicheImpression() {
 }
 
 // ==========================================
-// 6. ONGLET 3 : TABLEAU DE BORD COMPLET (BESOINS, TABLETTES & ACTIONS DIRECTES)
+// 6. ONGLET 3 : TABLEAU DE BORD COMPLET
 // ==========================================
 function toggleAfficherArchives() {
     afficherArchivesMode = !afficherArchivesMode;
@@ -1331,7 +1402,6 @@ function rafraichirDashboard() {
             if (!act) return;
             let estVal = e.valides && e.valides[idAct];
 
-            // 1. Remédiations
             let s = e.suivi && e.suivi[idAct] ? e.suivi[idAct] : null;
             if (s && (s.statut === 'a_revoir' || s.statut === 'a_refaire')) {
                 let cleRem = `${e.id}_${idAct}`;
@@ -1351,7 +1421,6 @@ function rafraichirDashboard() {
                 }
             }
 
-            // 2. Préparation des Tablettes (Anton / Scratch)
             if (!estVal && estActiviteTablette(act)) {
                 let cleTab = `tab_${act.id}`;
                 let estArchTab = dashboardArchives.includes(cleTab);
@@ -1365,13 +1434,11 @@ function rafraichirDashboard() {
 
     let html = `<div class="grid-2-cols" style="margin-bottom:20px;">`;
 
-    // Colonne Besoins / Ateliers dirigés
     html += `<div class="card-panel" style="border-left:5px solid #c0392b;">
         <h3 style="color:#c0392b; margin-bottom:10px;">👩‍🏫 Besoins d'ateliers dirigés & Remédiations</h3>
         ${lignesRemediation ? `<table class="table-classique"><thead><tr><th>Élève</th><th>Matière</th><th>Atelier</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${lignesRemediation}</tbody></table>` : `<p style="color:#7f8c8d; font-size:13px;">Aucune demande de remédiation en cours.</p>`}
     </div>`;
 
-    // Colonne Préparation Tablettes / Anton
     let tabKeys = Object.keys(tachesTablettesMap);
     html += `<div class="card-panel" style="border-left:5px solid #8e44ad;">
         <h3 style="color:#6c3483; margin-bottom:10px;">📱 Préparation Tablettes (Anton / Scratch)</h3>
@@ -1386,7 +1453,6 @@ function rafraichirDashboard() {
         }).join('') + `</tbody></table>` : `<p style="color:#7f8c8d; font-size:13px;">Aucune activité tablette à préparer.</p>`}
     </div></div>`;
 
-    // Cartes élèves dépliables
     html += `<div class="dashboard-grid">`;
     listeEl.forEach(e => {
         let total = (e.planHebdo || []).length;
@@ -1433,7 +1499,7 @@ function rafraichirDashboard() {
 }
 
 // ==========================================
-// 7. ONGLET 4 : BASE DE DONNÉES, SAISIE MULTIPLE & 4 MODALES DE GESTION
+// 7. ONGLET 4 : BASE DE DONNÉES, SAISIE MULTIPLE & MODALES
 // ==========================================
 function toggleModeSaisieMultiple() {
     modeSaisieMultipleActif = !modeSaisieMultipleActif;
@@ -1530,7 +1596,6 @@ function enregistrerSaisieMultiple() {
     showToast(`✅ ${nbAjoutes} exercice(s) ajouté(s) d'un coup dans "${sequence}" !`, "success");
 }
 
-// Modales de gestion (Matières, Séquences, Compétences, Types)
 function ouvrirModalGestionMatieres() { afficherListeMatieresModal(); ouvrirModal('modalMatieres'); }
 function afficherListeMatieresModal() {
     let mats = [...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
@@ -1850,7 +1915,7 @@ function afficherBase() {
 }
 
 // ==========================================
-// 8. ONGLET 5 : PROGRAMMATIONS P1 À P5 (BOUTONS P1-P5 CLIQUABLES)
+// 8. ONGLET 5 : PROGRAMMATIONS P1 À P5
 // ==========================================
 function initProgFilters() {
     const selMat = document.getElementById('selectMatiereProg');
@@ -1980,7 +2045,7 @@ function lancerImpressionEtiquettes() {
 }
 
 // ==========================================
-// 10. ONGLETS 7 & 8 : MATRICE ET BILAN ÉLÈVE (+ EXPORT EDULIVRET / LSU)
+// 10. ONGLETS 7 & 8 : MATRICE (+ FILTRE PÉRIODE) & BILANS
 // ==========================================
 function genererMatriceCompetences() {
     const selMat = document.getElementById('selectMatiereMatrice');
@@ -1989,25 +2054,39 @@ function genererMatriceCompetences() {
         selMat.innerHTML = mats.map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
     }
     const niv = document.getElementById('selectNiveauMatrice') ? document.getElementById('selectNiveauMatrice').value : 'CP';
+    const per = document.getElementById('selectPeriodeMatrice') ? document.getElementById('selectPeriodeMatrice').value : 'Toutes';
     const mat = selMat ? selMat.value : 'Toutes';
+    const evalOnly = document.getElementById('cbEvalOnlyMatrice') ? document.getElementById('cbEvalOnlyMatrice').checked : false;
     const cont = document.getElementById('conteneurMatrice');
     if (!cont) return;
 
     let elevesNiv = getElevesTries().filter(e => (e.niveau || 'CP').toUpperCase() === niv);
-    let acts = baseDonnees.filter(a => a && (a.niveau || "").toUpperCase().includes(niv) && (mat === 'Toutes' || (a.matiere || "").trim() === mat));
+    let acts = baseDonnees.filter(a => {
+        if (!a) return false;
+        if (!(a.niveau || "").toUpperCase().includes(niv)) return false;
+        if (mat !== 'Toutes' && (a.matiere || "").trim() !== mat) return false;
+        let cleCompProg = `${a.matiere}||${a.sequence}||${a.competence}`;
+        let p = programmations[a.id] || programmations[cleCompProg] || a.periode || "";
+        if (per === 'Non_affecte' && p !== "") return false;
+        if (per !== 'Toutes' && per !== 'Non_affecte' && !p.includes(per)) return false;
+        if (evalOnly && !a.estEvaluation) return false;
+        return true;
+    });
 
     if (elevesNiv.length === 0 || acts.length === 0) {
-        cont.innerHTML = `<div class="empty-state"><p>Aucun élève ou activité pour le niveau ${escHTML(niv)}.</p></div>`;
+        cont.innerHTML = `<div class="empty-state"><p>Aucun élève ou activité trouvé pour ces critères (${escHTML(niv)}${per !== 'Toutes' ? ' • ' + escHTML(per) : ''}).</p></div>`;
         return;
     }
 
-    let html = `<table class="table-classique"><thead><tr><th>Matière / Compétence / Ressource</th>`;
+    let html = `<table class="table-classique"><thead><tr><th>Matière / Période / Compétence / Ressource</th>`;
     elevesNiv.forEach(e => { html += `<th style="text-align:center;">${escHTML(e.nom)}</th>`; });
     html += `</tr></thead><tbody>`;
 
     acts.forEach(a => {
         let coul = getCouleurMatiereBandeau(a.matiere);
-        html += `<tr><td><span style="background:${coul.bg}; color:#fff; padding:1px 6px; border-radius:4px; font-size:11px;">${escHTML(a.matiere)}</span> <strong>${escHTML(a.ressource)}</strong><br><small>${escHTML(a.competence)}</small></td>`;
+        let p = programmations[a.id] || a.periode || "";
+        let badgePer = p ? `<span class="filter-btn" style="padding:1px 5px; font-size:10.5px; margin-left:4px;">${escHTML(p)}</span>` : '';
+        html += `<tr><td><span style="background:${coul.bg}; color:#fff; padding:1px 6px; border-radius:4px; font-size:11px;">${escHTML(a.matiere)}</span>${badgePer} <strong>${escHTML(a.ressource)}</strong> ${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}<br><small>${escHTML(a.sequence)} — ${escHTML(a.competence)}</small></td>`;
         elevesNiv.forEach(e => {
             let valide = e.historique && e.historique.some(h => h.idActivite === a.id);
             let enCours = e.planHebdo && e.planHebdo.includes(a.id);
@@ -2126,7 +2205,7 @@ function changerOnglet(idPage, element) {
     document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
     let targetPage = document.getElementById(idPage); if (targetPage) targetPage.classList.add('active'); if (element) element.classList.add('active');
     if (idPage === 'pageSuivi') { majListeEleves(); if (idEleveCourant) chargerEleve(); }
-    if (idPage === 'pageImpression') { if (idEleveCourant) idEleveImpressionCourant = idEleveCourant; majListeEleves(); changementEleveImpression(); }
+    if (idPage === 'pageImpression') { if (idEleveCourant) idEleveImpressionCourant = idEleveCourant; majListeEleves(); chargerConfigImpressionUI(); changementEleveImpression(); }
     if (idPage === 'pageDashboard') { rafraichirDashboard(); }
     if (idPage === 'pageBase') { initNiveaux(); majSelectCouleursRapides(); afficherBase(); }
     if (idPage === 'pageProg') { initProgFilters(); afficherProgrammation(); }
