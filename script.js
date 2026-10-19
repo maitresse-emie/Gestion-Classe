@@ -167,8 +167,42 @@ function sauvegarderProgrammations() {
 }
 
 // ==========================================
-// GESTION FIREBASE CLOUD (URL FIXE ET STABLE)
+// GESTION RESTAURATION FICHIER JSON & FIREBASE
 // ==========================================
+function restaurerFichierJSON(event) {
+    let fichier = event.target.files[0];
+    if (!fichier) return;
+    let lecteur = new FileReader();
+    lecteur.onload = function(e) {
+        try {
+            let data = JSON.parse(e.target.result);
+            if (data && (data.base || data.eleves)) {
+                baseDonnees = Array.isArray(data.base) ? data.base : [];
+                eleves = data.eleves || {};
+                if (data.images) imagesParType = data.images;
+                if (data.programmations) { programmations = data.programmations; localStorage.setItem(KEY_PROG, JSON.stringify(programmations)); }
+                if (data.archives) { dashboardArchives = data.archives; localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); }
+                if (data.theme) appliquerThemeVisuel(data.theme);
+
+                Object.values(eleves).forEach(el => assurerStructureSemaines(el));
+
+                localStorage.setItem(KEY_ATELIERS, JSON.stringify(baseDonnees));
+                localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves));
+                localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
+
+                showToast("✅ Données restaurées avec succès !", "success");
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast("Format de fichier invalide.", "error");
+            }
+        } catch (err) {
+            console.error("Erreur lecture JSON:", err);
+            showToast("Erreur lors de la lecture du fichier JSON.", "error");
+        }
+    };
+    lecteur.readAsText(fichier);
+}
+
 let timerFirebaseSave;
 const URL_FIREBASE_FIXE = "https://gestionclasse-cc401-default-rtdb.europe-west1.firebasedatabase.app";
 let firebaseConfig = JSON.parse(localStorage.getItem(KEY_FIREBASE_CFG)) || { dbUrl: URL_FIREBASE_FIXE, apiKey: "", email: "", refreshToken: "", idToken: "" };
@@ -243,7 +277,6 @@ function tenterConnexionAutoFirebase() {
     if (dbUrlInput) dbUrlInput.value = URL_FIREBASE_FIXE;
     chargerDepuisFirebase(false);
 }
-
 function nettoyerNomPourTri(str) { return (!str) ? "" : str.replace(/^[^a-zA-ZÀ-ÿ0-9]+/, "").trim().toLowerCase(); }
 function formaterEtoiles(nb) { let n = parseInt(nb) || 0; return n <= 0 ? "" : `<span style="color:#f39c12; font-size:12px; margin-right:4px;" title="Difficulté : ${n} étoile(s)">${"⭐".repeat(n)}</span>`; }
 
@@ -446,7 +479,9 @@ function postEditGlobal() {
     if (typeof initProgFilters === 'function') initProgFilters(); 
     if (typeof afficherProgrammation === 'function') afficherProgrammation(); 
     if (typeof afficherBase === 'function') afficherBase(); 
-}function majBarreSemainesUI() {
+}
+
+function majBarreSemainesUI() {
     if (!idEleveCourant || !eleves[idEleveCourant]) return;
     let e = eleves[idEleveCourant]; assurerStructureSemaines(e); syncEleveVersSemaineActive(e);
     const sel = document.getElementById('selectSemaineEleve');
