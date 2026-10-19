@@ -175,13 +175,10 @@ function restaurerFichierJSON(event) {
         console.log("Aucun fichier sélectionné.");
         return;
     }
-    console.log("Fichier sélectionné :", fichier.name);
     let lecteur = new FileReader();
     lecteur.onload = function(e) {
         try {
             let data = JSON.parse(e.target.result);
-            console.log("Données JSON parsées avec succès :", data);
-            
             if (data && (data.base || data.eleves)) {
                 baseDonnees = Array.isArray(data.base) ? data.base : [];
                 eleves = data.eleves || {};
@@ -199,7 +196,6 @@ function restaurerFichierJSON(event) {
                 showToast("✅ Données restaurées avec succès !", "success");
                 setTimeout(() => location.reload(), 1500);
             } else {
-                console.warn("Le fichier JSON ne contient pas les clés 'base' ou 'eleves'.");
                 showToast("Format de fichier invalide (clés manquantes).", "error");
             }
         } catch (err) {
@@ -211,7 +207,7 @@ function restaurerFichierJSON(event) {
     lecteur.readAsText(fichier);
 }
 
-// Fonction passerelle pour éviter toute erreur si le bouton appelle "restaurerSauvegarde"
+// Fonction globale directement appelée par le bouton HTML
 function restaurerSauvegarde() {
     let input = document.getElementById('inputFichierJson');
     if (input && input.files[0]) {
@@ -295,7 +291,6 @@ function tenterConnexionAutoFirebase() {
     if (dbUrlInput) dbUrlInput.value = URL_FIREBASE_FIXE;
     chargerDepuisFirebase(false);
 }
-
 function nettoyerNomPourTri(str) { return (!str) ? "" : str.replace(/^[^a-zA-ZÀ-ÿ0-9]+/, "").trim().toLowerCase(); }
 function formaterEtoiles(nb) { let n = parseInt(nb) || 0; return n <= 0 ? "" : `<span style="color:#f39c12; font-size:12px; margin-right:4px;" title="Difficulté : ${n} étoile(s)">${"⭐".repeat(n)}</span>`; }
 
