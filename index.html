@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GestionClasse - Application Pédagogique</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2c3e50">
 </head>
 <body class="theme-pastel">
 
@@ -261,5 +263,14 @@
     <button id="btnScrollTop" onclick="window.scrollTo({top:0, behavior:'smooth'})" style="display:none; position:fixed; bottom:20px; right:20px; z-index:99; background:#2c3e50; color:#fff; border:none; padding:10px 15px; border-radius:50%; cursor:pointer; font-size:16px;">⬆️</button>
 
     <script src="script.js"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('./sw.js')
+            .then((reg) => console.log('Service Worker enregistré avec succès :', reg.scope))
+            .catch((err) => console.log('Échec de l’enregistrement du Service Worker :', err));
+        });
+      }
+    </script>
 </body>
 </html>
