@@ -3,210 +3,578 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GestionClasse - Application Pédagogique</title>
-    <link rel="stylesheet" href="style.css">
+    <title>GestionClasse - Plans de Travail & Suivi</title>
+    <link rel="stylesheet" href="style.css?v=20261020">
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#2c3e50">
+    <meta name="theme-color" content="#1b4f72">
 </head>
 <body class="theme-pastel">
 
-    <!-- Toast container pour les notifications -->
+    <!-- Conteneur pour les notifications Toast -->
     <div id="toast-container"></div>
 
-    <!-- Barre de navigation principale -->
-    <header class="main-header">
-        <h1>🏫 GestionClasse</h1>
+    <!-- En-tête et navigation principale -->
+    <header class="main-header no-print">
+        <div class="header-top">
+            <h1>🏫 GestionClasse</h1>
+            <div class="header-Theme-Quick">
+                <select id="selectThemeHeader" onchange="appliquerThemeVisuel(this.value)" title="Changer le thème visuel">
+                    <option value="pastel">🎨 Thème Pastel</option>
+                    <option value="doodles">✏️ Thème Doodles</option>
+                    <option value="nature">🌿 Thème Nature</option>
+                    <option value="classique">📘 Thème Classique</option>
+                </select>
+            </div>
+        </div>
         <nav class="nav-bar">
-            <button class="nav-btn active" onclick="changerOnglet('pageDashboard', this)">📊 Tableau de bord</button>
-            <button class="nav-btn" onclick="changerOnglet('pageSuivi', this)">⭐ Suivi Élèves</button>
-            <button class="nav-btn" onclick="changerOnglet('pageBase', this)">📚 Base Ateliers</button>
-            <button class="nav-btn" onclick="changerOnglet('pageProg', this)">📅 Programmations</button>
-            <button class="nav-btn" onclick="changerOnglet('pageEtiquettes', this)">🏷️ Étiquettes</button>
-            <button class="nav-btn" onclick="changerOnglet('pageImpression', this)">🖨️ Fiches Plans</button>
-            <button class="nav-btn" onclick="changerOnglet('pageMatrice', this)">📈 Matrice</button>
-            <button class="nav-btn" onclick="changerOnglet('pageBilan', this)">📋 Bilan</button>
+            <button class="nav-btn active" onclick="changerOnglet('pageDashboard', this)">📊 1. Tableau de bord</button>
+            <button class="nav-btn" onclick="changerOnglet('pageSuivi', this)">⭐ 2. Suivi Élèves</button>
+            <button class="nav-btn" onclick="changerOnglet('pageBase', this)">📚 3. Base Ateliers</button>
+            <button class="nav-btn" onclick="changerOnglet('pageProg', this)">📅 4. Programmations</button>
+            <button class="nav-btn" onclick="changerOnglet('pageEtiquettes', this)">🏷️ 5. Étiquettes</button>
+            <button class="nav-btn" onclick="changerOnglet('pageImpression', this)">🖨️ 6. Fiches Plans</button>
+            <button class="nav-btn" onclick="changerOnglet('pageMatrice', this)">📈 7. Matrice</button>
+            <button class="nav-btn" onclick="changerOnglet('pageBilan', this)">📋 8. Bilan</button>
             <button class="nav-btn" onclick="changerOnglet('pageSave', this)">💾 9. Sauvegarde</button>
         </nav>
     </header>
 
     <main class="container">
 
-        <!-- 1. TABLEAU DE BORD -->
+        <!-- ========================================== -->
+        <!-- 1. TABLEAU DE BORD                         -->
+        <!-- ========================================== -->
         <section id="pageDashboard" class="page active">
-            <h2>Tableau de bord de la classe</h2>
+            <div class="page-header-flex">
+                <h2>📊 Tableau de bord de la classe</h2>
+                <div class="toolbar-actions">
+                    <button type="button" class="filter-btn" id="btnToggleArchivesDash" onclick="toggleAfficherArchives()">👁️ Voir les éléments archivés</button>
+                    <button type="button" class="btn-action" onclick="rafraichirDashboard()">🔄 Actualiser</button>
+                </div>
+            </div>
             <div id="dashboardContent"></div>
         </section>
 
-        <!-- 2. SUIVI ELEVES -->
+        <!-- ========================================== -->
+        <!-- 2. SUIVI ÉLÈVES & PLANS DE TRAVAIL         -->
+        <!-- ========================================== -->
         <section id="pageSuivi" class="page">
-            <h2>Suivi individualisé des élèves</h2>
-            <div class="selection-eleve-bar">
-                <select id="selectEleveProfile" onchange="chargerEleve()">
-                    <option value="">-- Sélectionner un élève --</option>
-                </select>
-                <button type="button" class="btn-action" id="btnEditEleve" style="display:none;" onclick="ouvrirModalEditionEleve()">✏️ Modifier</button>
-                <button type="button" class="btn-danger" onclick="supprimerEleve()" style="display:none;" id="btnSupprEleve">🗑️</button>
+            <h2>⭐ Suivi individualisé et Plans de travail</h2>
+
+            <!-- Barre d'ajout et sélection d'élève -->
+            <div class="card-panel" style="margin-bottom: 20px;">
+                <div class="selection-eleve-bar">
+                    <select id="selectEleveProfile" onchange="chargerEleve()">
+                        <option value="">-- Sélectionner un élève --</option>
+                    </select>
+                    <button type="button" class="btn-action" id="btnEditEleve" style="display:none;" onclick="ouvrirModalEditionEleve()">✏️ Modifier l'élève</button>
+                    <button type="button" class="btn-danger" id="btnSupprEleve" style="display:none;" onclick="supprimerEleve()">🗑️ Supprimer</button>
+                </div>
+
+                <div class="ajout-eleve-bar">
+                    <strong>➕ Nouvel élève :</strong>
+                    <input type="text" id="nouvelEleveNom" placeholder="Prénom de l'élève">
+                    <select id="nouvelEleveNiveau">
+                        <option value="CP">CP</option>
+                        <option value="CE1">CE1</option>
+                        <option value="CE2">CE2</option>
+                        <option value="CM1">CM1</option>
+                        <option value="CM2">CM2</option>
+                    </select>
+                    <label style="cursor:pointer; font-size:13px;">
+                        <input type="checkbox" id="nouvelEleveFichierJaune"> 📒 Fichier Jaune
+                    </label>
+                    <button type="button" class="btn-valid" onclick="creerEleve()">Ajouter l'élève</button>
+                </div>
             </div>
 
-            <div id="messageSelectEleve" style="text-align: center; padding: 40px; color: #7f8c8d;">
-                <h3>Veuillez sélectionner un élève dans la liste ci-dessus pour gérer son plan de travail.</h3>
+            <div id="messageSelectEleve" class="empty-state">
+                <h3>👆 Sélectionnez un élève ci-dessus (ou créez-en un) pour gérer son plan de travail.</h3>
             </div>
 
             <div id="zoneTravail" style="display: none;">
                 <!-- Barre de gestion des semaines -->
-                <div class="panel-semaines" style="background:#f8f9fa; padding:15px; border-radius:8px; margin-bottom:20px; border:1px solid #e9ecef;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <div class="panel-semaines">
+                    <div class="semaines-flex">
                         <div>
-                            <strong id="labelSemaineTitre">Semaine 1</strong>
-                            <select id="selectSemaineEleve" onchange="changerSemaineActive(this.value)" style="margin-left:10px; padding:5px; border-radius:4px;"></select>
+                            <strong id="labelSemaineTitre" style="font-size:16px; color:#1b4f72;">Semaine 1</strong>
+                            <select id="selectSemaineEleve" onchange="changerSemaineActive(this.value)" style="margin-left:10px; padding:6px; border-radius:6px;"></select>
                         </div>
-                        <div style="display:flex; gap:10px; align-items:center;">
-                            <label>Début Sem. (Lundi) : <input type="date" id="dateDebutSemaineInput" onchange="appliquerDateDebutSemaine(this.value)" style="padding:4px; border-radius:4px; border:1px solid #ccc;"></label>
-                            <span id="dateFinSemaineAffiche" style="font-weight:bold; color:#2c3e50;">➔ Vendredi : --/--</span>
+                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                            <label>Début (Lundi) : <input type="date" id="dateDebutSemaineInput" onchange="appliquerDateDebutSemaine(this.value)"></label>
+                            <span id="dateFinSemaineAffiche" style="font-weight:bold; color:#1b4f72;">➔ Vendredi : --/--</span>
                         </div>
-                        <div style="display:flex; gap:5px;">
-                            <button type="button" class="btn-action" onclick="ajouterSemaineAvance()">➕ Préparer Sem. Avance</button>
-                            <button type="button" class="btn-danger" id="btnSupprimerSemaine" onclick="supprimerSemaineActive()" style="display:none;">🗑️ Suppr. Sem.</button>
+                        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                            <button type="button" class="btn-action" onclick="ajouterSemaineAvance()">➕ Semaine d'avance</button>
+                            <button type="button" class="btn-danger" id="btnSupprimerSemaine" onclick="supprimerSemaineActive()" style="display:none;">🗑️ Suppr. Semaine</button>
                             <button type="button" class="btn-valid" onclick="commencerNouvelleSemaine()">🏁 Clôturer & Suivante</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- Infos et quotas élève -->
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
-                    <div>
-                        <span style="font-size:16px; margin-right:15px;">Ateliers : <strong id="compteurAteliersEleve">0</strong> / <span id="maxAteliersAffiche">15</span></span>
-                        <label style="font-size:13px; margin-right:15px;">Max Ateliers : <input type="number" id="inputMaxAteliersEleve" min="1" max="25" value="15" onchange="modifierMaxAteliersEleve()" style="width:50px; padding:2px;"></label>
-                        <span style="font-size:16px;">Tablettes : <strong id="compteurTablettesEleve">0/2</strong></span>
-                        <label style="font-size:13px; margin-left:10px;">Max Tab. : <input type="number" id="inputMaxTablettesEleve" min="0" max="10" value="2" onchange="modifierMaxTablettesEleve()" style="width:40px; padding:2px;"></label>
+                <!-- Quotas et options de l'élève -->
+                <div class="quotas-bar">
+                    <div style="display:flex; gap:18px; align-items:center; flex-wrap:wrap;">
+                        <span class="badge-quota">📌 Ateliers : <strong id="compteurAteliersEleve">0</strong> / <span id="maxAteliersAffiche">15</span></span>
+                        <label style="font-size:13px;">Limite ateliers : <input type="number" id="inputMaxAteliersEleve" min="1" max="25" value="15" onchange="modifierMaxAteliersEleve()" style="width:55px;"></label>
+                        <span class="badge-quota tablette">📱 Tablettes : <strong id="compteurTablettesEleve">0/2</strong></span>
+                        <label style="font-size:13px;">Limite tablettes : <input type="number" id="inputMaxTablettesEleve" min="0" max="10" value="2" onchange="modifierMaxTablettesEleve()" style="width:55px;"></label>
                     </div>
                     <div>
-                        <label style="cursor:pointer; background:#fff3cd; padding:5px 10px; border-radius:4px; border:1px solid #ffeeba; font-weight:bold;">
-                            <input type="checkbox" id="cbFichierJauneEleve" onchange="toggleFichierJauneEleve(this.checked)"> 📒 Activer Fichier Jaune
+                        <label class="badge-jaune-toggle">
+                            <input type="checkbox" id="cbFichierJauneEleve" onchange="toggleFichierJauneEleve(this.checked)"> 📒 Mode Fichier Jaune
                         </label>
                     </div>
                 </div>
 
+                <!-- Sélecteur de ressources pour ajouter au plan -->
+                <div class="card-panel" style="margin-bottom:20px; background:#f8fbff; border:1px solid #d6eaf8;">
+                    <h3 style="margin-bottom:12px; color:#1b4f72;">➕ Ajouter des activités au plan de <span class="nomEleveAffiche"></span></h3>
+                    <div class="filtres-ajout-plan">
+                        <select id="selectPeriodeDispo" onchange="afficherRessourcesDisponibles()">
+                            <option value="Toutes">📅 Toutes les périodes</option>
+                            <option value="P1">Période 1</option>
+                            <option value="P2">Période 2</option>
+                            <option value="P3">Période 3</option>
+                            <option value="P4">Période 4</option>
+                            <option value="P5">Période 5</option>
+                        </select>
+                        <select id="selectMatiere" onchange="changementMatiereSelection()">
+                            <option value="">-- 1. Choisir une matière --</option>
+                        </select>
+                        <select id="selectSequence" onchange="afficherRessourcesDisponibles()">
+                            <option value="">-- 2. Choisir une séquence (ou Toutes) --</option>
+                        </select>
+                        <div class="etoiles-filter">
+                            <span>Difficulté :</span>
+                            <button type="button" class="filter-btn active" id="btnEtoile0" onclick="filtrerEtoilesDispo(0)">Toutes</button>
+                            <button type="button" class="filter-btn" id="btnEtoile1" onclick="filtrerEtoilesDispo(1)">⭐</button>
+                            <button type="button" class="filter-btn" id="btnEtoile2" onclick="filtrerEtoilesDispo(2)">⭐⭐</button>
+                            <button type="button" class="filter-btn" id="btnEtoile3" onclick="filtrerEtoilesDispo(3)">⭐⭐⭐</button>
+                        </div>
+                    </div>
+                    <div id="zoneRessourcesDispo" style="max-height:280px; overflow-y:auto; margin-top:10px;">
+                        <table class="table-classique">
+                            <thead>
+                                <tr>
+                                    <th style="width:70px;">Niv. / Pér.</th>
+                                    <th style="width:160px;">Séquence / Leçon</th>
+                                    <th>Compétence</th>
+                                    <th>Ressource & Support</th>
+                                    <th style="width:110px;">Jour</th>
+                                    <th style="width:150px;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableRessourcesDispo">
+                                <tr><td colspan="6" style="text-align:center; color:#7f8c8d;">Sélectionnez une matière ci-dessus pour afficher les activités disponibles.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <!-- Tableau du Plan Hebdomadaire -->
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:10px;">
+                    <h3>📋 Plan de travail en cours (<span class="nomEleveAffiche"></span>)</h3>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button type="button" class="btn-valid" onclick="validerSelectionPlan()">✅ Valider les cases cochées</button>
+                        <button type="button" class="btn-action" onclick="ouvrirModalDuplication()">📋 Dupliquer ce plan vers d'autres élèves</button>
+                    </div>
+                </div>
+
                 <table class="table-classique">
                     <thead>
                         <tr>
-                            <th style="width:40px;">Fini</th>
-                            <th style="width:40px;">Prio</th>
-                            <th style="width:50px;">N°</th>
-                            <th style="width:150px;">Matière / Séquence</th>
+                            <th style="width:36px; text-align:center;"><input type="checkbox" onchange="cocherToutPlan(this)" title="Tout cocher"></th>
+                            <th style="width:40px; text-align:center;">Prio</th>
+                            <th style="width:50px; text-align:center;">N°</th>
+                            <th style="width:170px;">Matière / Séquence</th>
                             <th>Compétence</th>
-                            <th>Ressource & Détails</th>
-                            <th style="width:110px;">Jour</th>
-                            <th style="width:90px;">Actions</th>
+                            <th>Ressource & Suivi</th>
+                            <th style="width:115px;">Jour</th>
+                            <th style="width:130px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="tableApercuPlan"></tbody>
                 </table>
 
-                <!-- Actions de groupe élève -->
-                <div style="margin-top:15px; display:flex; gap:10px;">
-                    <button type="button" class="btn-action" onclick="ouvrirModalDuplication()">📋 Dupliquer ce plan vers d'autres élèves</button>
+                <!-- Historique et activités masquées -->
+                <div class="grid-2-cols" style="margin-top:30px;">
+                    <div>
+                        <h3>✅ Historique des activités validées</h3>
+                        <div style="max-height:260px; overflow-y:auto;">
+                            <table class="table-classique">
+                                <thead>
+                                    <tr>
+                                        <th style="width:85px;">Date</th>
+                                        <th style="width:55px;">Niv.</th>
+                                        <th>Matière / Séquence</th>
+                                        <th>Ressource</th>
+                                        <th style="width:50px;">Rest.</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tableHistorique"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div>
+                        <h3>🙈 Activités masquées pour cet élève</h3>
+                        <div style="max-height:260px; overflow-y:auto;">
+                            <table class="table-classique">
+                                <thead>
+                                    <tr>
+                                        <th style="width:55px;">Niv.</th>
+                                        <th>Matière / Séquence</th>
+                                        <th>Compétence</th>
+                                        <th>Ressource</th>
+                                        <th style="width:50px;">Rest.</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tableMasquees"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- 3. BASE DE DONNÉES DES ATELIERS            -->
+        <!-- ========================================== -->
+        <section id="pageBase" class="page">
+            <h2>📚 Base de données des activités et ateliers</h2>
+
+            <!-- Formulaire Ajout / Édition d'une activité -->
+            <div class="card-panel" style="margin-bottom:20px;">
+                <h3 id="titreFormulaireBase" style="margin-bottom:12px; color:#1b4f72;">➕ Ajouter ou modifier une activité</h3>
+                <div class="form-grid-base">
+                    <div>
+                        <label>Matière :</label>
+                        <input type="text" id="inputMatiere" list="listeMatieresConnues" placeholder="Ex: Français, Mathématiques, Sciences...">
+                        <datalist id="listeMatieresConnues">
+                            <option value="Français">
+                            <option value="Mathématiques">
+                            <option value="Histoire-Géographie">
+                            <option value="Sciences et technologie">
+                            <option value="Anglais">
+                            <option value="Arts">
+                            <option value="EPS">
+                            <option value="EMC">
+                        </datalist>
+                    </div>
+                    <div>
+                        <label>Séquence / Domaine :</label>
+                        <input type="text" id="inputSequence" placeholder="Ex: Numération 1, Grammaire...">
+                    </div>
+                    <div>
+                        <label>Leçon (optionnel) :</label>
+                        <input type="text" id="inputLecon" placeholder="Ex: N1, G2...">
+                    </div>
+                    <div>
+                        <label>Compétence :</label>
+                        <input type="text" id="inputCompetence" placeholder="Ex: Dénombrer jusqu'à 100">
+                    </div>
+                    <div>
+                        <label>Nom de la ressource / Atelier :</label>
+                        <input type="text" id="inputRessource" placeholder="Ex: Cartes à pinces N1">
+                    </div>
+                    <div>
+                        <label>Type de support :</label>
+                        <select id="selectTypeRessource"></select>
+                    </div>
+                    <div>
+                        <label>Page / Ex. Manuel standard (📘) :</label>
+                        <input type="text" id="inputPageManuel" placeholder="Ex: p. 24 ex 2">
+                    </div>
+                    <div>
+                        <label>Variante Fichier Jaune (📒) :</label>
+                        <input type="text" id="inputVarianteJaune" placeholder="Ex: Fichier p. 18">
+                    </div>
+                    <div>
+                        <label>Période :</label>
+                        <select id="selectPeriodeForm">
+                            <option value="">-- Sans période --</option>
+                            <option value="P1">Période 1</option>
+                            <option value="P2">Période 2</option>
+                            <option value="P3">Période 3</option>
+                            <option value="P4">Période 4</option>
+                            <option value="P5">Période 5</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Difficulté (Étoiles) :</label>
+                        <select id="selectDifficulte">
+                            <option value="0">Aucune étoile</option>
+                            <option value="1">⭐ (Niveau 1)</option>
+                            <option value="2">⭐⭐ (Niveau 2)</option>
+                            <option value="3">⭐⭐⭐ (Niveau 3)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>Couleur étiquette :</label>
+                        <select id="selectCouleurRapide"></select>
+                    </div>
+                    <div>
+                        <label>Lien image (optionnel) :</label>
+                        <input type="text" id="inputImageAct" placeholder="URL de l'image ou lien Drive">
+                    </div>
                 </div>
 
-                <!-- Historique et masquées -->
-                <h3 style="margin-top:30px;">Historique des activités validées</h3>
-                <table class="table-classique">
-                    <thead>
-                        <tr>
-                            <th style="width:100px;">Date</th>
-                            <th style="width:60px;">Niv.</th>
-                            <th style="width:150px;">Matière / Séquence</th>
-                            <th>Compétence</th>
-                            <th>Ressource</th>
-                            <th style="width:60px;">Rest.</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableHistorique"></tbody>
-                </table>
-
-                <h3 style="margin-top:20px;">Activités masquées</h3>
-                <table class="table-classique">
-                    <thead>
-                        <tr>
-                            <th style="width:60px;">Niv.</th>
-                            <th style="width:150px;">Matière / Séquence</th>
-                            <th>Compétence</th>
-                            <th>Ressource</th>
-                            <th style="width:60px;">Rest.</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableMasquees"></tbody>
-                </table>
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px; margin-top:15px; padding-top:12px; border-top:1px dashed #ccc;">
+                    <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                        <strong>Niveaux :</strong>
+                        <label><input type="checkbox" class="cb-niveau-form" value="CP" checked> CP</label>
+                        <label><input type="checkbox" class="cb-niveau-form" value="CE1"> CE1</label>
+                        <label><input type="checkbox" class="cb-niveau-form" value="CE2"> CE2</label>
+                        <label><input type="checkbox" class="cb-niveau-form" value="CM1"> CM1</label>
+                        <label><input type="checkbox" class="cb-niveau-form" value="CM2"> CM2</label>
+                        <label style="margin-left:15px; background:#fcf3cf; padding:4px 8px; border-radius:4px; border:1px solid #f1c40f;">
+                            <input type="checkbox" id="cbEstEvaluation"> 🎯 Est une Évaluation
+                        </label>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button type="button" class="btn-remove" id="btnAnnulerEditBase" style="display:none;" onclick="annulerEditionBase()">Annuler</button>
+                        <button type="button" class="btn-valid" id="btnSubmitBase" onclick="enregistrerActiviteBase()">💾 Enregistrer l'activité</button>
+                    </div>
+                </div>
             </div>
+
+            <!-- Gestion des types de supports (Icônes & Quota Tablette) -->
+            <details class="card-panel" style="margin-bottom:20px;">
+                <summary style="cursor:pointer; font-weight:bold; color:#1b4f72;">⚙️ Gérer les types de supports (Icônes, Tablettes Anton/Scratch, Couleurs)</summary>
+                <div style="margin-top:12px;">
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+                        <input type="text" id="inputNouveauTypeNom" placeholder="Nom du type (ex: Anton, Jeu...)">
+                        <input type="text" id="inputNouveauTypeImg" placeholder="URL icône image (optionnel)" style="flex:1;">
+                        <label><input type="checkbox" id="cbNouveauTypeTablette"> 📱 Compte comme Tablette</label>
+                        <label><input type="checkbox" id="cbNouveauTypeCouleur" checked> 🎨 Colorer l'étiquette</label>
+                        <button type="button" class="btn-action" onclick="ajouterOuModifierType()">➕ Ajouter / Mettre à jour ce type</button>
+                    </div>
+                    <div id="listeTypesConfig" style="display:flex; gap:10px; flex-wrap:wrap;"></div>
+                </div>
+            </details>
+
+            <!-- Filtres de la base -->
+            <div class="card-panel" style="margin-bottom:15px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <div id="barreFiltresNiveauxBase" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                        <select id="selectFiltreMatiereBase" onchange="filtrerBaseMatiere(this.value)"></select>
+                        <select id="selectFiltreTypeBase" onchange="filtrerBaseType(this.value)"></select>
+                        <input type="text" id="inputRechercheBase" placeholder="🔍 Rechercher..." oninput="afficherBase()">
+                    </div>
+                </div>
+            </div>
+
+            <p style="margin-bottom:8px; font-size:13px; color:#555;">Total affiché : <strong id="compteurBaseAffichee">0</strong> activité(s)</p>
+            <table class="table-classique">
+                <thead>
+                    <tr>
+                        <th style="width:70px;">Niveau</th>
+                        <th style="width:65px;">Période</th>
+                        <th style="width:170px;">Matière / Séquence</th>
+                        <th>Compétence</th>
+                        <th>Ressource & Support</th>
+                        <th style="width:160px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBaseDonnees"></tbody>
+            </table>
         </section>
 
-        <!-- 3. BASE ATELIERS -->
-        <section id="pageBase" class="page">
-            <h2>Base de données des activités et ateliers</h2>
-        </section>
-
-        <!-- 4. PROGRAMMATIONS -->
+        <!-- ========================================== -->
+        <!-- 4. PROGRAMMATIONS PAR PÉRIODES (P1 à P5)   -->
+        <!-- ========================================== -->
         <section id="pageProg" class="page">
-            <h2>Programmations annuelles et séquences</h2>
+            <h2>📅 Programmations annuelles par périodes (P1 à P5)</h2>
+            <div class="card-panel" style="margin-bottom:15px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                <label>Niveau :
+                    <select id="selectNiveauProg" onchange="afficherProgrammation()">
+                        <option value="Tous">Tous les niveaux</option>
+                        <option value="CP">CP</option>
+                        <option value="CE1">CE1</option>
+                        <option value="CE2">CE2</option>
+                        <option value="CM1">CM1</option>
+                        <option value="CM2">CM2</option>
+                    </select>
+                </label>
+                <label>Matière :
+                    <select id="selectMatiereProg" onchange="afficherProgrammation()">
+                        <option value="Toutes">Toutes les matières</option>
+                    </select>
+                </label>
+                <label>Filtrer Période :
+                    <select id="selectPeriodeProg" onchange="afficherProgrammation()">
+                        <option value="Toutes">Toutes (P1 à P5)</option>
+                        <option value="P1">Période 1</option>
+                        <option value="P2">Période 2</option>
+                        <option value="P3">Période 3</option>
+                        <option value="P4">Période 4</option>
+                        <option value="P5">Période 5</option>
+                        <option value="Non_affecte">Non affectées</option>
+                    </select>
+                </label>
+            </div>
+            <div id="contenuProgrammation"></div>
         </section>
 
-        <!-- 5. ETIQUETTES -->
+        <!-- ========================================== -->
+        <!-- 5. GÉNÉRATEUR D'ÉTIQUETTES                 -->
+        <!-- ========================================== -->
         <section id="pageEtiquettes" class="page">
-            <h2>Générateur d'étiquettes</h2>
+            <div class="no-print">
+                <h2>🏷️ Générateur d'étiquettes d'ateliers</h2>
+                <div class="card-panel" style="margin-bottom:15px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                        <select id="selectNiveauEtiquettes" onchange="afficherChoixEtiquettes()">
+                            <option value="Tous">Tous les niveaux</option>
+                            <option value="CP">CP</option>
+                            <option value="CE1">CE1</option>
+                            <option value="CE2">CE2</option>
+                            <option value="CM1">CM1</option>
+                            <option value="CM2">CM2</option>
+                        </select>
+                        <select id="selectMatiereEtiquettes" onchange="afficherChoixEtiquettes()">
+                            <option value="Toutes">Toutes les matières</option>
+                        </select>
+                        <button type="button" class="filter-btn" onclick="cocherToutesEtiquettes(true)">✅ Tout cocher</button>
+                        <button type="button" class="filter-btn" onclick="cocherToutesEtiquettes(false)">❌ Tout décocher</button>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button type="button" class="btn-action" onclick="genererEtiquettesAImprimer()">🔄 Générer l'aperçu</button>
+                        <button type="button" class="btn-valid" onclick="window.print()">🖨️ Imprimer les étiquettes</button>
+                    </div>
+                </div>
+                <div id="listeChoixEtiquettes" style="max-height:220px; overflow-y:auto; margin-bottom:20px; border:1px solid #ddd; border-radius:6px; padding:10px; background:#fff;"></div>
+            </div>
+            <div id="zoneApercuEtiquettes" class="etiquettes-grid-print"></div>
         </section>
 
-        <!-- 6. IMPRESSION -->
+        <!-- ========================================== -->
+        <!-- 6. IMPRESSION DES FICHES PLANS DE TRAVAIL  -->
+        <!-- ========================================== -->
         <section id="pageImpression" class="page">
-            <h2>Impression des plans de travail</h2>
+            <div class="no-print">
+                <h2>🖨️ Impression des Fiches Plans de Travail</h2>
+                <div class="card-panel" style="margin-bottom:20px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                    <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                        <label>Élève ou Groupe :
+                            <select id="selectEleveImpression" onchange="changementEleveImpression()"></select>
+                        </label>
+                        <label>Format :
+                            <select id="selectFormatImpression" onchange="changementEleveImpression()">
+                                <option value="A4">📄 A4 Complet (1 élève / page)</option>
+                                <option value="A5">📑 A5 Compact (2 élèves / page)</option>
+                            </select>
+                        </label>
+                    </div>
+                    <button type="button" class="btn-valid" onclick="window.print()">🖨️ Lancer l'impression</button>
+                </div>
+            </div>
+            <div id="zoneFichesImpression"></div>
         </section>
 
-        <!-- 7. MATRICE -->
+        <!-- ========================================== -->
+        <!-- 7. MATRICE DES COMPÉTENCES                 -->
+        <!-- ========================================== -->
         <section id="pageMatrice" class="page">
-            <h2>Matrice des compétences</h2>
+            <h2>📈 Matrice de suivi des compétences</h2>
+            <div class="card-panel" style="margin-bottom:15px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                <label>Niveau :
+                    <select id="selectNiveauMatrice" onchange="genererMatriceCompetences()">
+                        <option value="CP">CP</option>
+                        <option value="CE1">CE1</option>
+                        <option value="CE2">CE2</option>
+                        <option value="CM1">CM1</option>
+                        <option value="CM2">CM2</option>
+                    </select>
+                </label>
+                <label>Matière :
+                    <select id="selectMatiereMatrice" onchange="genererMatriceCompetences()">
+                        <option value="Toutes">Toutes les matières</option>
+                    </select>
+                </label>
+            </div>
+            <div id="conteneurMatrice" style="overflow-x:auto;"></div>
         </section>
 
-        <!-- 8. BILAN -->
+        <!-- ========================================== -->
+        <!-- 8. BILAN DES ÉVALUATIONS (LSU)             -->
+        <!-- ========================================== -->
         <section id="pageBilan" class="page">
-            <h2>Bilan des évaluations et acquisitions</h2>
+            <div class="page-header-flex no-print">
+                <h2>📋 Bilan individuel des compétences et évaluations</h2>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <select id="selectEleveBilan" onchange="genererBilanEleve()"></select>
+                    <button type="button" class="btn-valid" onclick="window.print()">🖨️ Imprimer le bilan</button>
+                </div>
+            </div>
+            <div id="conteneurBilanEleve"></div>
         </section>
 
-        <!-- 9. SAUVEGARDE & CLOUD -->
+        <!-- ========================================== -->
+        <!-- 9. SAUVEGARDE, RESTAURATION & CLOUD        -->
+        <!-- ========================================== -->
         <section id="pageSave" class="page">
-            <h2>💾 Sauvegarde, Restauration & Cloud Firebase</h2>
-            
-            <div style="background:#fff; padding:20px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); margin-bottom:20px;">
-                <h3>Statut de la Synchronisation Cloud</h3>
-                <p id="statutFirebase" style="font-weight:bold; color:#f39c12;">⏳ Connexion au Cloud en cours...</p>
-                <button type="button" class="btn-action" onclick="sauvegarderVersFirebase()">⬆️ Forcer l'envoi vers le Cloud</button>
-                <button type="button" class="btn-valid" onclick="chargerDepuisFirebase(true)">⬇️ Récupérer depuis le Cloud</button>
+            <h2>💾 Sauvegarde, Restauration & Synchronisation Cloud</h2>
+
+            <!-- 1. Restauration Fichier JSON -->
+            <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #27ae60;">
+                <h3 style="color:#1e8449; margin-bottom:8px;">📤 1. Restaurer vos données depuis un fichier JSON</h3>
+                <p style="font-size:14px; margin-bottom:12px;">Sélectionnez votre fichier `.json` de sauvegarde. La restauration se lance automatiquement dès la sélection (ou en cliquant sur le bouton ci-dessous).</p>
+                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <input type="file" id="inputFichierJson" onchange="restaurerFichierJSON(event)" accept=".json,application/json" style="padding:10px; border:2px dashed #27ae60; border-radius:6px; flex:1; background:#f9fffb;">
+                    <button type="button" class="btn-valid" onclick="restaurerSauvegarde()" style="padding:12px 20px; font-size:15px;">🔄 Restaurer les données du fichier</button>
+                </div>
             </div>
 
-            <div style="background:#fff; padding:20px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); margin-bottom:20px;">
-                <h3>📤 Restaurer une sauvegarde JSON locale</h3>
-                <p>Sélectionnez un fichier `.json` exporté précédemment de l'application pour restaurer l'intégralité de vos données sur cet appareil.</p>
-                <input type="file" id="inputFichierJson" onchange="restaurerFichierJSON(event)" accept=".json" style="padding:10px; border:1px solid #ccc; border-radius:4px; width:100%;">
-                <button type="button" class="btn-action" onclick="restaurerSauvegarde()" style="margin-top:10px;">Restaurer les données</button>
+            <!-- 2. Restauration de secours par Copier-Coller direct -->
+            <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #e67e22;">
+                <h3 style="color:#d35400; margin-bottom:8px;">📋 2. Restauration directe par Copier-Coller (Secours 100 % infaillible)</h3>
+                <p style="font-size:13px; margin-bottom:8px;">Si votre fichier bloque ou si vous avez copié le texte de vos données depuis Firebase, collez simplement tout le texte JSON ci-dessous et cliquez sur <strong>Importer le texte collé</strong> :</p>
+                <textarea id="textareaJsonSecours" rows="4" placeholder='Collez ici le contenu de votre sauvegarde (ex: {"base":[...], "eleves":{...}})' style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-family:monospace; font-size:12px; margin-bottom:8px;"></textarea>
+                <button type="button" class="btn-action" onclick="restaurerDepuisTexteColle()" style="background:#e67e22;">⚡ Importer le texte collé maintenant</button>
             </div>
 
-            <div style="background:#fff; padding:20px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1);">
-                <h3>💾 Utilisation du Stockage Local</h3>
+            <!-- 3. Export Sauvegarde Locale -->
+            <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #2980b9;">
+                <h3 style="color:#1b4f72; margin-bottom:8px;">📥 3. Télécharger une sauvegarde complète (.json)</h3>
+                <p style="font-size:14px; margin-bottom:12px;">Enregistrez une copie complète de vos élèves, plans de travail, ateliers et programmations sur votre ordinateur.</p>
+                <button type="button" class="btn-action" onclick="exporterSauvegardeJSON()">💾 Télécharger ma sauvegarde (.json)</button>
+            </div>
+
+            <!-- 4. Synchronisation Firebase Cloud -->
+            <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #8e44ad;">
+                <h3 style="color:#6c3483; margin-bottom:8px;">🔥 4. Synchronisation Cloud Firebase</h3>
+                <p id="statutFirebase" style="font-weight:bold; color:#f39c12; margin-bottom:12px;">⏳ Vérification du Cloud...</p>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                    <button type="button" class="btn-valid" onclick="chargerDepuisFirebase(true)">⬇️ Récupérer les données depuis Firebase</button>
+                    <button type="button" class="btn-action" onclick="sauvegarderVersFirebase(true)">⬆️ Forcer l'envoi vers Firebase</button>
+                    <button type="button" class="filter-btn" onclick="inspecterToutesBranchesFirebase()">🔍 Chercher des sauvegardes sur tout le Cloud Firebase</button>
+                </div>
+            </div>
+
+            <!-- 5. Stockage & Nettoyage du Cache -->
+            <div class="card-panel">
+                <h3 style="margin-bottom:8px;">⚙️ 5. Stockage local & Réparation du cache</h3>
                 <p id="texteStockage">Calcul en cours...</p>
-                <div style="background:#e0e0e0; border-radius:4px; height:20px; width:100%; overflow:hidden; margin-top:10px;">
+                <div style="background:#e0e0e0; border-radius:6px; height:18px; width:100%; overflow:hidden; margin:10px 0 15px 0;">
                     <div id="jaugeStockageFill" style="background:#27ae60; height:100%; width:0%;"></div>
                 </div>
+                <button type="button" class="filter-btn" onclick="viderCacheApplication()">🧹 Purger le cache hors-ligne (Service Worker) et recharger</button>
             </div>
         </section>
 
     </main>
 
-    <!-- FENETRES MODALES -->
+    <!-- ========================================== -->
+    <!-- FENÊTRES MODALES                           -->
+    <!-- ========================================== -->
     <div id="modalDupliquer" class="modal" style="display:none;">
         <div class="modal-content">
-            <h3>Dupliquer le plan de <span id="nomEleveSourceDupli"></span></h3>
-            <div id="listeElevesDupli" style="max-height:250px; overflow-y:auto; margin:15px 0; border:1px solid #ddd; padding:10px; display:flex; flex-direction:column; gap:5px;"></div>
+            <h3>📋 Dupliquer le plan de <span id="nomEleveSourceDupli"></span></h3>
+            <div id="listeElevesDupli" style="max-height:260px; overflow-y:auto; margin:15px 0; border:1px solid #ddd; padding:10px; display:flex; flex-direction:column; gap:6px;"></div>
             <div style="display:flex; justify-content:flex-end; gap:10px;">
-                <button type="button" class="btn-remove" onclick="document.getElementById('modalDupliquer').style.display='none'">Annuler</button>
+                <button type="button" class="btn-remove" onclick="fermerModal('modalDupliquer')">Annuler</button>
                 <button type="button" class="btn-valid" onclick="validerDuplication()">Dupliquer</button>
             </div>
         </div>
@@ -214,11 +582,11 @@
 
     <div id="modalAssigner" class="modal" style="display:none;">
         <div class="modal-content">
-            <h3>Assigner l'activité : <span id="nomActiviteAssign"></span></h3>
+            <h3>📌 Assigner l'activité : <span id="nomActiviteAssign"></span></h3>
             <div style="margin:10px 0;">
-                <label>Jour imposé : 
-                    <select id="selectJourAssignMultiple" style="padding:5px; border-radius:4px;">
-                        <option value="">-- Aucun --</option>
+                <label>Jour imposé (optionnel) :
+                    <select id="selectJourAssignMultiple" style="padding:6px; border-radius:4px;">
+                        <option value="">-- Libre --</option>
                         <option value="Lundi">Lundi</option>
                         <option value="Mardi">Mardi</option>
                         <option value="Jeudi">Jeudi</option>
@@ -226,9 +594,9 @@
                     </select>
                 </label>
             </div>
-            <div id="listeElevesAssign" style="max-height:250px; overflow-y:auto; margin:15px 0; border:1px solid #ddd; padding:10px; display:flex; flex-direction:column; gap:5px;"></div>
+            <div id="listeElevesAssign" style="max-height:260px; overflow-y:auto; margin:15px 0; border:1px solid #ddd; padding:10px; display:flex; flex-direction:column; gap:6px;"></div>
             <div style="display:flex; justify-content:flex-end; gap:10px;">
-                <button type="button" class="btn-remove" onclick="document.getElementById('modalAssigner').style.display='none'">Annuler</button>
+                <button type="button" class="btn-remove" onclick="fermerModal('modalAssigner')">Annuler</button>
                 <button type="button" class="btn-valid" onclick="validerAssignationMultiple()">Valider l'assignation</button>
             </div>
         </div>
@@ -236,13 +604,13 @@
 
     <div id="modalEditEleve" class="modal" style="display:none;">
         <div class="modal-content">
-            <h3>Modifier l'élève</h3>
+            <h3>✏️ Modifier l'élève</h3>
             <div style="margin:10px 0;">
-                <label>Prénom : <input type="text" id="editEleveNomInput" style="padding:5px; border-radius:4px; width:100%; margin-top:5px;"></label>
+                <label>Prénom : <input type="text" id="editEleveNomInput" style="padding:8px; border-radius:4px; width:100%; margin-top:5px; border:1px solid #ccc;"></label>
             </div>
             <div style="margin:10px 0;">
-                <label>Niveau : 
-                    <select id="editEleveNiveauSelect" style="padding:5px; border-radius:4px; width:100%; margin-top:5px;">
+                <label>Niveau :
+                    <select id="editEleveNiveauSelect" style="padding:8px; border-radius:4px; width:100%; margin-top:5px; border:1px solid #ccc;">
                         <option value="CP">CP</option>
                         <option value="CE1">CE1</option>
                         <option value="CE2">CE2</option>
@@ -251,8 +619,8 @@
                     </select>
                 </label>
             </div>
-            <div style="margin:10px 0;">
-                <label style="cursor:pointer;"><input type="checkbox" id="editEleveFichierJauneInput"> 📒 Fichier Jaune activé</label>
+            <div style="margin:12px 0;">
+                <label style="cursor:pointer; font-weight:bold;"><input type="checkbox" id="editEleveFichierJauneInput"> 📒 Utilise le Fichier Jaune</label>
             </div>
             <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
                 <button type="button" class="btn-remove" onclick="fermerModal('modalEditEleve')">Annuler</button>
@@ -261,17 +629,18 @@
         </div>
     </div>
 
-    <button id="btnScrollTop" onclick="window.scrollTo({top:0, behavior:'smooth'})" style="display:none; position:fixed; bottom:20px; right:20px; z-index:99; background:#2c3e50; color:#fff; border:none; padding:10px 15px; border-radius:50%; cursor:pointer; font-size:16px;">⬆️</button>
+    <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" style="display:none; position:fixed; bottom:20px; right:20px; z-index:99; background:#1b4f72; color:#fff; border:none; padding:12px 16px; border-radius:50%; cursor:pointer; font-size:16px; box-shadow:0 3px 8px rgba(0,0,0,0.2);">⬆️</button>
 
-    <script src="script.js"></script>
+    <!-- Purge automatique des anciens Service Workers bloquants + chargement du script -->
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('./sw.js')
-            .then((reg) => console.log('Service Worker enregistré avec succès :', reg.scope))
-            .catch((err) => console.log('Échec de l’enregistrement du Service Worker :', err));
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for (let registration of registrations) {
+            registration.update();
+          }
         });
       }
     </script>
+    <script src="script.js?v=20261020"></script>
 </body>
 </html>
