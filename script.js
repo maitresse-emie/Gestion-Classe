@@ -60,7 +60,6 @@ function getCouleurMatiereBandeau(matiere) {
     return { bg: "#eaeded", text: "#2c3e50", border: "#bdc3c7" };
 }
 
-// Adaptation automatique Manuel Standard vs Fichier Jaune selon le profil de l'élève
 function getInfosActivitePourEleve(act, eleve) {
     let useJaune = Boolean(eleve && eleve.fichierJaune && act && act.varianteJaune && act.varianteJaune.trim() !== "");
     let detailPage = useJaune ? act.varianteJaune.trim() : (act.pageManuel ? act.pageManuel.trim() : "");
@@ -187,10 +186,6 @@ function eliminerDoublonsHistoriques() {
 
 function getNiveauxCochesFormulaire() { let res = []; document.querySelectorAll('.cb-niveau-form:checked').forEach(cb => res.push(cb.value)); return res; }
 
-function verifierDoublonActivite(matiere, sequence, competence, ressource, visuel, idExclu) {
-    return baseDonnees.find(a => a.id !== idExclu && (a.ressource || "").trim().toLowerCase() === ressource.trim().toLowerCase() && (a.matiere || "").trim().toLowerCase() === matiere.trim().toLowerCase() && (a.sequence || "").trim().toLowerCase() === sequence.trim().toLowerCase());
-}
-
 function majSelectCouleursRapides(valeurForcee) {
     const select = document.getElementById('selectCouleurRapide'); if (!select) return;
     select.innerHTML = '<option value="">-- Choisir une couleur --</option><option value="#ffe599">🟡 Jaune (Maths CP / Fichier Jaune)</option><option value="#f6b26b">🟠 Orange (Maths CE)</option><option value="#ea9999">🔴 Rouge (Maths CM)</option><option value="#d5a6bd">🟣 Violet (Français CP)</option><option value="#b6d7a8">🟢 Vert (Français CE)</option><option value="#9fc5e8">🔵 Bleu (Français CM)</option><option value="#ffffff">⚪ Blanc</option>';
@@ -199,8 +194,7 @@ function majSelectCouleursRapides(valeurForcee) {
 
 let idEleveCourant = null, idEleveImpressionCourant = null;
 let filtreCourantDB = 'Tous', filtreCourantMatiere = 'Toutes', filtreCourantTypeDB = 'Tous';
-let idEnCoursEdition = null, couleurManuelleModifiee = false, isFormLoading = false;
-let dernierNiveauForm = [], derniereMatiereForm = "", derniereSequenceForm = "", derniereCompForm = "";
+let idEnCoursEdition = null, couleurManuelleModifiee = false;
 
 function getListeTrie(idsArray, priosArray = [], suiviObj = {}) {
     if (!idsArray) return [];
@@ -299,7 +293,6 @@ function calculTailleStockage() {
     if(jauge) { jauge.style.width = pct + "%"; jauge.style.backgroundColor = pct > 80 ? "#e74c3c" : (pct > 50 ? "#f39c12" : "#27ae60"); }
 }
 
-// --- AMÉLIORATION 7 : SYNCHRONISATION CLOUD FIREBASE (SANS EXPIRATION) ---
 let timerFirebaseSave;
 let firebaseConfig = JSON.parse(localStorage.getItem(KEY_FIREBASE_CFG)) || { dbUrl: "", apiKey: "", email: "", refreshToken: "", idToken: "" };
 
@@ -435,7 +428,6 @@ async function chargerDepuisFirebase(forcer = false) {
     }
 }
 
-// --- SYNCHRONISATION GOOGLE DRIVE (ROBUSTE AVEC AUTO-CRÉATION SI VIDE) ---
 const CLIENT_ID = '133293729951-pv43qv8a9758rbm4atpiiq3rv0g79vnd.apps.googleusercontent.com';
 const API_KEY = ''; const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly';
 let driveAccessToken = null, driveFileId = null, intervalVerificationSession = null, timerAutoSave;
@@ -903,7 +895,7 @@ function afficherPlanHebdo() {
             <td class="${jourActuel ? 'col-num num-jour-impose' : 'col-num'}">${logoDebutLigne}${num}</td>
             <td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${coulMat.bg}; margin-right:4px;"></span><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td>
             <td>${a.lecon ? '<em>'+escHTML(a.lecon)+'</em> - ' : ''}${escHTML(a.competence)}</td>
-            <td>${logoDebutLigne}${formaterEtoiles(a.difficulte)}<strong style="${jourActuel ? 'text-decoration:underline;' : ''}">${escHTML(a.ressource)}</strong> ${infosLivre.badgeLivre} ${badge} ${suiviHtml}</td>
+            <td>${logoDebutLigne}${formaterEtoiles(a.difficulte)}<strong style="${jourActuel ? 'text-decoration:underline;' : ''}">${escHTML(a.ressource)}</strong> ${infosL.badgeLivre} ${badge} ${suiviHtml}</td>
             <td style="text-align:center;">${selectJourHtml}</td>
             <td>${actionHtml}</td>
         </tr>`;
@@ -945,7 +937,7 @@ function afficherRessourcesDisponibles() {
         nbAffichees++; let badge = a.estEvaluation ? `<span class="badge-eval">🎯 Évaluation</span>` : '', infosLivre = getInfosActivitePourEleve(a, eleve);
         tbody.innerHTML += `<tr class="${a.estEvaluation ? 'row-eval' : ''}">
             <td>${a.lecon ? '<em>'+escHTML(a.lecon)+'</em> - ' : ''}${escHTML(a.competence)}</td>
-            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infosLivre.badgeLivre} <br><span style="font-size:11px; color:#7f8c8d;">(${escHTML(infosLivre.typeEffectif)} Atelier: ${escHTML(a.symbole)})</span> ${badge}</td>
+            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infosL.badgeLivre} <br><span style="font-size:11px; color:#7f8c8d;">(${escHTML(infosL.typeEffectif)} Atelier: ${escHTML(a.symbole)})</span> ${badge}</td>
             <td style="text-align: right; width: 340px; white-space: nowrap;">
                 <select id="jour_dispo_${a.id}" style="padding:5px; font-size:12px; border-radius:4px; border:1px solid #2980b9; margin-right:4px;"><option value="">📅 Libre (Au choix)</option><option value="Lundi">Lundi</option><option value="Mardi">Mardi</option><option value="Jeudi">Jeudi</option><option value="Vendredi">Vendredi</option></select>
                 <button type="button" class="btn-add" onclick="ajouterAuPlan('${a.id}')">➕ Plan</button>
@@ -1159,9 +1151,6 @@ function genererBilanEleve() {
     zone.innerHTML = html;
 }
 
-// ==========================================
-// 4. BASE DE DONNÉES, MANUELS & IMPRESSION FICHE (AVEC MÉTÉO)
-// ==========================================
 function initNiveaux() {
     const selectNiveau = document.getElementById('selectNiveau'); if(!selectNiveau) return;
     let niveauxSimples = new Set(); baseDonnees.forEach(a => { if(a.niveau) a.niveau.split(/[,/]+/).map(x => x.trim().toUpperCase()).forEach(x => { if(x) niveauxSimples.add(x); }); });
@@ -1351,6 +1340,7 @@ function afficherChoixEtiquettes() {
     genererApercuEtiquettes();
 }
 function cocherToutesEtiquettes(source) { document.querySelectorAll('.cb-etiquette').forEach(cb => cb.checked = source.checked); genererApercuEtiquettes(); }
+
 function genererApercuEtiquettes() {
     const container = document.getElementById('printEtiquettesContainer'); if(!container) return;
     const checkboxes = document.querySelectorAll('.cb-etiquette:checked');
@@ -1358,10 +1348,20 @@ function genererApercuEtiquettes() {
     container.style.gap = `${gap}mm`; let html = '';
     checkboxes.forEach(cb => {
         const id = cb.getAttribute('data-id'), a = baseDonnees.find(x => x.id === id), qte = parseInt(document.querySelector(`.input-qte-etq[data-id="${id}"]`).value) || 1;
-        if(a) { for(let i=0; i<qte; i++) html += `<div class="etiquette-box" style="width:${w}mm; height:${h}mm; font-size:${fs}px; border:1px solid #000;"><strong>${escHTML(a.symbole || a.ressource)}</strong></div>`; }
+        if(a) {
+            let bgStyle = "", textColor = "";
+            if (a.visuel && a.visuel.startsWith('#') && a.visuel !== '#ffffff') {
+                bgStyle = `background-color: ${a.visuel}; -webkit-print-color-adjust: exact; print-color-adjust: exact;`;
+                if (isDarkColor(a.visuel)) textColor = "color: #ffffff;";
+            }
+            for(let i=0; i<qte; i++) {
+                html += `<div class="etiquette-box" style="width:${w}mm; height:${h}mm; font-size:${fs}px; border:1px solid #000; ${bgStyle} ${textColor}"><strong>${escHTML(a.symbole || a.ressource)}</strong></div>`;
+            }
+        }
     });
     container.innerHTML = html || '<p style="text-align:center; width:100%; color:#7f8c8d;">Cochez des étiquettes.</p>';
 }
+
 function lancerImpressionEtiquettes() { window.print(); }
 
 function exporterSauvegarde() {
@@ -1453,7 +1453,6 @@ function genererHtmlFicheEleve(eleve, estUnique, indexSemaineForce) {
         planningRowsHtml += `<tr><td><span class="planning-cell-box">${joursJours["Lundi"][i] ?? ""}</span></td><td><span class="planning-cell-box">${joursJours["Mardi"][i] ?? ""}</span></td><td><span class="planning-cell-box">${joursJours["Jeudi"][i] ?? ""}</span></td><td><span class="planning-cell-box">${joursJours["Vendredi"][i] ?? ""}</span></td></tr>`;
     }
 
-    // AMÉLIORATION 6 : Bandeau Bilan de fin de semaine, Météo de l'élève & Signature des parents
     let bilanBasPageHtml = `<div style="display:flex; justify-content:space-between; align-items:stretch; gap:8px; margin-top:4px; font-size:9px;">
         <div style="flex:1; border:1px solid #7f8c8d; border-radius:4px; padding:4px 8px; display:flex; align-items:center; justify-content:space-between;">
             <strong>🏁 Bilan de ma semaine :</strong>
@@ -1487,9 +1486,7 @@ function changerOnglet(idPage, element) {
     window.scrollTo({top: 0, behavior: 'smooth'});
 }
 
-// Injection dynamique des nouveaux champs (Manuels, Fichier Jaune, Firebase) dans votre HTML existant
 function initialiserAmeliorationsUI() {
-    // 1. Bouton Fichier Jaune dans la barre élève
     let btnEdit = document.getElementById('btnEditEleve');
     if (btnEdit && !document.getElementById('labelToggleFichierJaune')) {
         let lbl = document.createElement('label');
@@ -1499,7 +1496,6 @@ function initialiserAmeliorationsUI() {
         lbl.innerHTML = `<input type="checkbox" id="cbFichierJauneBar" onchange="toggleFichierJauneEleve(this.checked)"> 📒 Fichier Jaune`;
         btnEdit.insertAdjacentElement('afterend', lbl);
     }
-    // 2. Champs Page GDM, Page Manuel et Variante Fichier Jaune dans le formulaire Base de données
     let boxForm = document.getElementById('boxFormulaireManuel');
     if (boxForm && !document.getElementById('addPageGDM')) {
         let rowManuels = document.createElement('div');
@@ -1515,7 +1511,6 @@ function initialiserAmeliorationsUI() {
         if (rows.length >= 2) rows[1].insertAdjacentElement('afterend', rowManuels);
         else boxForm.appendChild(rowManuels);
     }
-    // 3. Panneau Firebase Cloud Temps Réel dans l'onglet 9 (Sauvegarde)
     let pageSavePanel = document.querySelector('#pageSave .panel');
     if (pageSavePanel && !document.getElementById('blocFirebaseCloud')) {
         let divFb = document.createElement('div');
