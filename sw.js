@@ -1,40 +1,62 @@
-const CACHE_NAME = 'gestion-classe-v2026-10-v7';
+const CACHE_NAME = 'gestionclasse-v1';
 const ASSETS_TO_CACHE = [
-  './',
   './index.html',
-  './style.css',
   './script.js',
+  './style.css',
   './manifest.json'
 ];
 
+// Installation du Service Worker et mise en cache des fichiers essentiels
 self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      console.log('Mise en cache des fichiers de l’application');
+      return cache.addAll(ASSETS_TO_CACHE);
+    })
+  );
   self.skipWaiting();
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE)));
 });
 
+// Activation et nettoyage des anciens caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
+    caches.keys().then((keys) => {
       return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) return caches.delete(cache);
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
+            console.log('Suppression de l’ancien cache :', key);
+            return caches.delete(key);
+          }
         })
       );
-    }).then(() => self.clients.claim())
+    })
   );
+  self.clients.claim();
 });
 
+// Interception des requêtes réseau (Mode hors-ligne prioritaire sur les fichiers statiques)
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) return;
+  // On ne met pas en cache les requêtes vers Firebase (pour garder la synchro temps réel)
+  if (event.request.url.includes('firebasedatabase.app')) {
+    return;
+  }
+
   event.respondWith(
-    fetch(event.request)
-      .then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-          const responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseClone));
+    caches.match(event.request).then((cachedResponse) => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return fetch(event.request).then((networkResponse) => {
+        return caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, networkResponse.clone());
+          return networkResponse;
+        });
+      }).catch(() => {
+        // Optionnel : page de repli si hors-ligne et ressource absente du cache
+        if (event.request.headers.get('accept').includes('text/html')) {
+          return caches.match('./index.html');
         }
-        return networkResponse;
-      })
-      .catch(() => caches.match(event.request))
+      });
+    })
   );
 });
