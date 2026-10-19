@@ -173,11 +173,6 @@ let timerFirebaseSave;
 const URL_FIREBASE_FIXE = "https://gestionclasse-cc401-default-rtdb.europe-west1.firebasedatabase.app";
 let firebaseConfig = JSON.parse(localStorage.getItem(KEY_FIREBASE_CFG)) || { dbUrl: URL_FIREBASE_FIXE, apiKey: "", email: "", refreshToken: "", idToken: "" };
 
-if (!firebaseConfig.dbUrl) {
-    firebaseConfig.dbUrl = URL_FIREBASE_FIXE;
-    localStorage.setItem(KEY_FIREBASE_CFG, JSON.stringify(firebaseConfig));
-}
-
 async function sauvegarderVersFirebase() {
     Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
     const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, theme: localStorage.getItem(KEY_THEME) || 'pastel', updatedAt: new Date().toISOString() };
@@ -185,18 +180,13 @@ async function sauvegarderVersFirebase() {
         let res = await fetch(`${URL_FIREBASE_FIXE}/classe_data.json`, {
             method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
         });
-        if (!res.ok) {
-            let errText = await res.text();
-            throw new Error(`HTTP ${res.status} - ${errText}`);
-        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         let statut = document.getElementById('statutFirebase');
         if (statut) { statut.innerText = "🔥 Synchro Cloud OK (" + new Date().toLocaleTimeString() + ")"; statut.style.color = "#27ae60"; }
         showToast("Données envoyées sur le Cloud !", "success");
     } catch (e) { 
         console.error("Erreur synchro Firebase:", e);
         showToast("Erreur Firebase : " + e.message, "error");
-        let statut = document.getElementById('statutFirebase');
-        if (statut) { statut.innerText = "⚠️ Erreur d'écriture"; statut.style.color = "#e74c3c"; }
     }
 }
 
@@ -205,10 +195,7 @@ async function chargerDepuisFirebase(forcer = false) {
     if (statut) statut.innerText = "⏳ Chargement depuis le Cloud...";
     try {
         let res = await fetch(`${URL_FIREBASE_FIXE}/classe_data.json`);
-        if (!res.ok) {
-            let errText = await res.text();
-            throw new Error(`HTTP ${res.status} - ${errText}`);
-        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         let data = await res.json();
         if (data && (data.base || data.eleves)) {
             if (forcer || baseDonnees.length === 0 || confirm("Des données ont été trouvées sur votre Cloud Firebase. Voulez-vous charger la version du Cloud sur cet appareil ?")) {
@@ -224,7 +211,7 @@ async function chargerDepuisFirebase(forcer = false) {
                 localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
                 postEditGlobal(); majListeEleves(); initialiserSelectsFormulaire(); afficherChoixEtiquettes(); majSelectCouleursRapides(); rafraichirDashboard();
                 if (idEleveCourant) chargerEleve();
-                showToast("🔥 Données récupérées depuis Firebase !", "success");
+                showToast("🔥 Données récupérées et synchronisées depuis Firebase !", "success");
             }
             if (statut) { statut.innerText = "🔥 Cloud Firebase actif"; statut.style.color = "#27ae60"; }
         } else {
