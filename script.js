@@ -37,23 +37,25 @@ let modeSaisieMultipleActif = false;
 let imagesParType = JSON.parse(localStorage.getItem(KEY_IMAGES));
 if (!imagesParType) {
     imagesParType = {
-        "Atelier": { img: "", emoji: "🧩", remplacerNum: false, appliquerCouleur: true, isTablette: false },
+        "Atelier": { img: "", emoji: "", remplacerNum: false, appliquerCouleur: true, isTablette: false },
         "Jeu": { img: "", emoji: "🎲", remplacerNum: false, appliquerCouleur: true, isTablette: false },
         "Fichier jaune": { img: "", emoji: "📒", remplacerNum: false, appliquerCouleur: false, isTablette: false },
-        "Vidéo": { img: "", emoji: "💻", remplacerNum: false, appliquerCouleur: false, isTablette: false },
+        "Vidéo": { img: "", emoji: "💻", remplacerNum: true, appliquerCouleur: false, isTablette: false },
         "Anton": { img: "", emoji: "📱", remplacerNum: true, appliquerCouleur: false, isTablette: true },
-        "Scratch": { img: "", emoji: "🐱", remplacerNum: true, appliquerCouleur: false, isTablette: true }
+        "Scratch": { img: "", emoji: "🤖", remplacerNum: true, appliquerCouleur: false, isTablette: true }
     };
 } else {
     if (!imagesParType["Fichier jaune"]) {
         imagesParType["Fichier jaune"] = { img: "", emoji: "📒", remplacerNum: false, appliquerCouleur: false, isTablette: false };
     }
     Object.keys(imagesParType).forEach(k => {
-        if (typeof imagesParType[k] === 'object' && imagesParType[k].isTablette === undefined) {
-            imagesParType[k].isTablette = (k.toLowerCase() === 'anton' || k.toLowerCase() === 'scratch');
-        }
-        if (typeof imagesParType[k] === 'object' && imagesParType[k].emoji === undefined) {
-            imagesParType[k].emoji = (k.toLowerCase() === 'jeu' ? '🎲' : (k.toLowerCase() === 'atelier' ? '🧩' : '📌'));
+        if (typeof imagesParType[k] === 'object') {
+            if (imagesParType[k].isTablette === undefined) {
+                imagesParType[k].isTablette = (k.toLowerCase() === 'anton' || k.toLowerCase() === 'scratch');
+            }
+            if (imagesParType[k].emoji === undefined) {
+                imagesParType[k].emoji = (k.toLowerCase() === 'jeu' ? '🎲' : '');
+            }
         }
     });
 }
@@ -64,23 +66,49 @@ if (!baseDonnees || !Array.isArray(baseDonnees)) baseDonnees = [];
 let eleves = JSON.parse(localStorage.getItem(KEY_ELEVES));
 if (!eleves || typeof eleves !== 'object') eleves = {};
 
-function getEmojiMatiere(matiere) {
-    let m = (matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    if (m.includes("francais") || m.includes("lecture") || m.includes("grammaire") || m.includes("orthographe") || m.includes("conjugaison") || m.includes("lexique") || m.includes("vocabulaire") || m.includes("ecriture") || m.includes("phonologie")) return "🔤";
-    if (m.includes("math") || m.includes("numeration") || m.includes("calcul") || m.includes("geometrie") || m.includes("mesure") || m.includes("probleme")) return "🔢";
-    if (m.includes("art") || m.includes("musique") || m.includes("chant") || m.includes("poesie") || m.includes("plastique")) return "🎨";
-    if (m.includes("eps") || m.includes("sport") || m.includes("physique") || m.includes("motricite") || m.includes("natation")) return "🏃";
-    if (m.includes("histoire") || m.includes("geographie") || m.includes("espace") || m.includes("temps")) return "🗺️";
-    if (m.includes("science") || m.includes("techno") || m.includes("vivant") || m.includes("matiere") || m.includes("monde")) return "🧬";
-    if (m.includes("anglais") || m.includes("langue") || m.includes("allemand") || m.includes("espagnol") || m.includes("lv")) return "🇬🇧";
-    if (m.includes("emc") || m.includes("moral") || m.includes("civique") || m.includes("citoyen")) return "⚖️";
-    return "📘";
+// Correspondance exacte avec les émojis de matières renseignés dans la base :
+// ✅Français - Orthographe | ✏️Français - Écriture | ➗Mathématiques - Algèbre et Proportionnalité
+// 📏Mathématiques - Mesure | 📚Français - Conjugaison | 🔤Français - Grammaire
+// 🔷Mathématiques - Géométrie | 🤖Mathématiques - Programmation | 🧑‍🎓Français - Lexique / Vocabulaire
+// 🧮Mathématiques - Numération
+function getEmojiMatiere(matiere, sequence = "") {
+    let matRaw = (matiere || "").trim();
+    if (matRaw.startsWith("🧑‍🎓")) return "🧑‍🎓";
+    if (matRaw.startsWith("✅")) return "✅";
+    if (matRaw.startsWith("✏️")) return "✏️";
+    if (matRaw.startsWith("➗")) return "➗";
+    if (matRaw.startsWith("📏")) return "📏";
+    if (matRaw.startsWith("📚")) return "📚";
+    if (matRaw.startsWith("🔤")) return "🔤";
+    if (matRaw.startsWith("🔷")) return "🔷";
+    if (matRaw.startsWith("🤖")) return "🤖";
+    if (matRaw.startsWith("🧮")) return "🧮";
+
+    // Si la matière commence par n'importe quel autre émoji, on le récupère directement
+    let matchEmojiDebut = matRaw.match(/^([^\w\sÀ-ÿ]+)/u);
+    if (matchEmojiDebut && matchEmojiDebut[1].trim()) {
+        return matchEmojiDebut[1].trim();
+    }
+
+    let text = (matRaw + " " + (sequence || "")).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (text.includes("orthographe")) return "✅";
+    if (text.includes("ecriture")) return "✏️";
+    if (text.includes("algebre") || text.includes("proportionnalite")) return "➗";
+    if (text.includes("mesure")) return "📏";
+    if (text.includes("conjugaison")) return "📚";
+    if (text.includes("grammaire")) return "🔤";
+    if (text.includes("geometrie")) return "🔷";
+    if (text.includes("programmation") || text.includes("scratch")) return "🤖";
+    if (text.includes("lexique") || text.includes("vocabulaire")) return "🧑‍🎓";
+    if (text.includes("numeration") || text.includes("nombre") || text.includes("calcul")) return "🧮";
+
+    return "";
 }
 
 function getCouleurMatiereBandeau(matiere) {
     let m = (matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     if (m.includes("francais") || m.includes("lecture") || m.includes("grammaire") || m.includes("orthographe") || m.includes("conjugaison") || m.includes("lexique") || m.includes("vocabulaire") || m.includes("ecriture") || m.includes("phonologie")) return { bg: "#1b4f72", text: "#ffffff", border: "#154360" };
-    if (m.includes("math") || m.includes("numeration") || m.includes("calcul") || m.includes("geometrie") || m.includes("mesure") || m.includes("probleme")) return { bg: "#c0392b", text: "#ffffff", border: "#922b21" };
+    if (m.includes("math") || m.includes("numeration") || m.includes("calcul") || m.includes("geometrie") || m.includes("mesure") || m.includes("algebre") || m.includes("proportionnalite") || m.includes("programmation") || m.includes("probleme")) return { bg: "#c0392b", text: "#ffffff", border: "#922b21" };
     if (m.includes("art") || m.includes("musique") || m.includes("chant") || m.includes("poesie") || m.includes("plastique")) return { bg: "#795548", text: "#ffffff", border: "#5d4037" };
     if (m.includes("eps") || m.includes("sport") || m.includes("physique") || m.includes("motricite") || m.includes("natation")) return { bg: "#e67e22", text: "#ffffff", border: "#d35400" };
     if (m.includes("histoire") || m.includes("geographie") || m.includes("espace") || m.includes("temps")) return { bg: "#5dade2", text: "#ffffff", border: "#2e86c1" };
@@ -114,7 +142,7 @@ function getInfosActivitePourEleve(act, eleve) {
     if (useJaune) {
         let detailPage = act.varianteJaune.trim();
         let badgeLivre = `<span style="background:#ffe599; color:#7c2d12; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; border:1px solid #f1c40f;">📒 ${escHTML(detailPage)}</span>`;
-        let typeEffectif = (imagesParType["Fichier jaune"] && imagesParType["Fichier jaune"].img) ? "Fichier jaune" : (act.typeRes || "");
+        let typeEffectif = (imagesParType["Fichier jaune"] && (imagesParType["Fichier jaune"].img || imagesParType["Fichier jaune"].emoji)) ? "Fichier jaune" : (act.typeRes || "");
         return { useJaune: true, detailPage, badgeLivre, typeEffectif, couleurForcee: "#ffe599" };
     }
 
@@ -140,16 +168,39 @@ function getInfosActivitePourEleve(act, eleve) {
         }
     }
 
+    let coulAct = (act && act.visuel && act.visuel.startsWith('#')) ? act.visuel : "";
     return {
         useJaune: false,
         detailPage,
         badgeLivre,
         typeEffectif: (act && act.typeRes) ? act.typeRes : "",
-        couleurForcee: (act && act.visuel) ? act.visuel : ""
+        couleurForcee: coulAct
     };
 }
 
-// Ordre demandé : [Image du type] [Emoji matière] [N° Atelier (Symbole)]
+// Nettoie le numéro d'atelier si l'utilisateur ou l'ancienne base y avait déjà inclus l'émoji du type ou de la matière
+function extraireNumeroAtelierPropre(symboleBrut, emojiType, emojiMat) {
+    let s = (symboleBrut || "").trim();
+    if (!s) return "";
+    if (emojiType && s.startsWith(emojiType)) s = s.slice(emojiType.length).trim();
+    if (emojiMat && s.startsWith(emojiMat)) s = s.slice(emojiMat.length).trim();
+    // Nettoyage des émojis de matières connus en préfixe pour éviter tout doublon (ex: "🎲🔤1" -> "1")
+    const emojisConnus = ["🎲", "🧩", "📒", "💻", "📱", "🤖", "🧑‍🎓", "✅", "✏️", "➗", "📏", "📚", "🔤", "🔷", "🧮"];
+    let modifie = true;
+    while (modifie) {
+        modifie = false;
+        for (let em of emojisConnus) {
+            if (s.startsWith(em)) {
+                s = s.slice(em.length).trim();
+                modifie = true;
+            }
+        }
+    }
+    return s;
+}
+
+// Construit le code visuel : [Image ou Émoji du type] + [Émoji Matière] + [N° Atelier]
+// Exemple : Jeu (🎲) + Français Grammaire (🔤) + n° 1 => 🎲🔤1 sur fond bleu (#9fc5e8 en CM)
 function getRepereAtelierHtml(act, eleve, tailleMaxImg = 28) {
     let infos = getInfosActivitePourEleve(act, eleve);
     let typeKey = "";
@@ -162,27 +213,62 @@ function getRepereAtelierHtml(act, eleve, tailleMaxImg = 28) {
         }
     }
     let typeCfg = typeKey ? imagesParType[typeKey] : null;
+
+    // Image du type ou image spécifique (y compris anciennes activités ayant une URL dans act.visuel)
     let imgUrl = "";
     if (act && act.imageSpecifique && act.imageSpecifique.trim() !== "") {
         imgUrl = formaterLienImage(act.imageSpecifique);
     } else if (typeCfg && typeCfg.img && typeCfg.img.trim() !== "") {
         imgUrl = formaterLienImage(typeCfg.img);
+    } else if (act && act.visuel && (act.visuel.startsWith('http') || act.visuel.includes('drive.google'))) {
+        imgUrl = formaterLienImage(act.visuel);
     }
 
-    let emojiType = (typeCfg && typeCfg.emoji) ? typeCfg.emoji : "";
-    let emojiMat = getEmojiMatiere(act ? act.matiere : "");
-    let sym = (act && act.symbole) ? act.symbole.trim() : "";
+    let emojiType = (typeCfg && typeCfg.emoji) ? typeCfg.emoji.trim() : "";
+    if (!emojiType && typeKey.toLowerCase() === "jeu") emojiType = "🎲";
 
-    let visualPrefix = "";
+    let emojiMat = getEmojiMatiere(act ? act.matiere : "", act ? act.sequence : "");
+    let symBrut = (act && act.symbole) ? act.symbole.trim() : "";
+    let numPropre = extraireNumeroAtelierPropre(symBrut, emojiType, emojiMat);
+
+    let remplacerNumParLogo = Boolean(typeCfg && typeCfg.remplacerNum);
+    let bg = infos.couleurForcee;
+    if (!bg || bg === "#ffffff") {
+        bg = calculerCouleurAutomatique(act ? act.matiere : "", act ? act.niveau : "", infos.typeEffectif);
+    }
+
+    let html = "";
     if (imgUrl && !imgUrl.startsWith('#')) {
-        visualPrefix = `<img src="${escHTML(imgUrl)}" style="max-height:${tailleMaxImg}px; max-width:50px; object-fit:contain; vertical-align:middle; margin-right:3px;">`;
-    } else if (emojiType) {
-        visualPrefix = `<span style="font-size:${tailleMaxImg}px; vertical-align:middle; margin-right:3px;">${emojiType}</span>`;
+        let tagImg = `<img src="${escHTML(imgUrl)}" style="max-height:${tailleMaxImg}px; max-width:52px; object-fit:contain; vertical-align:middle; display:inline-block;">`;
+        if (remplacerNumParLogo && !numPropre) {
+            html = tagImg;
+        } else if (numPropre || symBrut) {
+            html = `${tagImg} <strong style="vertical-align:middle;">${escHTML( emojiMat + numPropre )}</strong>`;
+        } else {
+            html = tagImg;
+        }
+    } else {
+        // Affichage combiné : [Émoji Type] [Émoji Matière] [Numéro] -> ex: 🎲🔤1
+        if (numPropre || symBrut) {
+            let codeComplet = `${emojiType}${emojiMat}${numPropre}`;
+            html = `<strong style="font-size:${Math.max(13, Math.round(tailleMaxImg * 0.6))}px; letter-spacing:0.5px;">${escHTML(codeComplet)}</strong>`;
+        } else if (emojiType) {
+            html = `<span style="font-size:${Math.max(14, tailleMaxImg - 4)}px;">${escHTML(emojiType)}</span>`;
+        } else {
+            html = "";
+        }
     }
 
-    let html = `${visualPrefix}<span style="vertical-align:middle; font-size:${Math.max(12, tailleMaxImg - 6)}px; margin-right:3px;">${emojiMat}</span><strong>${escHTML(sym)}</strong>`;
-    let bg = infos.couleurForcee || calculerCouleurAutomatique(act ? act.matiere : "", act ? act.niveau : "", infos.typeEffectif);
-    return { html, bg, typeEffectif: infos.typeEffectif };
+    return {
+        html,
+        bg,
+        typeEffectif: infos.typeEffectif,
+        emojiType,
+        emojiMat,
+        numPropre,
+        imgUrl,
+        codeTexte: (numPropre || symBrut) ? `${emojiType}${emojiMat}${numPropre}` : ""
+    };
 }
 
 function calculerVendrediDepuisISO(dateISO) {
@@ -320,7 +406,15 @@ function importerDonneesUniversel(rawData) {
         Object.values(eleves).forEach(el => assurerStructureSemaines(el));
         localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves));
     }
-    if (nouvImages && typeof nouvImages === 'object') { imagesParType = nouvImages; localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType)); }
+    if (nouvImages && typeof nouvImages === 'object') {
+        imagesParType = nouvImages;
+        Object.keys(imagesParType).forEach(k => {
+            if (typeof imagesParType[k] === 'object' && imagesParType[k].emoji === undefined) {
+                imagesParType[k].emoji = (k.toLowerCase() === 'jeu' ? '🎲' : '');
+            }
+        });
+        localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
+    }
     if (nouvProg && typeof nouvProg === 'object') { programmations = nouvProg; localStorage.setItem(KEY_PROG, JSON.stringify(programmations)); }
     if (Array.isArray(nouvArchives)) { dashboardArchives = nouvArchives; localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); }
     if (nouvPrintCfg && typeof nouvPrintCfg === 'object') { printConfig = { ...printConfig, ...nouvPrintCfg }; localStorage.setItem(KEY_PRINT_CFG, JSON.stringify(printConfig)); }
@@ -380,8 +474,13 @@ window.restaurerFichierJSON = restaurerFichierJSON;
 function restaurerDepuisTexteColle() {
     let zone = document.getElementById('textareaJsonSecours');
     if (!zone || !zone.value.trim()) { showToast("Collez votre JSON d'abord.", "error"); return; }
+    let txt = zone.value.trim();
+    if (txt.startsWith('"') && txt.endsWith('"')) {
+        try { txt = JSON.parse(txt); } catch (e) {}
+    }
     try {
-        if (importerDonneesUniversel(JSON.parse(zone.value.trim()))) zone.value = "";
+        let parsed = typeof txt === 'string' ? JSON.parse(txt) : txt;
+        if (importerDonneesUniversel(parsed)) zone.value = "";
     } catch (err) {
         showToast("Le texte collé n'est pas un JSON valide.", "error");
     }
@@ -471,7 +570,7 @@ function declencherAutoSaveFirebase() {
 function tenterConnexionAutoFirebase() { chargerDepuisFirebase(false); }
 
 // ==========================================
-// 3. UTILITAIRES, TRI FIXE & THÈMES VISUELS
+// 3. UTILITAIRES, TRI FIXE & COULEURS AUTO
 // ==========================================
 function nettoyerNomPourTri(str) { return (!str) ? "" : str.replace(/^[^a-zA-ZÀ-ÿ0-9]+/, "").trim().toLowerCase(); }
 function formaterEtoiles(nb) { let n = parseInt(nb) || 0; return n <= 0 ? "" : `<span style="color:#f39c12; font-size:12px; margin-right:4px;" title="Difficulté : ${n} étoile(s)">${"⭐".repeat(n)}</span>`; }
@@ -505,7 +604,7 @@ function getNiveauxCochesFormulaire(classe = '.cb-niveau-form') {
 
 function majSelectCouleursRapides(valeurForcee) {
     const select = document.getElementById('selectCouleurRapide'); if (!select) return;
-    select.innerHTML = '<option value="">-- Couleur auto par matière/niveau --</option><option value="#ffe599">🟡 Jaune</option><option value="#f6b26b">🟠 Orange</option><option value="#ea9999">🔴 Rouge</option><option value="#d5a6bd">🟣 Violet</option><option value="#b6d7a8">🟢 Vert</option><option value="#9fc5e8">🔵 Bleu</option><option value="#ffffff">⚪ Blanc</option>';
+    select.innerHTML = '<option value="">-- Couleur auto par matière/niveau --</option><option value="#ffe599">🟡 Jaune (Maths CP)</option><option value="#f6b26b">🟠 Orange (Maths CE)</option><option value="#ea9999">🔴 Rouge (Maths CM)</option><option value="#d5a6bd">🟣 Violet (Français CP)</option><option value="#b6d7a8">🟢 Vert (Français CE)</option><option value="#9fc5e8">🔵 Bleu (Français CM)</option><option value="#ffffff">⚪ Blanc</option>';
     if (valeurForcee) select.value = valeurForcee;
 }
 
@@ -516,8 +615,9 @@ function majListeTypesSelect() {
     let htmlEtiq = '<option value="Tous">Tous les supports</option>';
     if (imagesParType) {
         Object.keys(imagesParType).forEach(t => {
-            html += `<option value="${escHTML(t)}">${escHTML(t)}</option>`;
-            htmlEtiq += `<option value="${escHTML(t)}">${escHTML(t)}</option>`;
+            let em = imagesParType[t].emoji ? imagesParType[t].emoji + " " : "";
+            html += `<option value="${escHTML(t)}">${escHTML(em + t)}</option>`;
+            htmlEtiq += `<option value="${escHTML(t)}">${escHTML(em + t)}</option>`;
         });
     }
     if (selectType) selectType.innerHTML = html;
@@ -591,12 +691,30 @@ function calculerCouleurAutomatique(matiere, niveauxStr, typeRes) {
     let typeKey = "";
     if (imagesParType) { for (let k in imagesParType) { if (k.trim().toLowerCase() === (typeRes || "").trim().toLowerCase()) { typeKey = k; break; } } }
     if (typeKey && imagesParType[typeKey] && typeof imagesParType[typeKey] === 'object' && imagesParType[typeKey].appliquerCouleur === false) return "#ffffff";
-    let mat = matiere.trim().toLowerCase(), nivs = niveauxStr.toUpperCase();
+    let mat = matiere.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""), nivs = niveauxStr.toUpperCase();
     let ordreNivs = ["CP", "CE1", "CE2", "CM1", "CM2"], niveauPlusBas = "";
     for (let n of ordreNivs) { if (nivs.includes(n)) { niveauPlusBas = n; break; } }
-    if (mat.includes('math')) { if (niveauPlusBas === 'CP') return "#ffe599"; if (niveauPlusBas === 'CE1' || niveauPlusBas === 'CE2') return "#f6b26b"; if (niveauPlusBas === 'CM1' || niveauPlusBas === 'CM2') return "#ea9999"; }
-    else if (mat.includes('français') || mat.includes('francais')) { if (niveauPlusBas === 'CP') return "#d5a6bd"; if (niveauPlusBas === 'CE1' || niveauPlusBas === 'CE2') return "#b6d7a8"; if (niveauPlusBas === 'CM1' || niveauPlusBas === 'CM2') return "#9fc5e8"; }
+    if (mat.includes('math') || mat.includes('numeration') || mat.includes('geometrie') || mat.includes('mesure') || mat.includes('algebre') || mat.includes('calcul')) {
+        if (niveauPlusBas === 'CP') return "#ffe599";
+        if (niveauPlusBas === 'CE1' || niveauPlusBas === 'CE2') return "#f6b26b";
+        if (niveauPlusBas === 'CM1' || niveauPlusBas === 'CM2') return "#ea9999";
+    } else if (mat.includes('francais') || mat.includes('grammaire') || mat.includes('orthographe') || mat.includes('conjugaison') || mat.includes('vocabulaire') || mat.includes('lexique') || mat.includes('ecriture')) {
+        if (niveauPlusBas === 'CP') return "#d5a6bd";
+        if (niveauPlusBas === 'CE1' || niveauPlusBas === 'CE2') return "#b6d7a8";
+        if (niveauPlusBas === 'CM1' || niveauPlusBas === 'CM2') return "#9fc5e8";
+    }
     return "#ffffff";
+}
+
+function majCouleurAutoFormSimple() {
+    if (idEnCoursEdition) return;
+    let selCoul = document.getElementById('selectCouleurRapide');
+    if (!selCoul) return;
+    let mat = document.getElementById('inputMatiere') ? document.getElementById('inputMatiere').value : "";
+    let typeR = document.getElementById('selectTypeRessource') ? document.getElementById('selectTypeRessource').value : "";
+    let nivs = getNiveauxCochesFormulaire('.cb-niveau-form').join(', ');
+    let coul = calculerCouleurAutomatique(mat, nivs, typeR);
+    selCoul.value = coul;
 }
 
 function calculTailleStockage() {
@@ -651,6 +769,57 @@ function toggleFichierJauneEleve(isChecked) {
     eleves[idEleveCourant].fichierJaune = Boolean(isChecked);
     sauvegarderEleves(); majListeEleves(); afficherPlanHebdo(); afficherRessourcesDisponibles();
     showToast(isChecked ? "📒 Mode Fichier Jaune activé !" : "📘 Mode Manuel Standard activé !");
+}
+
+function majListeEleves() {
+    const select = document.getElementById('selectEleveProfile'), selectImp = document.getElementById('selectEleveImpression'), selectBilan = document.getElementById('selectEleveBilan');
+    let optHtml = '<option value="">-- Sélectionner un élève --</option>';
+    let optImp = '<option value="TOUS_ELEVES">📚 TOUS les élèves de la classe</option><option value="NIVEAU_CP">📘 Groupe CP</option><option value="NIVEAU_CE1">📘 Groupe CE1</option><option value="NIVEAU_CE2">📘 Groupe CE2</option><option value="NIVEAU_CM1">📘 Groupe CM1</option><option value="NIVEAU_CM2">📘 Groupe CM2</option>';
+    let optBilan = '<option value="">-- Choisir un élève --</option>';
+
+    getElevesTries().forEach(e => {
+        let tagParcours = "";
+        if (estEleveCM(e)) {
+            let p = e.parcours || (e.niveau.toUpperCase() === "CM2" ? "orange" : "jaune");
+            tagParcours = (p === "orange") ? " 🟠" : " 🟡";
+        }
+        let tagJaune = e.fichierJaune ? " 📒" : "";
+        let labelNiv = `[${e.niveau || "CP"}] ${e.nom}${tagParcours}${tagJaune}`;
+        optHtml += `<option value="${e.id}">${escHTML(labelNiv)}</option>`;
+        optImp += `<option value="${e.id}">${escHTML(labelNiv)}</option>`;
+        optBilan += `<option value="${e.id}">${escHTML(labelNiv)}</option>`;
+    });
+    if (select) select.innerHTML = optHtml;
+    if (selectImp) selectImp.innerHTML = optImp;
+    if (selectBilan) selectBilan.innerHTML = optBilan;
+
+    let btnEdit = document.getElementById('btnEditEleve'), btnSuppr = document.getElementById('btnSupprEleve');
+    if (idEleveCourant && eleves[idEleveCourant]) {
+        if (select) select.value = idEleveCourant;
+        if (btnEdit) btnEdit.style.display = "inline-block";
+        if (btnSuppr) btnSuppr.style.display = "inline-block";
+    } else {
+        if (btnEdit) btnEdit.style.display = "none";
+        if (btnSuppr) btnSuppr.style.display = "none";
+    }
+    if (idEleveCourant && !idEleveImpressionCourant) idEleveImpressionCourant = idEleveCourant;
+    if (idEleveImpressionCourant) {
+        if (selectImp) selectImp.value = idEleveImpressionCourant;
+        if (selectBilan && eleves[idEleveImpressionCourant]) selectBilan.value = idEleveImpressionCourant;
+    }
+}
+
+function modifierMaxAteliersEleve() {
+    if (!idEleveCourant) return;
+    let val = Math.min(25, Math.max(1, parseInt(document.getElementById('inputMaxAteliersEleve').value) || 15));
+    eleves[idEleveCourant].maxAteliers = val; sauvegarderEleves();
+    let maxAff = document.getElementById('maxAteliersAffiche'); if (maxAff) maxAff.innerText = val;
+}
+function modifierMaxTablettesEleve() {
+    if (!idEleveCourant) return;
+    let val = Math.min(10, Math.max(0, parseInt(document.getElementById('inputMaxTablettesEleve').value) || 0));
+    eleves[idEleveCourant].maxTablettes = val; sauvegarderEleves();
+    if (idEleveCourant) afficherPlanHebdo();
 }
 
 function creerEleve() {
@@ -795,7 +964,20 @@ function chargerEleve() {
 
 function initialiserSelectsFormulaire() {
     const selMat = document.getElementById('selectMatiere');
-    let matieres = [...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+    const matieresParDefaut = [
+        "✅Français - Orthographe",
+        "✏️Français - Écriture",
+        "📚Français - Conjugaison",
+        "🔤Français - Grammaire",
+        "🧑‍🎓Français - Lexique",
+        "🧑‍🎓Français - Vocabulaire",
+        "🧮Mathématiques - Numération",
+        "➗Mathématiques - Algèbre et Proportionnalité",
+        "📏Mathématiques - Mesure",
+        "🔷Mathématiques - Géométrie",
+        "🤖Mathématiques - Programmation"
+    ];
+    let matieres = [...new Set([...matieresParDefaut, ...baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean)])].sort((a, b) => nettoyerNomPourTri(a).localeCompare(nettoyerNomPourTri(b), 'fr'));
     let sequences = [...new Set(baseDonnees.map(b => (b.sequence || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
     let competences = [...new Set(baseDonnees.map(b => (b.competence || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
 
@@ -1005,7 +1187,7 @@ function cloreSemainePourUnEleve(eleve) {
         let nextIdx = Math.min(eleve.semaineIndex, eleve.semaines.length - 1), s = eleve.semaines[nextIdx];
         eleve.semaineIndex = nextIdx; if (!s.priorites) s.priorites = [];
         aTransferer.forEach(idAct => { if (!s.planHebdo.includes(idAct)) s.planHebdo.unshift(idAct); if (!s.priorites.includes(idAct)) s.priorites.push(idAct); });
-        eleve.planHebdo = [...s.planHebdo]; eleve.priorites = [...s.priorites]; eleve.joursAssignes = { ...(s.joursAssignes || {}) }; eleve.valides = { ...(s.valides || {}) }; eleve.suivi = { ...(s.suivi || {}), ...(s.suivi || {}) }; eleve.dateDebutISO = s.dateDebutISO || ""; eleve.dateDebut = s.dateDebut || ""; eleve.dateFin = s.dateFin || "";
+        eleve.planHebdo = [...s.planHebdo]; eleve.priorites = [...s.priorites]; eleve.joursAssignes = { ...(s.joursAssignes || {}) }; eleve.valides = { ...(s.valides || {}) }; eleve.suivi = { ...(eleve.suivi || {}), ...(s.suivi || {}) }; eleve.dateDebutISO = s.dateDebutISO || ""; eleve.dateDebut = s.dateDebut || ""; eleve.dateFin = s.dateFin || "";
     } else {
         let nextISO = "", nextDeb = "", nextFin = "";
         if (eleve.dateDebutISO) { let c = calculerVendrediDepuisISO(eleve.dateDebutISO); if (c.lundiSuivantISO) { nextISO = c.lundiSuivantISO; let c2 = calculerVendrediDepuisISO(nextISO); nextDeb = c2.debutFR; nextFin = c2.finFR; } }
@@ -1035,4 +1217,641 @@ function cloturerSemaineClasseGlobale() {
 
 function basculerPriorite(idActivite) {
     if (!idEleveCourant) return; let eleve = eleves[idEleveCourant]; if (!eleve.priorites) eleve.priorites = [];
-    let idx = eleve.priorites.indexOf(idActivite); if (idx > -1) eleve.prior
+    let idx = eleve.priorites.indexOf(idActivite); if (idx > -1) eleve.priorites.splice(idx, 1); else eleve.priorites.push(idActivite);
+    sauvegarderEleves(); afficherPlanHebdo();
+}
+
+function cocherToutPlan(source) { document.querySelectorAll('.cb-plan-valider:not(:disabled)').forEach(cb => cb.checked = source.checked); }
+
+function validerSelectionPlan() {
+    if (!idEleveCourant) return; const checks = document.querySelectorAll('.cb-plan-valider:checked:not(:disabled)');
+    if (checks.length === 0) { showToast("Cochez au moins une activité.", "error"); return; }
+    checks.forEach(cb => marquerCommeValideSansRafraichir(cb.value, eleves[idEleveCourant]));
+    sauvegarderEleves(); afficherPlanHebdo(); afficherHistorique(); afficherRessourcesDisponibles(); rafraichirDashboard(); showToast("Validé !", "success");
+}
+
+function estActiviteTablette(act) {
+    if (!act || !act.typeRes) return false; let tName = act.typeRes.trim().toLowerCase();
+    for (let k in imagesParType) { if (k.trim().toLowerCase() === tName) return Boolean(imagesParType[k] && imagesParType[k].isTablette); } return false;
+}
+
+function marquerCommeValideSansRafraichir(idActivite, eleve) {
+    const act = baseDonnees.find(b => b.id === idActivite); if (!act) return; const dateValid = new Date().toLocaleDateString('fr-FR');
+    if (!eleve.valides) eleve.valides = {}; eleve.valides[idActivite] = dateValid;
+    if (act.estEvaluation) {
+        let niveauxAct = (act.niveau || "").toUpperCase().split(/[,/]+/).map(x => x.trim());
+        baseDonnees.filter(b => (b.matiere || "").trim().toLowerCase() === (act.matiere || "").trim().toLowerCase() && (b.competence || "").trim().toLowerCase() === (act.competence || "").trim().toLowerCase() && niveauxAct.some(n => (b.niveau || "").toUpperCase().includes(n))).forEach(b => {
+            if (!eleve.historique.some(h => h.idActivite === b.id)) eleve.historique.push({ idActivite: b.id, date: dateValid });
+            eleve.valides[b.id] = dateValid; if (eleve.suivi && eleve.suivi[b.id]) delete eleve.suivi[b.id];
+        });
+    } else {
+        if (!eleve.historique.some(h => h.idActivite === idActivite)) eleve.historique.push({ idActivite: idActivite, date: dateValid });
+        if (eleve.suivi && eleve.suivi[idActivite]) delete eleve.suivi[idActivite];
+    }
+}
+
+function annulerValidationPlan(idActivite) { if (!idEleveCourant) return; let eleve = eleves[idEleveCourant]; if (eleve.valides && eleve.valides[idActivite]) { delete eleve.valides[idActivite]; eleve.historique = eleve.historique.filter(h => h.idActivite !== idActivite); sauvegarderEleves(); afficherPlanHebdo(); afficherHistorique(); rafraichirDashboard(); } }
+function validerDirectement(idActivite) { if (!idEleveCourant) return; marquerCommeValideSansRafraichir(idActivite, eleves[idEleveCourant]); sauvegarderEleves(); afficherRessourcesDisponibles(); afficherHistorique(); afficherPlanHebdo(); rafraichirDashboard(); showToast("Validé !", "success"); }
+function masquerActivite(idActivite) { if (!idEleveCourant) return; eleves[idEleveCourant].masquees.push(idActivite); sauvegarderEleves(); afficherRessourcesDisponibles(); afficherHistorique(); }
+function demasquerActivite(idActivite) { if (!idEleveCourant) return; eleves[idEleveCourant].masquees = eleves[idEleveCourant].masquees.filter(id => id !== idActivite); sauvegarderEleves(); afficherRessourcesDisponibles(); afficherHistorique(); }
+
+function ajouterAuPlan(idActivite) {
+    const eleve = eleves[idEleveCourant], max = eleve.maxAteliers || 15;
+    if (eleve.planHebdo.length >= max) {
+        if (!eleve.enAttente) eleve.enAttente = [];
+        if (!eleve.enAttente.includes(idActivite)) eleve.enAttente.push(idActivite);
+        sauvegarderEleves(); afficherRessourcesDisponibles(); afficherPlanHebdo();
+        showToast(`⚠️ Quota (${max}) atteint : placé en file d'attente !`, "error");
+        return;
+    }
+    const actAjoutee = baseDonnees.find(b => b.id === idActivite);
+    if (actAjoutee && estActiviteTablette(actAjoutee)) {
+        let maxTab = eleve.maxTablettes ?? 2, nbTabActuels = eleve.planHebdo.map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length;
+        if (nbTabActuels >= maxTab) { showToast(`🚫 Quota tablettes (${maxTab}) atteint.`, "error"); return; }
+    }
+    let selectJourElem = document.getElementById('jour_dispo_' + idActivite), jourChoisi = selectJourElem ? selectJourElem.value : "";
+    eleve.planHebdo.push(idActivite); if (!eleve.joursAssignes) eleve.joursAssignes = {}; if (jourChoisi) eleve.joursAssignes[idActivite] = jourChoisi;
+    sauvegarderEleves(); majBarreSemainesUI(); afficherRessourcesDisponibles(); afficherPlanHebdo(); rafraichirDashboard();
+    showToast(jourChoisi ? `Ajouté (${jourChoisi})` : "Ajouté au plan !");
+}
+
+function mettreEnAttente(idActivite) {
+    if (!idEleveCourant) return;
+    let eleve = eleves[idEleveCourant]; if (!eleve.enAttente) eleve.enAttente = [];
+    if (!eleve.enAttente.includes(idActivite)) eleve.enAttente.push(idActivite);
+    sauvegarderEleves(); afficherRessourcesDisponibles(); afficherPlanHebdo();
+    showToast("⏳ Placé en attente pour la semaine suivante.");
+}
+
+function annulerAttente(idActivite, basculerDansPlan = false) {
+    if (!idEleveCourant) return;
+    let eleve = eleves[idEleveCourant];
+    eleve.enAttente = (eleve.enAttente || []).filter(id => id !== idActivite);
+    if (basculerDansPlan) eleve.planHebdo.push(idActivite);
+    sauvegarderEleves(); afficherPlanHebdo(); afficherRessourcesDisponibles();
+}
+
+function retirerDuPlan(idActivite) {
+    let e = eleves[idEleveCourant], idx = e.planHebdo.indexOf(idActivite);
+    if (idx > -1) e.planHebdo.splice(idx, 1);
+    else { idx = (e.enAttente || []).indexOf(idActivite); if (idx > -1) e.enAttente.splice(idx, 1); }
+    if (e.suivi && e.suivi[idActivite]) delete e.suivi[idActivite];
+    if (e.valides && e.valides[idActivite]) delete e.valides[idActivite];
+    if (e.joursAssignes && e.joursAssignes[idActivite]) delete e.joursAssignes[idActivite];
+    sauvegarderEleves(); majBarreSemainesUI(); afficherRessourcesDisponibles(); afficherPlanHebdo(); rafraichirDashboard(); showToast("Retiré");
+}
+
+function desarchiverActivite(idActivite) {
+    if (!idEleveCourant) return;
+    const eleve = eleves[idEleveCourant], index = eleve.historique.findIndex(h => h.idActivite === idActivite);
+    if (index > -1) { eleve.historique.splice(index, 1); if (eleve.valides) delete eleve.valides[idActivite]; sauvegarderEleves(); afficherHistorique(); afficherPlanHebdo(); afficherRessourcesDisponibles(); rafraichirDashboard(); }
+}
+
+function afficherPlanHebdo() {
+    const eleve = eleves[idEleveCourant], tbodyApercu = document.getElementById('tableApercuPlan'); if (!tbodyApercu || !eleve) return; tbodyApercu.innerHTML = '';
+    document.getElementById('compteurAteliersEleve').innerText = eleve.planHebdo.length; document.getElementById('maxAteliersAffiche').innerText = eleve.maxAteliers || 15;
+    let nbTabCount = eleve.planHebdo.map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length;
+    let compteurTabElem = document.getElementById('compteurTablettesEleve'); if (compteurTabElem) compteurTabElem.innerText = `${nbTabCount}/${eleve.maxTablettes ?? 2}`;
+
+    let planObjects = getListeTrie(eleve.planHebdo, eleve.priorites || []);
+    planObjects.forEach((a, index) => {
+        const num = index + 1;
+        let badge = a.estEvaluation ? `<span class="badge-eval">🎯 Éval</span>` : '';
+        let estValide = eleve.valides && eleve.valides[a.id];
+        let rowClass = a.estEvaluation ? 'row-eval' : (estValide ? 'row-valide' : '');
+        let statutSuivi = (eleve.suivi && eleve.suivi[a.id]) ? eleve.suivi[a.id].statut : "";
+        let isPrio = (eleve.priorites && eleve.priorites.includes(a.id));
+        let logoDebutLigne = statutSuivi === 'a_revoir' ? `👩‍🏫 ` : (statutSuivi === 'a_refaire' ? `🔄 ` : "");
+        let infosL = getInfosActivitePourEleve(a, eleve);
+        let rep = getRepereAtelierHtml(a, eleve, 28);
+
+        let suiviHtml = `<div style="margin-top:4px; display:flex; gap:4px; flex-wrap:wrap;">
+            <button type="button" class="filter-btn" style="font-size:11px; padding:2px 6px; ${statutSuivi === 'a_revoir' ? 'background:#c0392b; color:#fff;' : ''}" onclick="definirStatutSuivi('${a.id}', '${statutSuivi === 'a_revoir' ? '' : 'a_revoir'}')">👩‍🏫 À revoir</button>
+            <button type="button" class="filter-btn" style="font-size:11px; padding:2px 6px; ${statutSuivi === 'a_refaire' ? 'background:#e67e22; color:#fff;' : ''}" onclick="definirStatutSuivi('${a.id}', '${statutSuivi === 'a_refaire' ? '' : 'a_refaire'}')">🔄 À refaire</button>
+        </div>`;
+        if (eleve.suivi && eleve.suivi[a.id] && eleve.suivi[a.id].commentaire) {
+            suiviHtml += `<div style="color:#7f8c8d; font-size:11px; margin-top:2px;">💬 ${escHTML(eleve.suivi[a.id].commentaire)}</div>`;
+        }
+
+        let jourActuel = (eleve.joursAssignes && eleve.joursAssignes[a.id]) ? eleve.joursAssignes[a.id] : "";
+        let selectJourHtml = `<select onchange="assignerJour('${a.id}', this.value)" style="width:100%; padding:4px; font-size:12px; ${jourActuel ? 'background:#fef5e7; font-weight:bold; color:#d35400;' : ''}"><option value="">-- Libre --</option><option value="Lundi" ${jourActuel === 'Lundi' ? 'selected' : ''}>Lundi</option><option value="Mardi" ${jourActuel === 'Mardi' ? 'selected' : ''}>Mardi</option><option value="Jeudi" ${jourActuel === 'Jeudi' ? 'selected' : ''}>Jeudi</option><option value="Vendredi" ${jourActuel === 'Vendredi' ? 'selected' : ''}>Vendredi</option></select>`;
+        let actionHtml = estValide
+            ? `<span style="color:#27ae60; font-weight:bold; font-size:12px;">✅ Fini</span><br><button type="button" class="btn-remove" style="width:100%; margin-top:4px;" onclick="annulerValidationPlan('${a.id}')">↩️ Défaire</button>`
+            : `<button type="button" class="btn-valid" style="width:100%; margin-bottom:4px;" onclick="validerDirectement('${a.id}')">🏁 Fini</button><button type="button" class="btn-remove" style="width:100%;" onclick="retirerDuPlan('${a.id}')">❌ Retirer</button>`;
+        let coulMat = getCouleurMatiereBandeau(a.matiere);
+
+        tbodyApercu.innerHTML += `<tr class="${rowClass}">
+            <td style="text-align:center;"><input type="checkbox" class="cb-plan-valider" value="${a.id}" ${estValide ? 'checked disabled' : ''} style="transform: scale(1.3); cursor:pointer;"></td>
+            <td style="text-align:center; cursor:pointer; font-size:18px;" onclick="basculerPriorite('${a.id}')" style="${isPrio ? 'color:#f1c40f;' : 'color:#bdc3c7;'}">${isPrio ? '⭐' : '☆'}</td>
+            <td class="${jourActuel ? 'col-num num-jour-impose' : 'col-num'}">${logoDebutLigne}${num}</td>
+            <td><span style="display:inline-block; padding:2px 8px; border-radius:4px; background:${coulMat.bg}; color:${coulMat.text}; font-weight:bold; font-size:12px; margin-bottom:3px;">${escHTML(a.matiere)}</span><br>${escHTML(a.sequence)}</td>
+            <td>${a.lecon ? '<strong>'+escHTML(a.lecon)+'</strong> - ' : ''}${escHTML(a.competence)}</td>
+            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infosL.badgeLivre} ${badge} ${suiviHtml}</td>
+            <td style="text-align:center; background:${rep.bg};">${rep.html}</td>
+            <td style="text-align:center;">${selectJourHtml}</td>
+            <td>${actionHtml}</td>
+        </tr>`;
+    });
+    if (eleve.planHebdo.length === 0) tbodyApercu.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#7f8c8d; padding:20px;">Plan vide.</td></tr>';
+
+    const blocAtt = document.getElementById('blocEnAttenteEleve'), tbodyAtt = document.getElementById('tableEnAttente'), cptAtt = document.getElementById('compteurAttenteEleve');
+    if (blocAtt && tbodyAtt) {
+        let attList = (eleve.enAttente || []).map(id => baseDonnees.find(b => b.id === id)).filter(Boolean);
+        if (cptAtt) cptAtt.innerText = attList.length;
+        if (attList.length > 0) {
+            blocAtt.style.display = 'block';
+            tbodyAtt.innerHTML = attList.map(a => `<tr>
+                <td><strong>${escHTML(a.matiere)}</strong> — ${escHTML(a.sequence)}</td>
+                <td>${escHTML(a.competence)}</td>
+                <td><strong>${escHTML(a.ressource)}</strong></td>
+                <td>
+                    <button type="button" class="btn-action" style="padding:4px 8px;" onclick="annulerAttente('${a.id}', true)">⬆️ Mettre au plan</button>
+                    <button type="button" class="btn-remove" style="padding:4px 8px;" onclick="annulerAttente('${a.id}', false)">❌</button>
+                </td>
+            </tr>`).join('');
+        } else {
+            blocAtt.style.display = 'none';
+        }
+    }
+}
+
+function afficherHistorique() {
+    const eleve = eleves[idEleveCourant], tbodyHist = document.getElementById('tableHistorique'), tbodyMasq = document.getElementById('tableMasquees'); if (!tbodyHist || !tbodyMasq || !eleve) return; tbodyHist.innerHTML = ''; tbodyMasq.innerHTML = '';
+    [...eleve.historique].reverse().forEach(hist => { const a = baseDonnees.find(b => b.id === hist.idActivite); if (a) tbodyHist.innerHTML += `<tr><td><strong>${escHTML(hist.date)}</strong></td><td>${escHTML(a.niveau)}</td><td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td><td>${escHTML(a.competence)}</td><td>${formaterEtoiles(a.difficulte)}${escHTML(a.ressource)}</td><td style="text-align:center;"><button type="button" class="filter-btn" onclick="desarchiverActivite('${a.id}')">↩️</button></td></tr>`; });
+    if (eleve.historique.length === 0) tbodyHist.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#7f8c8d;">Aucun.</td></tr>';
+    eleve.masquees.forEach(idAct => { const a = baseDonnees.find(b => b.id === idAct); if (a) tbodyMasq.innerHTML += `<tr><td>${escHTML(a.niveau)}</td><td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td><td>${escHTML(a.competence)}</td><td>${escHTML(a.ressource)}</td><td style="text-align:center;"><button type="button" class="filter-btn" onclick="demasquerActivite('${a.id}')">↩️</button></td></tr>`; });
+    if (eleve.masquees.length === 0) tbodyMasq.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#7f8c8d;">Aucune.</td></tr>';
+}
+
+// ==========================================
+// 5. ONGLET 2 : IMPRESSION FICHES ÉLÈVES (N° FIXES + SEMAINIER)
+// ==========================================
+function chargerConfigImpressionUI() {
+    let t = document.getElementById('printInputTitre'); if (t) t.value = printConfig.titre || "Plan de travail";
+    let c = document.getElementById('printInputConsigne'); if (c) c.value = printConfig.consigne || "";
+    let m = document.getElementById('printSelectMeteo'); if (m) m.value = printConfig.meteo || "meteo";
+    let cbCpt = document.getElementById('printCbCompteur'); if (cbCpt) cbCpt.checked = printConfig.afficherCompteur !== false;
+    let cbSig = document.getElementById('printCbSignature'); if (cbSig) cbSig.checked = printConfig.afficherSignature !== false;
+    let cbCom = document.getElementById('printCbCommentaire'); if (cbCom) cbCom.checked = Boolean(printConfig.afficherCommentaire);
+}
+
+function sauvegarderConfigImpression() {
+    let t = document.getElementById('printInputTitre'), c = document.getElementById('printInputConsigne'), m = document.getElementById('printSelectMeteo');
+    let cbCpt = document.getElementById('printCbCompteur'), cbSig = document.getElementById('printCbSignature'), cbCom = document.getElementById('printCbCommentaire');
+    printConfig = {
+        titre: t ? t.value : "Plan de travail",
+        consigne: c ? c.value : "",
+        meteo: m ? m.value : "meteo",
+        afficherCompteur: cbCpt ? cbCpt.checked : true,
+        afficherSignature: cbSig ? cbSig.checked : true,
+        afficherCommentaire: cbCom ? cbCom.checked : false
+    };
+    localStorage.setItem(KEY_PRINT_CFG, JSON.stringify(printConfig));
+    declencherAutoSaveFirebase();
+    rafraichirFicheImpression();
+}
+
+function changementEleveImpression() {
+    const sel = document.getElementById('selectEleveImpression'), selSem = document.getElementById('selectSemaineImpression'), dateInp = document.getElementById('dateImpressionInput');
+    if (!sel) return;
+    idEleveImpressionCourant = sel.value || 'TOUS_ELEVES';
+    if (eleves[idEleveImpressionCourant]) {
+        let e = eleves[idEleveImpressionCourant]; assurerStructureSemaines(e);
+        if (selSem) { selSem.innerHTML = e.semaines.map((s, i) => `<option value="${i}">Semaine ${i + 1} ${s.dateDebut ? `(${s.dateDebut})` : ''}</option>`).join(''); selSem.value = e.semaineIndex || 0; }
+        if (dateInp) dateInp.value = e.dateDebutISO || "";
+    } else if (selSem) selSem.innerHTML = '<option value="0">Semaine active de chaque élève</option>';
+    rafraichirFicheImpression();
+}
+
+function changerSemaineDepuisImpression(val) {
+    if (eleves[idEleveImpressionCourant]) { chargerSemaineDepuisIndex(eleves[idEleveImpressionCourant], parseInt(val) || 0); sauvegarderEleves(); rafraichirFicheImpression(); }
+}
+
+function appliquerDateImpression(dateISO) {
+    if (!dateISO) return;
+    let res = calculerVendrediDepuisISO(dateISO);
+    if (eleves[idEleveImpressionCourant]) {
+        let e = eleves[idEleveImpressionCourant]; e.dateDebutISO = dateISO; e.dateDebut = res.debutFR; e.dateFin = res.finFR; syncEleveVersSemaineActive(e);
+    } else {
+        Object.values(eleves).forEach(e => { e.dateDebutISO = dateISO; e.dateDebut = res.debutFR; e.dateFin = res.finFR; syncEleveVersSemaineActive(e); });
+    }
+    sauvegarderEleves(); rafraichirFicheImpression();
+}
+
+function genererHtmlFicheEleve(e, format = 'A4') {
+    assurerStructureSemaines(e);
+    let planObjects = getListeTrie(e.planHebdo, e.priorites || []);
+
+    let titreFiche = (printConfig && printConfig.titre) ? printConfig.titre.trim() : "Plan de travail";
+    let consignePerso = (printConfig && printConfig.consigne && printConfig.consigne.trim() !== "")
+        ? escHTML(printConfig.consigne.trim())
+        : `Choisis tes ateliers et écris leur <strong>N°</strong> dans le semainier (les numéros <u>soulignés</u> sont déjà placés au jour imposé, 👩‍🏫 = avec la maîtresse). <strong>Entoure</strong> le numéro quand tu commences, <strong>barre-le</strong> quand c'est terminé !`;
+
+    let joursJours = { "Lundi": [], "Mardi": [], "Jeudi": [], "Vendredi": [] };
+    planObjects.forEach((a, idx) => {
+        let num = idx + 1;
+        let jImp = (e.joursAssignes && e.joursAssignes[a.id]) ? e.joursAssignes[a.id] : "";
+        if (jImp && joursJours[jImp]) {
+            let st = (e.suivi && e.suivi[a.id]) ? e.suivi[a.id].statut : "";
+            let icone = st === 'a_revoir' ? '👩‍🏫' : (st === 'a_refaire' ? '🔄' : '');
+            joursJours[jImp].push(`${icone}<u>${num}</u>`);
+        }
+    });
+
+    let nbLignesPlanning = Math.max(4, Math.ceil(planObjects.length / 3), joursJours["Lundi"].length, joursJours["Mardi"].length, joursJours["Jeudi"].length, joursJours["Vendredi"].length);
+    let planningRowsHtml = "";
+    for (let i = 0; i < nbLignesPlanning; i++) {
+        let valLun = joursJours["Lundi"][i] !== undefined ? joursJours["Lundi"][i] : "";
+        let valMar = joursJours["Mardi"][i] !== undefined ? joursJours["Mardi"][i] : "";
+        let valJeu = joursJours["Jeudi"][i] !== undefined ? joursJours["Jeudi"][i] : "";
+        let valVen = joursJours["Vendredi"][i] !== undefined ? joursJours["Vendredi"][i] : "";
+        planningRowsHtml += `<tr>
+            <td><span class="planning-cell-box">${valLun}</span></td>
+            <td><span class="planning-cell-box">${valMar}</span></td>
+            <td><span class="planning-cell-box">${valJeu}</span></td>
+            <td><span class="planning-cell-box">${valVen}</span></td>
+        </tr>`;
+    }
+
+    let planningTableHtml = `<div style="margin-bottom:8px;">
+        <table class="planning-table">
+            <thead>
+                <tr><th>LUNDI</th><th>MARDI</th><th>JEUDI</th><th>VENDREDI</th></tr>
+            </thead>
+            <tbody>${planningRowsHtml}</tbody>
+        </table>
+    </div>`;
+
+    let rowsHtml = "";
+    let derniereCleSeq = "";
+
+    planObjects.forEach((a, index) => {
+        const num = index + 1;
+        let cleSeq = `${a.matiere || ''}||${a.sequence || ''}`;
+        if (cleSeq !== derniereCleSeq) {
+            derniereCleSeq = cleSeq;
+            let coul = getCouleurMatiereBandeau(a.matiere);
+            rowsHtml += `<tr class="sequence-separator-row">
+                <td colspan="7" style="background-color: ${coul.bg} !important; color: ${coul.text} !important; border-color: ${coul.border} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                    📑 ${escHTML(a.matiere || '')} — Séquence : ${escHTML(a.sequence || '')}
+                </td>
+            </tr>`;
+        }
+
+        let infos = getInfosActivitePourEleve(a, e);
+        let rep = getRepereAtelierHtml(a, e, 32);
+        let jourImp = (e.joursAssignes && e.joursAssignes[a.id]) ? e.joursAssignes[a.id] : "";
+        let estValide = e.valides && e.valides[a.id];
+        let rowClass = a.estEvaluation ? 'row-eval' : (estValide ? 'row-valide' : '');
+        let statutSuivi = (e.suivi && e.suivi[a.id]) ? e.suivi[a.id].statut : "";
+        let logoMaitresseDebut = statutSuivi === 'a_revoir' ? '👩‍🏫 ' : (statutSuivi === 'a_refaire' ? '🔄 ' : '');
+        let numCellClass = jourImp ? 'col-num num-jour-impose' : 'col-num';
+        let resStyle = jourImp ? 'text-decoration:underline;' : '';
+        let badgeEval = a.estEvaluation ? ` <span class="badge-eval">🎯 Éval</span>` : '';
+
+        rowsHtml += `<tr class="${rowClass}">
+            <td class="${numCellClass}" style="white-space:nowrap;">${logoMaitresseDebut}${num}</td>
+            <td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td>
+            <td>${a.lecon ? '<em>' + escHTML(a.lecon) + '</em><br>' : ''}${escHTML(a.competence)}</td>
+            <td>${logoMaitresseDebut}${formaterEtoiles(a.difficulte)}<strong style="${resStyle}">${escHTML(a.ressource)}</strong> ${infos.badgeLivre}${badgeEval}</td>
+            <td class="col-center">${escHTML(infos.typeEffectif)}</td>
+            <td class="col-center print-visual-cell" style="background-color:${rep.bg} !important; width:85px; text-align:center;">${rep.html}</td>
+            <td class="col-center">${escHTML(a.personnes || '')}</td>
+        </tr>`;
+    });
+
+    if (planObjects.length === 0) {
+        rowsHtml = `<tr><td colspan="7" style="text-align:center; color:#7f8c8d;">Aucune activité.</td></tr>`;
+    }
+
+    let blocsPied = [];
+    if (!printConfig || printConfig.afficherCompteur !== false) {
+        blocsPied.push(`<div style="flex:1; border:1px solid #7f8c8d; border-radius:4px; padding:4px 8px; display:flex; align-items:center; justify-content:space-between;"><strong>🏁 Bilan :</strong><span style="font-size:10.5px; font-weight:bold;">Ateliers terminés : ...... / ${planObjects.length}</span></div>`);
+    }
+    if (!printConfig || printConfig.meteo !== 'aucun') {
+        let icones = `<span style="font-size:13px;">☀️</span> <span style="font-size:13px;">⛅</span> <span style="font-size:13px;">🌧️</span>`;
+        if (printConfig && printConfig.meteo === 'smileys') icones = `<span style="font-size:13px;">😊</span> <span style="font-size:13px;">😐</span> <span style="font-size:13px;">😟</span>`;
+        if (printConfig && printConfig.meteo === 'etoiles') icones = `<span style="font-size:13px;">⭐</span> <span style="font-size:13px;">⭐</span> <span style="font-size:13px;">⭐</span>`;
+        blocsPied.push(`<div style="flex:1; border:1px solid #7f8c8d; border-radius:4px; padding:4px 8px; display:flex; align-items:center; justify-content:space-around;"><strong>🌤️ Météo :</strong> ${icones}</div>`);
+    }
+    if (!printConfig || printConfig.afficherSignature !== false) {
+        blocsPied.push(`<div style="flex:1; border:1px solid #7f8c8d; border-radius:4px; padding:4px 8px; display:flex; align-items:center; justify-content:space-between;"><strong>✍️ Signature :</strong> <span>..................</span></div>`);
+    }
+
+    let bilanBasPageHtml = blocsPied.length > 0 ? `<div style="display:flex; justify-content:space-between; align-items:stretch; gap:8px; margin-top:6px; font-size:10px;">${blocsPied.join('')}</div>` : '';
+    let commBasHtml = (printConfig && printConfig.afficherCommentaire) ? `<div style="margin-top:6px; border:1px dashed #7f8c8d; border-radius:4px; padding:5px 8px; font-size:11px; min-height:32px;"><strong>💬 Mot de l'enseignante :</strong></div>` : '';
+
+    return `<div class="fiche-plan-print plan-eleve-page ${format === 'A4' ? 'a4-page' : ''}">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1b4f72; padding-bottom:5px; margin-bottom:6px;">
+            <h2 style="margin:0; border:none; padding:0; font-size:17px; color:#1b4f72;">${escHTML(titreFiche)} — ${escHTML(e.nom)} (${escHTML(e.niveau)})</h2>
+            <span style="font-size:12px; color:#2c3e50; font-weight:bold;">Semaine ${(e.semaineIndex || 0) + 1} ${(e.dateDebut && e.dateFin) ? `du ${e.dateDebut} au ${e.dateFin}` : ''}</span>
+        </div>
+        <div style="background:#f8f9fa; border-left:4px solid #1b4f72; padding:4px 8px; font-size:11px; margin-bottom:6px; border-radius:4px;">📌 ${consignePerso}</div>
+        ${planningTableHtml}
+        <table class="table-classique" style="margin-top:0; margin-bottom:6px;">
+            <thead>
+                <tr>
+                    <th class="col-num">N°</th>
+                    <th style="width:135px;">Matière & Séquence</th>
+                    <th>Compétence visée</th>
+                    <th>Ressource à réaliser</th>
+                    <th class="col-center" style="width:75px;">Type</th>
+                    <th class="col-center" style="width:85px;">N° Atelier</th>
+                    <th class="col-center" style="width:55px;">Nb Pers.</th>
+                </tr>
+            </thead>
+            <tbody>${rowsHtml}</tbody>
+        </table>
+        ${bilanBasPageHtml}
+        ${commBasHtml}
+    </div>`;
+}
+
+function rafraichirFicheImpression() {
+    const sel = document.getElementById('selectEleveImpression');
+    const fmt = document.getElementById('selectFormatImpression') ? document.getElementById('selectFormatImpression').value : 'A4';
+    const zone = document.getElementById('zoneFichesImpression'); if (!zone) return;
+    let val = sel ? (sel.value || 'TOUS_ELEVES') : 'TOUS_ELEVES';
+    let cibles = [];
+    if (val === 'TOUS_ELEVES') cibles = getElevesTries();
+    else if (val.startsWith('NIVEAU_')) cibles = getElevesTries().filter(e => (e.niveau || 'CP').toUpperCase() === val.replace('NIVEAU_', ''));
+    else if (eleves[val]) cibles = [eleves[val]];
+    if (cibles.length === 0) { zone.innerHTML = `<div class="empty-state"><p>Aucun élève à imprimer.</p></div>`; return; }
+
+    if (fmt === 'A5') {
+        let html = '';
+        for (let i = 0; i < cibles.length; i += 2) {
+            html += `<div class="conteneur-a5-pair">` + genererHtmlFicheEleve(cibles[i], 'A5') + (cibles[i + 1] ? genererHtmlFicheEleve(cibles[i + 1], 'A5') : '') + `</div>`;
+        }
+        zone.innerHTML = html;
+    } else {
+        zone.innerHTML = cibles.map(e => genererHtmlFicheEleve(e, 'A4')).join('');
+    }
+}
+
+// ==========================================
+// 6. ONGLET 3 : TABLEAU DE BORD
+// ==========================================
+function toggleAfficherArchives() {
+    afficherArchivesMode = !afficherArchivesMode;
+    let btn = document.getElementById('btnToggleArchivesDash');
+    if (btn) btn.innerText = afficherArchivesMode ? "🙈 Masquer les archives" : "👁️ Voir les archives";
+    rafraichirDashboard();
+}
+function archiverItem(cle) { if (!dashboardArchives.includes(cle)) dashboardArchives.push(cle); localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); rafraichirDashboard(); }
+function restaurerArchive(cle) { dashboardArchives = dashboardArchives.filter(k => k !== cle); localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); rafraichirDashboard(); }
+function viderArchives() { if (confirm("Vider les archives ?")) { dashboardArchives = []; localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); rafraichirDashboard(); } }
+function setSuivi(idEl, idAct, statut) {
+    let e = eleves[idEl]; if (!e) return;
+    if (!e.suivi) e.suivi = {};
+    if (!statut) delete e.suivi[idAct];
+    else e.suivi[idAct] = { statut: statut, commentaire: (e.suivi[idAct] && e.suivi[idAct].commentaire) || "" };
+    sauvegarderEleves(); rafraichirDashboard();
+}
+function validerDepuisDashboard(idEl, idAct) { let e = eleves[idEl]; if (!e) return; marquerCommeValideSansRafraichir(idAct, e); sauvegarderEleves(); rafraichirDashboard(); showToast("Validé !", "success"); }
+function toggleExpandEleveDash(idEl) { if (dashboardExpanded.has(idEl)) dashboardExpanded.delete(idEl); else dashboardExpanded.add(idEl); rafraichirDashboard(); }
+function ouvrirEleveDepuisDashboard(idEl) { idEleveCourant = idEl; let sel = document.getElementById('selectEleveProfile'); if (sel) sel.value = idEl; changerOnglet('pageSuivi', document.querySelectorAll('.nav-btn')[0]); }
+
+function rafraichirDashboard() {
+    const cont = document.getElementById('dashboardContent'); if (!cont) return;
+    const listeEl = getElevesTries();
+    if (listeEl.length === 0) { cont.innerHTML = `<div class="empty-state"><h3>Aucun élève enregistré.</h3></div>`; return; }
+
+    let lignesRemediation = '', tachesTablettesMap = {};
+    listeEl.forEach(e => {
+        assurerStructureSemaines(e);
+        (e.planHebdo || []).forEach(idAct => {
+            let act = baseDonnees.find(b => b.id === idAct); if (!act) return;
+            let estVal = e.valides && e.valides[idAct], s = e.suivi && e.suivi[idAct] ? e.suivi[idAct] : null;
+            if (s && (s.statut === 'a_revoir' || s.statut === 'a_refaire')) {
+                let cleRem = `${e.id}_${idAct}`, estArch = dashboardArchives.includes(cleRem);
+                if (afficherArchivesMode || !estArch) {
+                    let coul = getCouleurMatiereBandeau(act.matiere);
+                    lignesRemediation += `<tr style="${estArch ? 'opacity:0.5;' : ''}"><td><strong>[${escHTML(e.niveau)}] ${escHTML(e.nom)}</strong></td><td><span style="background:${coul.bg}; color:#fff; padding:2px 6px; border-radius:4px; font-size:11px;">${escHTML(act.matiere)}</span> ${escHTML(act.sequence)}</td><td><strong>${escHTML(act.ressource)}</strong></td><td>${s.statut === 'a_revoir' ? '👩‍🏫' : '🔄'}</td><td><button type="button" class="btn-valid" style="padding:3px 7px;" onclick="validerDepuisDashboard('${e.id}', '${idAct}')">✅</button><button type="button" class="filter-btn" style="padding:3px 7px;" onclick="${estArch ? `restaurerArchive('${cleRem}')` : `archiverItem('${cleRem}')`}">${estArch ? '↩️' : '📥'}</button></td></tr>`;
+                }
+            }
+            if (!estVal && estActiviteTablette(act)) {
+                let cleTab = `tab_${act.id}`, estArchTab = dashboardArchives.includes(cleTab);
+                if (afficherArchivesMode || !estArchTab) {
+                    if (!tachesTablettesMap[act.id]) tachesTablettesMap[act.id] = { act, elevesNoms: [], cleTab, estArchTab };
+                    tachesTablettesMap[act.id].elevesNoms.push(`${e.nom} (${e.niveau})`);
+                }
+            }
+        });
+    });
+
+    let tabKeys = Object.keys(tachesTablettesMap);
+    let html = `<div class="grid-2-cols" style="margin-bottom:20px;">
+        <div class="card-panel" style="border-left:5px solid #c0392b;"><h3 style="color:#c0392b; margin-bottom:10px;">👩‍🏫 Besoins d'ateliers dirigés & Remédiations</h3>${lignesRemediation ? `<table class="table-classique"><thead><tr><th>Élève</th><th>Matière</th><th>Atelier</th><th>Statut</th><th>Action</th></tr></thead><tbody>${lignesRemediation}</tbody></table>` : `<p style="color:#7f8c8d; font-size:13px;">Aucune remédiation en cours.</p>`}</div>
+        <div class="card-panel" style="border-left:5px solid #8e44ad;"><h3 style="color:#6c3483; margin-bottom:10px;">📱 Préparation Tablettes (Anton / Scratch)</h3>${tabKeys.length > 0 ? `<table class="table-classique"><thead><tr><th>Support</th><th>Activité</th><th>Élèves</th><th>Action</th></tr></thead><tbody>` + tabKeys.map(k => {
+            let item = tachesTablettesMap[k];
+            return `<tr style="${item.estArchTab ? 'opacity:0.5;' : ''}"><td><strong>${escHTML(item.act.typeRes)}</strong></td><td><strong>${escHTML(item.act.ressource)}</strong></td><td>${escHTML(item.elevesNoms.join(', '))}</td><td><button type="button" class="filter-btn" onclick="${item.estArchTab ? `restaurerArchive('${item.cleTab}')` : `archiverItem('${item.cleTab}')`}">${item.estArchTab ? '↩️' : '☑️'}</button></td></tr>`;
+        }).join('') + `</tbody></table>` : `<p style="color:#7f8c8d; font-size:13px;">Aucune activité tablette.</p>`}</div>
+    </div><div class="dashboard-grid">`;
+
+    listeEl.forEach(e => {
+        let total = (e.planHebdo || []).length, nbValides = (e.planHebdo || []).filter(id => e.valides && e.valides[id]).length;
+        let pct = total > 0 ? Math.round((nbValides / total) * 100) : 0;
+        let nbTab = (e.planHebdo || []).map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length;
+        let isExp = dashboardExpanded.has(e.id), badgeParc = estEleveCM(e) ? ((e.parcours === 'orange') ? ' 🟠' : ' 🟡') : '';
+        let detailsPlanHtml = isExp ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed #ccc; font-size:12.5px;">` + getListeTrie(e.planHebdo, e.priorites || []).map((a, idx) => {
+            let fait = e.valides && e.valides[a.id], st = (e.suivi && e.suivi[a.id]) ? e.suivi[a.id].statut : "";
+            return `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #f1f5f9;"><span style="${fait ? 'text-decoration:line-through; color:#27ae60;' : ''}"><strong>${idx + 1}.</strong> ${escHTML(a.ressource)}</span><div style="display:flex; gap:3px;">${!fait ? `<button type="button" class="filter-btn" style="padding:1px 5px;" onclick="validerDepuisDashboard('${e.id}', '${a.id}')">✅</button><button type="button" class="filter-btn" style="padding:1px 5px; ${st === 'a_revoir' ? 'background:#c0392b; color:#fff;' : ''}" onclick="setSuivi('${e.id}', '${a.id}', '${st === 'a_revoir' ? '' : 'a_revoir'}')">👩‍🏫</button><button type="button" class="filter-btn" style="padding:1px 5px; ${st === 'a_refaire' ? 'background:#e67e22; color:#fff;' : ''}" onclick="setSuivi('${e.id}', '${a.id}', '${st === 'a_refaire' ? '' : 'a_refaire'}')">🔄</button>` : '✅'}</div></div>`;
+        }).join('') + `</div>` : '';
+
+        html += `<div class="dash-card">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <strong style="font-size:16px; color:#1b4f72; cursor:pointer;" onclick="toggleExpandEleveDash('${e.id}')">${isExp ? '▼' : '▶'} [${escHTML(e.niveau)}] ${escHTML(e.nom)}${badgeParc} ${e.fichierJaune ? '📒' : ''}</strong>
+                <button type="button" class="filter-btn" onclick="ouvrirEleveDepuisDashboard('${e.id}')">Plan ➔</button>
+            </div>
+            <div style="font-size:12.5px; color:#555; margin-top:6px;">Semaine ${(e.semaineIndex || 0) + 1} • 📱 Tablettes : ${nbTab}/${e.maxTablettes ?? 2}</div>
+            <div class="dash-progress-bar"><div class="dash-progress-fill" style="width:${pct}%;"></div></div>
+            <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:600;"><span>${nbValides} / ${total} validés</span><span style="color:#27ae60;">${pct}%</span></div>
+            ${detailsPlanHtml}
+        </div>`;
+    });
+    cont.innerHTML = html + `</div>`;
+}
+
+// ==========================================
+// 7. ONGLET 4 : BASE DE DONNÉES, SAISIE MULTIPLE & MODALES (TYPES + ÉMOJIS)
+// ==========================================
+function estCMSelectionneFormSimple() {
+    let nivs = getNiveauxCochesFormulaire('.cb-niveau-form');
+    return nivs.includes('CM1') || nivs.includes('CM2');
+}
+
+function estCMSelectionneFormMulti() {
+    let nivs = getNiveauxCochesFormulaire('.cb-niveau-multi');
+    return nivs.includes('CM1') || nivs.includes('CM2');
+}
+
+function autoRemplirPageOrangeSimple(val) {
+    let inpOrange = document.getElementById('inputPageOrange');
+    if (!inpOrange) return;
+    if (estCMSelectionneFormSimple()) inpOrange.value = calculerPagePlusUn(val);
+}
+
+function verifierNiveauxCMFormSimple() {
+    let inpManuel = document.getElementById('inputPageManuel'), inpOrange = document.getElementById('inputPageOrange');
+    if (inpManuel && inpOrange) {
+        if (estCMSelectionneFormSimple()) {
+            inpOrange.disabled = false;
+            if (inpManuel.value.trim() && !inpOrange.value.trim()) inpOrange.value = calculerPagePlusUn(inpManuel.value);
+        } else {
+            inpOrange.value = "";
+            inpOrange.disabled = true;
+        }
+    }
+    majCouleurAutoFormSimple();
+}
+
+function autoRemplirPageOrangeMultiLigne(inputPageElem) {
+    let tr = inputPageElem.closest('tr'); if (!tr) return;
+    let inpOrange = tr.querySelector('.m-orange'); if (!inpOrange) return;
+    if (estCMSelectionneFormMulti()) inpOrange.value = calculerPagePlusUn(inputPageElem.value);
+}
+
+function verifierNiveauxCMMulti() {
+    let isCM = estCMSelectionneFormMulti();
+    document.querySelectorAll('#tbodySaisieMultiple .ligne-saisie-multi').forEach(tr => {
+        let inpPage = tr.querySelector('.m-page'), inpOrange = tr.querySelector('.m-orange');
+        if (!inpPage || !inpOrange) return;
+        if (isCM) {
+            inpOrange.disabled = false;
+            if (inpPage.value.trim() && !inpOrange.value.trim()) inpOrange.value = calculerPagePlusUn(inpPage.value);
+        } else {
+            inpOrange.value = "";
+            inpOrange.disabled = true;
+        }
+    });
+}
+
+function toggleModeSaisieMultiple() {
+    modeSaisieMultipleActif = !modeSaisieMultipleActif;
+    let bSimple = document.getElementById('blocSaisieSimpleBase'), bMulti = document.getElementById('blocSaisieMultipleBase'), btn = document.getElementById('btnToggleSaisieMulti');
+    if (modeSaisieMultipleActif) {
+        if (bSimple) bSimple.style.display = 'none';
+        if (bMulti) bMulti.style.display = 'block';
+        if (btn) btn.innerText = "📝 Revenir au formulaire de saisie simple";
+        let tbody = document.getElementById('tbodySaisieMultiple');
+        if (tbody && tbody.children.length === 0) ajouterLigneSaisieMultiple(4);
+        verifierNiveauxCMMulti();
+    } else {
+        if (bSimple) bSimple.style.display = 'block';
+        if (bMulti) bMulti.style.display = 'none';
+        if (btn) btn.innerText = "⚡ Passer en mode Saisie Multiple (plusieurs exercices d'un coup)";
+    }
+}
+
+function ajouterLigneSaisieMultiple(nbLignes = 1) {
+    const tbody = document.getElementById('tbodySaisieMultiple'); if (!tbody) return;
+    let isCM = estCMSelectionneFormMulti();
+    let optsTypes = `<option value="">-- Support --</option>` + Object.keys(imagesParType || {}).map(t => `<option value="${escHTML(t)}">${escHTML((imagesParType[t].emoji ? imagesParType[t].emoji + ' ' : '') + t)}</option>`).join('');
+    for (let i = 0; i < nbLignes; i++) {
+        let tr = document.createElement('tr');
+        tr.className = 'ligne-saisie-multi';
+        tr.innerHTML = `
+            <td><input type="text" class="m-lecon" placeholder="Ex: N1" style="width:100%;"></td>
+            <td><input type="text" class="m-comp" list="listeCompetencesConnues" placeholder="Compétence..." style="width:100%;"></td>
+            <td><input type="text" class="m-res" placeholder="Ex: Ex 1" style="width:100%;"></td>
+            <td><select class="m-type" style="width:100%;">${optsTypes}</select></td>
+            <td><input type="text" class="m-symbole" placeholder="1" style="width:100%;"></td>
+            <td><input type="text" class="m-pers" placeholder="👤" style="width:100%;"></td>
+            <td><input type="text" class="m-page" placeholder="p9" oninput="autoRemplirPageOrangeMultiLigne(this)" style="width:100%;"></td>
+            <td><input type="text" class="m-orange" placeholder="p10" ${isCM ? '' : 'disabled'} style="width:100%;"></td>
+            <td><input type="text" class="m-jaune" placeholder="Fichier p. 8" style="width:100%;"></td>
+            <td>
+                <select class="m-diff" style="width:100%;">
+                    <option value="0">0</option>
+                    <option value="1">⭐</option>
+                    <option value="2">⭐⭐</option>
+                    <option value="3">⭐⭐⭐</option>
+                </select>
+            </td>
+            <td style="text-align:center;"><input type="checkbox" class="m-eval" style="transform:scale(1.2);"></td>
+            <td style="text-align:center;"><button type="button" class="btn-remove" style="padding:3px 7px;" onclick="this.closest('tr').remove()">✖</button></td>
+        `;
+        tbody.appendChild(tr);
+    }
+}
+
+function enregistrerSaisieMultiple() {
+    let nivArr = getNiveauxCochesFormulaire('.cb-niveau-multi');
+    let niveauStr = nivArr.length > 0 ? nivArr.join(', ') : 'CP';
+    let isCM = nivArr.includes('CM1') || nivArr.includes('CM2');
+    let matiere = document.getElementById('multiMatiere').value.trim();
+    let sequence = document.getElementById('multiSequence').value.trim();
+    let periode = document.getElementById('multiPeriode').value;
+
+    if (!matiere || !sequence) { showToast("Veuillez renseigner la Matière et la Séquence communes en haut.", "error"); return; }
+
+    let lignes = document.querySelectorAll('#tbodySaisieMultiple .ligne-saisie-multi');
+    let nbAjoutes = 0;
+    lignes.forEach(tr => {
+        let ressource = tr.querySelector('.m-res').value.trim();
+        if (!ressource) return;
+        let lecon = tr.querySelector('.m-lecon').value.trim();
+        let competence = tr.querySelector('.m-comp').value.trim();
+        let typeRes = tr.querySelector('.m-type').value;
+        let symbole = tr.querySelector('.m-symbole') ? tr.querySelector('.m-symbole').value.trim() : "";
+        let personnes = tr.querySelector('.m-pers') ? tr.querySelector('.m-pers').value.trim() : "";
+        let pageManuel = tr.querySelector('.m-page').value.trim();
+        let pageOrange = isCM ? (tr.querySelector('.m-orange').value.trim()) : "";
+        let varianteJaune = tr.querySelector('.m-jaune').value.trim();
+        let difficulte = parseInt(tr.querySelector('.m-diff').value) || 0;
+        let estEval = tr.querySelector('.m-eval').checked;
+        let couleur = calculerCouleurAutomatique(matiere, niveauStr, typeRes);
+        let newId = 'act_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+
+        baseDonnees.push({
+            id: newId, matiere, sequence, lecon, competence, ressource, typeRes,
+            symbole, personnes, pageManuel, pageOrange, varianteJaune, periode,
+            difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: "", estEvaluation: estEval
+        });
+        if (periode) programmations[newId] = periode;
+        nbAjoutes++;
+    });
+
+    if (nbAjoutes === 0) { showToast("Remplissez au moins un nom d'exercice dans le tableau.", "error"); return; }
+    sauvegarderProgrammations(); postEditGlobal();
+    document.getElementById('tbodySaisieMultiple').innerHTML = '';
+    ajouterLigneSaisieMultiple(4);
+    showToast(`✅ ${nbAjoutes} exercice(s) ajouté(s) d'un coup dans "${sequence}" !`, "success");
+}
+
+function ouvrirModalGestionMatieres() { afficherListeMatieresModal(); ouvrirModal('modalMatieres'); }
+function afficherListeMatieresModal() {
+    let mats = [...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+    let cont = document.getElementById('listeMatieresModalContainer'); if (!cont) return;
+    cont.innerHTML = mats.map(m => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;"><input type="text" class="input-rename-mat" data-old="${escHTML(m)}" value="${escHTML(m)}" style="flex:1;"><button type="button" class="btn-remove" style="padding:4px 8px;" onclick="supprimerMatiereModal('${escJS(m)}')">🗑️</button></div>`).join('');
+}
+function sauvegarderToutesMatieres() {
+    document.querySelectorAll('.input-rename-mat').forEach(inp => {
+        let oldV = inp.getAttribute('data-old'), newV = inp.value.trim();
+        if (oldV && newV && oldV !== newV) baseDonnees.forEach(b => { if ((b.matiere || "").trim() === oldV) b.matiere = newV; });
+    });
+    postEditGlobal(); fermerModal('modalMatieres'); showToast("Matières mises à jour !", "success");
+}
+function supprimerMatiereModal(m) { if (confirm(`Supprimer toutes les activités de la matière "${m}" ?`)) { baseDonnees = baseDonnees.filter(b => (b.matiere || "").trim() !== m); postEditGlobal(); afficherListeMatieresModal(); } }
+
+function ouvrirModalGestionSequences() {
+    let sel = document.getElementById('filtreMatiereModalSeq');
+    let mats = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))];
+    if (sel) sel.innerHTML = mats.map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
+    afficherListeSequencesModal(); ouvrirModal('modalSequences');
+}
+function afficherListeSequencesModal() {
+    let matFiltre = document.getElementById('filtreMatiereModalSeq') ? document.getElementById('filtreMatiereModalSeq').value : 'Toutes';
+    let seqs = [...new Set(baseDonnees.filter(b => matFiltre === 'Toutes' || (b.matiere || "").trim() === matFiltre).map(b => (b.sequence || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+    let cont = document.getElementById('listeSequencesModalContainer'); if (!cont) return;
+    cont.innerHTML = seqs.map(s => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;"><input type="text" class="input-rename-seq" data-old="${escHTML(s)}" value="${escHTML(s)}" style="flex:1;"><button type="button" class="btn-remove" style="padding:4px 8px;" onclick="supprimerSequenceModal('${escJS(s)}')">🗑️</button></div>`).join('');
+}
+function sauvegarderToutesSequences() {
+    document.querySelectorAll('.input-rename-seq').forEach(inp => {
+        let oldV = inp.getAttribute('data-old'), newV = inp.value.trim();
+        if (oldV && newV && oldV !== newV) baseDonnees.forEach(b => { if ((b.sequence || "").trim() === oldV) b.sequence = newV; });
+    });
+    postEditGlobal(); fermerModal('modalSequences'); showToast("Séquences mises à jour !", "success");
+}
+function supprimerSequenceModal(s) { if (confirm(`Supprimer toutes les activités de la séquence "${s}" ?`)) { baseDonnees = baseDonnees.filter(b => (b.sequence || "").trim() !== s); post
