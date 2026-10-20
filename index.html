@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GestionClasse - Plans de Travail & Suivi</title>
-    <link rel="stylesheet" href="style.css?v=20261025">
+    <link rel="stylesheet" href="style.css?v=20261026">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
 </head>
@@ -28,7 +28,9 @@
 
     <main class="container">
 
-        <!-- 1. PLAN & SUIVI ÉLÈVES -->
+        <!-- ========================================== -->
+        <!-- 1. PLAN & SUIVI ÉLÈVES                     -->
+        <!-- ========================================== -->
         <div id="pageSuivi" class="page active">
             <div class="panel">
                 <h2>🧑‍🎓 1. Plan de travail & Suivi individualisé</h2>
@@ -138,16 +140,17 @@
                             <table class="table-classique">
                                 <thead>
                                     <tr>
-                                        <th style="width:70px;">Niv. / Pér.</th>
-                                        <th style="width:160px;">Séquence / Leçon</th>
+                                        <th style="width:65px;">Niv./Pér.</th>
+                                        <th style="width:150px;">Séquence / Leçon</th>
                                         <th>Compétence</th>
                                         <th>Ressource & Support</th>
-                                        <th style="width:110px;">Jour</th>
-                                        <th style="width:185px;">Actions</th>
+                                        <th style="width:75px; text-align:center;">N° Atelier</th>
+                                        <th style="width:105px;">Jour imposé</th>
+                                        <th style="width:175px;">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tableRessourcesDispo">
-                                    <tr><td colspan="6" style="text-align:center; color:#7f8c8d;">Sélectionnez une matière ci-dessus pour afficher les activités disponibles.</td></tr>
+                                    <tr><td colspan="7" style="text-align:center; color:#7f8c8d;">Sélectionnez une matière ci-dessus pour afficher les activités disponibles.</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -167,12 +170,13 @@
                             <tr>
                                 <th style="width:36px; text-align:center;"><input type="checkbox" onchange="cocherToutPlan(this)" title="Tout cocher"></th>
                                 <th style="width:40px; text-align:center;">Prio</th>
-                                <th style="width:50px; text-align:center;">N°</th>
-                                <th style="width:170px;">Matière / Séquence</th>
+                                <th style="width:48px; text-align:center;">N°</th>
+                                <th style="width:160px;">Matière / Séquence</th>
                                 <th>Compétence</th>
                                 <th>Ressource & Suivi</th>
-                                <th style="width:115px;">Jour</th>
-                                <th style="width:130px;">Actions</th>
+                                <th style="width:85px; text-align:center;">N° Atelier</th>
+                                <th style="width:110px;">Jour imposé</th>
+                                <th style="width:120px;">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="tableApercuPlan"></tbody>
@@ -236,7 +240,9 @@
             </div>
         </div>
 
-        <!-- 2. FICHE ÉLÈVE (IMPRESSION PLANS) -->
+        <!-- ========================================== -->
+        <!-- 2. FICHE ÉLÈVE (IMPRESSION PLANS)          -->
+        <!-- ========================================== -->
         <div id="pageImpression" class="page">
             <div class="panel no-print">
                 <h2>🖨️ 2. Fiche Élève — Impression des Plans de Travail</h2>
@@ -256,8 +262,8 @@
                         </label>
                         <label><strong>Format :</strong>
                             <select id="selectFormatImpression" onchange="rafraichirFicheImpression()">
-                                <option value="A4">📄 A4 Complet (1 élève / page)</option>
-                                <option value="A5">📑 A5 Compact (2 élèves côte-à-côte)</option>
+                                <option value="A4">📄 A4 Standard (1 ou 2 par page)</option>
+                                <option value="A5">📑 Deux colonnes côte-à-côte</option>
                             </select>
                         </label>
                     </div>
@@ -267,33 +273,32 @@
                     </div>
                 </div>
 
-                <details class="card-panel" style="margin-bottom:20px; background:#f8fbff; border:1px solid #d6eaf8;">
-                    <summary style="cursor:pointer; font-weight:bold; color:#1b4f72;">🎨 Personnaliser l'en-tête et les options de la fiche imprimée</summary>
+                <details class="card-panel" style="margin-bottom:15px; background:#f8fbff; border:1px solid #d6eaf8;">
+                    <summary style="cursor:pointer; font-weight:bold; color:#1b4f72;">🎨 Personnaliser l'en-tête et la consigne de la fiche imprimée</summary>
                     <div style="margin-top:14px;">
                         <div class="form-grid-base" style="margin-bottom:12px;">
                             <div>
                                 <label>Titre de la fiche :</label>
-                                <input type="text" id="printInputTitre" value="Plan de travail" placeholder="Ex: Plan de travail, Contrat..." oninput="sauvegarderConfigImpression()">
+                                <input type="text" id="printInputTitre" value="Plan de travail" placeholder="Ex: Plan de travail" oninput="sauvegarderConfigImpression()">
+                            </div>
+                            <div style="grid-column: span 2;">
+                                <label>Consigne affichée sous l'en-tête :</label>
+                                <input type="text" id="printInputConsigne" placeholder="Laissez vide pour la consigne par défaut (numéros soulignés, 👩‍🏫, entourer/barrer)" oninput="sauvegarderConfigImpression()">
                             </div>
                             <div>
-                                <label>Consigne ou message de la semaine (sous l'en-tête) :</label>
-                                <input type="text" id="printInputConsigne" placeholder="Ex: Je travaille dans le calme et je range mon atelier..." oninput="sauvegarderConfigImpression()">
-                            </div>
-                            <div>
-                                <label>Style d'auto-évaluation (Météo / Bilan élève) :</label>
+                                <label>Bilan météo (optionnel) :</label>
                                 <select id="printSelectMeteo" onchange="sauvegarderConfigImpression()">
+                                    <option value="aucun">🚫 Masqué (Format d'origine)</option>
                                     <option value="meteo">☀️ ⛅ 🌧️ (Météo)</option>
                                     <option value="smileys">😊 😐 😟 (Smileys)</option>
                                     <option value="etoiles">⭐ ⭐ ⭐ (Étoiles)</option>
-                                    <option value="aucun">🚫 Ne pas afficher</option>
                                 </select>
                             </div>
                         </div>
                         <div style="display:flex; gap:18px; align-items:center; flex-wrap:wrap; font-size:13px; padding-top:8px; border-top:1px dashed #bdc3c7;">
-                            <label style="cursor:pointer;"><input type="checkbox" id="printCbCompteur" checked onchange="sauvegarderConfigImpression()"> 📊 Afficher « Ateliers réussis : ___ / Total »</label>
-                            <label style="cursor:pointer;"><input type="checkbox" id="printCbSignature" checked onchange="sauvegarderConfigImpression()"> ✍️ Afficher « Signature : ________ »</label>
+                            <label style="cursor:pointer;"><input type="checkbox" id="printCbCompteur" onchange="sauvegarderConfigImpression()"> 📊 Afficher « Ateliers réussis : ___ / Total »</label>
+                            <label style="cursor:pointer;"><input type="checkbox" id="printCbSignature" onchange="sauvegarderConfigImpression()"> ✍️ Afficher « Signature : ________ »</label>
                             <label style="cursor:pointer;"><input type="checkbox" id="printCbCommentaire" onchange="sauvegarderConfigImpression()"> 💬 Ajouter un encadré « Mot de l'enseignante » en bas</label>
-                            <label style="cursor:pointer;"><input type="checkbox" id="printCbColBilan" checked onchange="sauvegarderConfigImpression()"> 🟢🟠🔴 Afficher la colonne « Bilan »</label>
                         </div>
                     </div>
                 </details>
@@ -301,7 +306,9 @@
             <div id="zoneFichesImpression"></div>
         </div>
 
-        <!-- 3. TABLEAU DE BORD -->
+        <!-- ========================================== -->
+        <!-- 3. TABLEAU DE BORD                         -->
+        <!-- ========================================== -->
         <div id="pageDashboard" class="page">
             <div class="panel">
                 <div class="page-header-flex">
@@ -317,7 +324,9 @@
             </div>
         </div>
 
-        <!-- 4. BASE DE DONNÉES DES ATELIERS -->
+        <!-- ========================================== -->
+        <!-- 4. BASE DE DONNÉES DES ATELIERS            -->
+        <!-- ========================================== -->
         <div id="pageBase" class="page">
             <div class="panel">
                 <div class="page-header-flex">
@@ -339,7 +348,7 @@
 
                 <!-- MODE 1 : SAISIE SIMPLE -->
                 <div id="blocSaisieSimpleBase" class="card-panel" style="margin-bottom:20px;">
-                    <h3 id="titreFormulaireBase" style="margin-bottom:12px; color:#1b4f72;">➕ Ajouter ou modifier une activité</h3>
+                    <h2 id="titreFormulaireBase" style="font-size:16px; margin-bottom:12px; color:#1b4f72; border:none; padding:0;">➕ Ajouter ou modifier une activité</h2>
                     <div class="form-grid-base">
                         <div>
                             <label>Matière :</label>
@@ -367,6 +376,14 @@
                         <div>
                             <label>Type de support :</label>
                             <select id="selectTypeRessource"></select>
+                        </div>
+                        <div>
+                            <label>N° Atelier / Boîte (Symbole) :</label>
+                            <input type="text" id="inputSymbole" placeholder="Ex: A1, Boîte 3...">
+                        </div>
+                        <div>
+                            <label>Nb Pers. :</label>
+                            <input type="text" id="inputPersonnes" placeholder="Ex: 1, 2, 1 à 4...">
                         </div>
                         <div>
                             <label>📘 Page Manuel (ou 🟡 Parcours Jaune CM) :</label>
@@ -470,16 +487,18 @@
                         <table class="table-classique">
                             <thead>
                                 <tr>
-                                    <th style="width:80px;">Leçon</th>
+                                    <th style="width:70px;">Leçon</th>
                                     <th>Compétence</th>
                                     <th>Nom de l'exercice / Ressource *</th>
-                                    <th style="width:115px;">Support</th>
-                                    <th style="width:110px;">📘/🟡 Page</th>
-                                    <th style="width:110px;">🟠 Page Orange (CM)</th>
-                                    <th style="width:110px;">📒 Var. Jaune</th>
-                                    <th style="width:80px;">Étoiles</th>
-                                    <th style="width:50px; text-align:center;">🎯 Éval</th>
-                                    <th style="width:40px;"></th>
+                                    <th style="width:105px;">Support</th>
+                                    <th style="width:75px;">N° Atel.</th>
+                                    <th style="width:65px;">Nb Pers.</th>
+                                    <th style="width:95px;">📘/🟡 Page</th>
+                                    <th style="width:95px;">🟠 Page CM</th>
+                                    <th style="width:95px;">📒 Var. Jaune</th>
+                                    <th style="width:70px;">Étoiles</th>
+                                    <th style="width:45px; text-align:center;">🎯</th>
+                                    <th style="width:38px;"></th>
                                 </tr>
                             </thead>
                             <tbody id="tbodySaisieMultiple"></tbody>
@@ -511,13 +530,15 @@
                 <table class="table-classique">
                     <thead>
                         <tr>
-                            <th style="width:70px;">Niveau</th>
-                            <th style="width:65px;">Période</th>
-                            <th style="width:170px;">Matière / Séquence</th>
+                            <th style="width:65px;">Niveau</th>
+                            <th style="width:60px;">Période</th>
+                            <th style="width:160px;">Matière / Séquence</th>
                             <th>Compétence</th>
-                            <th>Ressource & Support</th>
-                            <th style="width:95px;">Visuel</th>
-                            <th style="width:150px;">Actions</th>
+                            <th>Ressource & Pages</th>
+                            <th style="width:90px;">Type</th>
+                            <th style="width:65px; text-align:center;">Nb Pers.</th>
+                            <th style="width:105px; text-align:center;">N° Atelier / Visuel</th>
+                            <th style="width:130px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody id="tableBaseDonnees"></tbody>
@@ -779,7 +800,7 @@
             <div style="background:#f8f9fa; padding:10px; border-radius:6px; margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
                 <input type="text" id="inputNouveauTypeNom" placeholder="Nouveau type (ex: Anton)">
                 <input type="text" id="inputNouveauTypeImg" placeholder="URL image/logo (optionnel)" style="flex:1;">
-                <label style="font-size:12px;"><input type="checkbox" id="cbNouveauTypeRempNum"> Logo remplace N°</label>
+                <label style="font-size:12px;"><input type="checkbox" id="cbNouveauTypeRempNum"> Logo remplace N° Atelier</label>
                 <label style="font-size:12px;"><input type="checkbox" id="cbNouveauTypeCouleur" checked> Colorer</label>
                 <label style="font-size:12px;"><input type="checkbox" id="cbNouveauTypeTablette"> 📱 Tablette</label>
                 <button type="button" class="btn-action" onclick="ajouterOuModifierType()">➕ Ajouter</button>
@@ -862,6 +883,6 @@
 
     <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" style="display:none; position:fixed; bottom:20px; right:20px; z-index:99; background:#1b4f72; color:#fff; border:none; padding:12px 16px; border-radius:50%; cursor:pointer; font-size:16px; box-shadow:0 3px 8px rgba(0,0,0,0.2);">⬆️</button>
 
-    <script src="script.js?v=20261025"></script>
+    <script src="script.js?v=20261026"></script>
 </body>
 </html>
