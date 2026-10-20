@@ -75,15 +75,74 @@ function getCouleurMatiereBandeau(matiere) {
     return { bg: "#34495e", text: "#ffffff", border: "#2c3e50" };
 }
 
+// ==========================================
+// GESTION DES PARCOURS (UNIQUEMENT CM1 & CM2)
+// ==========================================
+function estEleveCM(eleveOuNiveau) {
+    let niv = typeof eleveOuNiveau === 'string' ? eleveOuNiveau : (eleveOuNiveau && eleveOuNiveau.niveau ? eleveOuNiveau.niveau : "");
+    niv = niv.toUpperCase().trim();
+    return (niv === "CM1" || niv === "CM2");
+}
+
+function calculerPagePlusUn(val) {
+    if (!val || !val.trim()) return "";
+    let str = val.trim();
+    // Format "p9", "p.9", "p 9 ex 2" -> "p10", "p.10", "p 10 ex 2"
+    let m = str.match(/^(.*?p\.?\s*)(\d+)(.*)$/i);
+    if (m) {
+        return m[1] + (parseInt(m[2], 10) + 1) + m[3];
+    }
+    // Format numérique simple "9" -> "10"
+    let mNum = str.match(/^(\d+)(.*)$/);
+    if (mNum) {
+        return (parseInt(mNum[1], 10) + 1) + mNum[2];
+    }
+    return str;
+}
+
+// Retourne uniquement la page correspondant à l'élève :
+// - Fichier Jaune prioritaire si activé sur l'élève
+// - CP / CE1 / CE2 : jamais touchés par les parcours (toujours pageManuel standard)
+// - CM1 / CM2 : affiche uniquement la page du parcours suivi par l'élève (Jaune ou Orange)
 function getInfosActivitePourEleve(act, eleve) {
     let useJaune = Boolean(eleve && eleve.fichierJaune && act && act.varianteJaune && act.varianteJaune.trim() !== "");
-    let detailPage = useJaune ? act.varianteJaune.trim() : (act.pageManuel ? act.pageManuel.trim() : "");
-    let badgeLivre = useJaune
-        ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; border:1px solid #f1c40f;">📒 ${escHTML(detailPage)}</span>`
-        : (detailPage ? `<span style="background:#eaf2f8; color:#1b4f72; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold;">📘 ${escHTML(detailPage)}</span>` : "");
-    let typeEffectif = useJaune && imagesParType["Fichier jaune"] && imagesParType["Fichier jaune"].img ? "Fichier jaune" : (act.typeRes || "");
-    let couleurForcee = useJaune ? "#ffe599" : (act.visuel || "");
-    return { useJaune, detailPage, badgeLivre, typeEffectif, couleurForcee };
+    if (useJaune) {
+        let detailPage = act.varianteJaune.trim();
+        let badgeLivre = `<span style="background:#ffe599; color:#7c2d12; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; border:1px solid #f1c40f;">📒 ${escHTML(detailPage)}</span>`;
+        let typeEffectif = (imagesParType["Fichier jaune"] && imagesParType["Fichier jaune"].img) ? "Fichier jaune" : (act.typeRes || "");
+        return { useJaune: true, detailPage, badgeLivre, typeEffectif, couleurForcee: "#ffe599" };
+    }
+
+    let detailPage = (act && act.pageManuel) ? act.pageManuel.trim() : "";
+    let badgeLivre = "";
+
+    if (eleve && estEleveCM(eleve)) {
+        let parcoursEl = eleve.parcours || (eleve.niveau.toUpperCase() === "CM2" ? "orange" : "jaune");
+        let aDeuxParcours = Boolean(act && act.pageOrange && act.pageOrange.trim() !== "");
+        if (parcoursEl === "orange" && aDeuxParcours) {
+            detailPage = act.pageOrange.trim();
+            badgeLivre = `<span style="background:#fdebd0; color:#9c640c; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; border:1px solid #f39c12;" title="Parcours Orange">${escHTML(detailPage)}</span>`;
+        } else if (detailPage) {
+            if (aDeuxParcours) {
+                badgeLivre = `<span style="background:#fef9e7; color:#7d6608; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; border:1px solid #f1c40f;" title="Parcours Jaune">${escHTML(detailPage)}</span>`;
+            } else {
+                badgeLivre = `<span style="background:#eaf2f8; color:#1b4f72; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold;">📘 ${escHTML(detailPage)}</span>`;
+            }
+        }
+    } else {
+        // Élèves de CP, CE1, CE2 : affichage classique sans parcours
+        if (detailPage) {
+            badgeLivre = `<span style="background:#eaf2f8; color:#1b4f72; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold;">📘 ${escHTML(detailPage)}</span>`;
+        }
+    }
+
+    return {
+        useJaune: false,
+        detailPage,
+        badgeLivre,
+        typeEffectif: (act && act.typeRes) ? act.typeRes : "",
+        couleurForcee: (act && act.visuel) ? act.visuel : ""
+    };
 }
 
 function calculerVendrediDepuisISO(dateISO) {
@@ -106,6 +165,14 @@ function assurerStructureSemaines(e) {
     if (!e.maxAteliers) e.maxAteliers = 15;
     if (e.maxTablettes === undefined) e.maxTablettes = 2;
     if (!e.niveau) e.niveau = "CP";
+    // Parcours uniquement pour CM1 et CM2
+    if (estEleveCM(e)) {
+        if (e.parcours !== "jaune" && e.parcours !== "orange") {
+            e.parcours = (e.niveau.toUpperCase() === "CM2") ? "orange" : "jaune";
+        }
+    } else {
+        delete e.parcours;
+    }
     if (e.fichierJaune === undefined) e.fichierJaune = false;
     if (!e.suivi) e.suivi = {};
     if (!e.valides) e.valides = {};
@@ -221,7 +288,7 @@ function importerDonneesUniversel(rawData) {
     if (data.theme) appliquerThemeVisuel(data.theme);
 
     rafraichirToutApresImport();
-    showToast(`✅ Restauration réussie (${baseDonnees.length} ateliers,${Object.keys(eleves).length} élèves) !`, "success");
+    showToast(`✅ Restauration réussie (${baseDonnees.length} ateliers, ${Object.keys(eleves).length} élèves) !`, "success");
     return true;
 }
 
@@ -312,7 +379,7 @@ async function sauvegarderVersFirebase(forcerManuellement = false) {
         let res = await fetch(`${URL_FIREBASE_FIXE}/classe_data.json`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         let statut = document.getElementById('statutFirebase');
-        if (statut) { statut.innerText = `🔥 Synchro Cloud OK (${new Date().toLocaleTimeString()} — ${baseDonnees.length} ateliers,${Object.keys(eleves).length} élèves)`; statut.style.color = "#27ae60"; }
+        if (statut) { statut.innerText = `🔥 Synchro Cloud OK (${new Date().toLocaleTimeString()} — ${baseDonnees.length} ateliers, ${Object.keys(eleves).length} élèves)`; statut.style.color = "#27ae60"; }
         if (forcerManuellement) showToast("⬆️ Données envoyées sur Firebase !", "success");
     } catch (e) {
         if (forcerManuellement) showToast("Erreur Firebase : " + e.message, "error");
@@ -331,10 +398,10 @@ async function chargerDepuisFirebase(forcer = false) {
 
         if (data && (nbBaseCloud > 0 || nbElevesCloud > 0)) {
             let localEstVide = (baseDonnees.length === 0 && Object.keys(eleves).length === 0);
-            if (forcer || localEstVide || confirm(`Cloud Firebase trouvé (${nbBaseCloud} ateliers,${nbElevesCloud} élèves). Charger ces données ?`)) {
+            if (forcer || localEstVide || confirm(`Cloud Firebase trouvé (${nbBaseCloud} ateliers, ${nbElevesCloud} élèves). Charger ces données ?`)) {
                 importerDonneesUniversel(data);
             }
-            if (statut) { statut.innerText = `🔥 Cloud Firebase connecté (${nbBaseCloud} ateliers,${nbElevesCloud} élèves)`; statut.style.color = "#27ae60"; }
+            if (statut) { statut.innerText = `🔥 Cloud Firebase connecté (${nbBaseCloud} ateliers, ${nbElevesCloud} élèves)`; statut.style.color = "#27ae60"; }
         } else {
             if (statut) { statut.innerText = "ℹ️ Cloud prêt. Vos données locales sont conservées."; statut.style.color = "#2980b9"; }
             if (baseDonnees.length > 0 || Object.keys(eleves).length > 0) sauvegarderVersFirebase(false);
@@ -498,7 +565,7 @@ function calculTailleStockage() {
     let _lsTotal = 0, _xLen, _x;
     for (_x in localStorage) { if (!localStorage.hasOwnProperty(_x)) continue; _xLen = ((localStorage[_x].length + _x.length) * 2); _lsTotal += _xLen; }
     let megaBytes = (_lsTotal / (1024 * 1024)).toFixed(2), pct = Math.min(100, (megaBytes / 5) * 100);
-    let texteSto = document.getElementById('texteStockage'); if (texteSto) texteSto.innerText = `${megaBytes} Mo utilisés sur environ 5.00 Mo (${baseDonnees.length} ateliers,${Object.keys(eleves).length} élèves en mémoire)`;
+    let texteSto = document.getElementById('texteStockage'); if (texteSto) texteSto.innerText = `${megaBytes} Mo utilisés sur environ 5.00 Mo (${baseDonnees.length} ateliers, ${Object.keys(eleves).length} élèves en mémoire)`;
     let jauge = document.getElementById('jaugeStockageFill');
     if (jauge) { jauge.style.width = pct + "%"; jauge.style.backgroundColor = pct > 80 ? "#e74c3c" : (pct > 50 ? "#f39c12" : "#27ae60"); }
 }
@@ -506,6 +573,45 @@ function calculTailleStockage() {
 // ==========================================
 // 4. ONGLET 1 : PLAN & SUIVI ÉLÈVES
 // ==========================================
+function majVisibiliteParcoursCreation(niveau) {
+    let selParc = document.getElementById('nouvelEleveParcours');
+    if (!selParc) return;
+    if (estEleveCM(niveau)) {
+        selParc.style.display = 'inline-block';
+        selParc.value = (niveau.toUpperCase() === 'CM2') ? 'orange' : 'jaune';
+    } else {
+        selParc.style.display = 'none';
+    }
+}
+
+function majVisibiliteParcoursEdition(niveau) {
+    let bloc = document.getElementById('blocEditEleveParcours');
+    let sel = document.getElementById('editEleveParcoursSelect');
+    if (!bloc || !sel) return;
+    if (estEleveCM(niveau)) {
+        bloc.style.display = 'block';
+        if (idEleveCourant && eleves[idEleveCourant] && eleves[idEleveCourant].parcours) {
+            sel.value = eleves[idEleveCourant].parcours;
+        } else {
+            sel.value = (niveau.toUpperCase() === 'CM2') ? 'orange' : 'jaune';
+        }
+    } else {
+        bloc.style.display = 'none';
+    }
+}
+
+function changerParcoursEleve(nouvParcours) {
+    if (!idEleveCourant || !eleves[idEleveCourant]) return;
+    let e = eleves[idEleveCourant];
+    if (!estEleveCM(e)) return;
+    e.parcours = (nouvParcours === 'orange') ? 'orange' : 'jaune';
+    sauvegarderEleves();
+    majListeEleves();
+    afficherPlanHebdo();
+    afficherRessourcesDisponibles();
+    showToast(e.parcours === 'orange' ? "🟠 Parcours Orange sélectionné !" : "🟡 Parcours Jaune sélectionné !");
+}
+
 function toggleFichierJauneEleve(isChecked) {
     if (!idEleveCourant || !eleves[idEleveCourant]) return;
     eleves[idEleveCourant].fichierJaune = Boolean(isChecked);
@@ -520,8 +626,13 @@ function majListeEleves() {
     let optBilan = '<option value="">-- Choisir un élève --</option>';
 
     getElevesTries().forEach(e => {
+        let tagParcours = "";
+        if (estEleveCM(e)) {
+            let p = e.parcours || (e.niveau.toUpperCase() === "CM2" ? "orange" : "jaune");
+            tagParcours = (p === "orange") ? " 🟠" : " 🟡";
+        }
         let tagJaune = e.fichierJaune ? " 📒" : "";
-        let labelNiv = `[${e.niveau || "CP"}] ${e.nom}${tagJaune}`;
+        let labelNiv = `[${e.niveau || "CP"}] ${e.nom}${tagParcours}${tagJaune}`;
         optHtml += `<option value="${e.id}">${escHTML(labelNiv)}</option>`;
         optImp += `<option value="${e.id}">${escHTML(labelNiv)}</option>`;
         optBilan += `<option value="${e.id}">${escHTML(labelNiv)}</option>`;
@@ -560,11 +671,22 @@ function modifierMaxTablettesEleve() {
 }
 
 function creerEleve() {
-    const nomInput = document.getElementById('nouvelEleveNom'), nivSelect = document.getElementById('nouvelEleveNiveau'), cbJauneNew = document.getElementById('nouvelEleveFichierJaune');
+    const nomInput = document.getElementById('nouvelEleveNom'), nivSelect = document.getElementById('nouvelEleveNiveau'), parcSelect = document.getElementById('nouvelEleveParcours'), cbJauneNew = document.getElementById('nouvelEleveFichierJaune');
     if (!nomInput) return;
     const nom = nomInput.value.trim(); if (!nom) { showToast("Indiquez le prénom de l'élève.", "error"); return; }
-    const niveau = nivSelect ? nivSelect.value : "CP"; const id = 'eleve_' + Date.now();
-    eleves[id] = { id: id, nom: nom, niveau: niveau, fichierJaune: Boolean(cbJauneNew && cbJauneNew.checked), planHebdo: [], enAttente: [], historique: [], masquees: [], priorites: [], maxAteliers: 15, maxTablettes: 2, suivi: {}, valides: {}, bilanEvaluations: {}, joursAssignes: {}, dateDebutISO: "", dateDebut: "", dateFin: "" };
+    const niveau = nivSelect ? nivSelect.value : "CP";
+    const id = 'eleve_' + Date.now();
+    let nouvEl = {
+        id: id, nom: nom, niveau: niveau,
+        fichierJaune: Boolean(cbJauneNew && cbJauneNew.checked),
+        planHebdo: [], enAttente: [], historique: [], masquees: [], priorites: [],
+        maxAteliers: 15, maxTablettes: 2, suivi: {}, valides: {}, bilanEvaluations: {}, joursAssignes: {},
+        dateDebutISO: "", dateDebut: "", dateFin: ""
+    };
+    if (estEleveCM(niveau)) {
+        nouvEl.parcours = parcSelect ? parcSelect.value : (niveau === "CM2" ? "orange" : "jaune");
+    }
+    eleves[id] = nouvEl;
     assurerStructureSemaines(eleves[id]); sauvegarderEleves();
     nomInput.value = ''; if (cbJauneNew) cbJauneNew.checked = false;
     majListeInstantaneeEleve(id); rafraichirDashboard();
@@ -577,6 +699,9 @@ function ouvrirModalEditionEleve() {
     if (!idEleveCourant || !eleves[idEleveCourant]) return; let e = eleves[idEleveCourant];
     document.getElementById('editEleveNomInput').value = e.nom;
     document.getElementById('editEleveNiveauSelect').value = e.niveau || "CP";
+    majVisibiliteParcoursEdition(e.niveau || "CP");
+    let selParc = document.getElementById('editEleveParcoursSelect');
+    if (selParc && estEleveCM(e)) selParc.value = e.parcours || (e.niveau.toUpperCase() === "CM2" ? "orange" : "jaune");
     let cbEditJaune = document.getElementById('editEleveFichierJauneInput'); if (cbEditJaune) cbEditJaune.checked = Boolean(e.fichierJaune);
     ouvrirModal('modalEditEleve');
 }
@@ -585,8 +710,15 @@ function validerEditionEleve() {
     if (!idEleveCourant || !eleves[idEleveCourant]) return;
     let nouveauNom = document.getElementById('editEleveNomInput').value.trim(), nouveauNiveau = document.getElementById('editEleveNiveauSelect').value;
     if (!nouveauNom) { showToast("Le prénom ne peut pas être vide.", "error"); return; }
-    eleves[idEleveCourant].nom = nouveauNom; eleves[idEleveCourant].niveau = nouveauNiveau;
-    let cbEditJaune = document.getElementById('editEleveFichierJauneInput'); if (cbEditJaune) eleves[idEleveCourant].fichierJaune = cbEditJaune.checked;
+    let e = eleves[idEleveCourant];
+    e.nom = nouveauNom; e.niveau = nouveauNiveau;
+    if (estEleveCM(nouveauNiveau)) {
+        let selParc = document.getElementById('editEleveParcoursSelect');
+        e.parcours = selParc ? selParc.value : (nouveauNiveau === "CM2" ? "orange" : "jaune");
+    } else {
+        delete e.parcours;
+    }
+    let cbEditJaune = document.getElementById('editEleveFichierJauneInput'); if (cbEditJaune) e.fichierJaune = cbEditJaune.checked;
     sauvegarderEleves(); fermerModal('modalEditEleve'); majListeEleves(); chargerEleve(); rafraichirDashboard(); showToast("Élève mis à jour !", "success");
 }
 
@@ -615,7 +747,7 @@ function majBarreSemainesUI() {
     if (sel) {
         let html = '';
         e.semaines.forEach((s, idx) => {
-            let datesTxt = (s.dateDebut && s.dateFin) ? ` (du ${s.dateDebut} au${s.dateFin})` : '';
+            let datesTxt = (s.dateDebut && s.dateFin) ? ` (du ${s.dateDebut} au ${s.dateFin})` : '';
             html += `<option value="${idx}">Semaine ${idx + 1}${datesTxt} — ${s.planHebdo.length} act.${idx === 0 ? ' [En cours]' : ' [D\'avance]'}</option>`;
         });
         sel.innerHTML = html; sel.value = e.semaineIndex;
@@ -689,6 +821,19 @@ function chargerEleve() {
     if (inputMaxTab) inputMaxTab.value = e.maxTablettes ?? 2;
     if (maxAff) maxAff.innerText = e.maxAteliers || 15;
     if (cbJaune) cbJaune.checked = Boolean(e.fichierJaune);
+
+    // Afficher le sélecteur de parcours UNIQUEMENT si l'élève est en CM1 ou CM2
+    let blocParc = document.getElementById('blocParcoursEleveSuivi');
+    let selParc = document.getElementById('selectParcoursEleve');
+    if (blocParc && selParc) {
+        if (estEleveCM(e)) {
+            blocParc.style.display = 'inline-block';
+            selParc.value = e.parcours || (e.niveau.toUpperCase() === "CM2" ? "orange" : "jaune");
+        } else {
+            blocParc.style.display = 'none';
+        }
+    }
+
     initialiserSelectsFormulaire();
     majBarreSemainesUI(); afficherPlanHebdo(); afficherHistorique(); afficherRessourcesDisponibles();
 }
@@ -754,7 +899,7 @@ function afficherRessourcesDisponibles() {
         if (nivAct && !nivAct.includes(nivEleve) && nivAct !== "TOUS") return false;
         if (mat !== 'TOUTES_MATIERES' && (a.matiere || "").trim() !== mat) return false;
         if (seq && seq !== 'TOUTES_SEQUENCES' && (a.sequence || "").trim() !== seq) return false;
-        let cleCompProg = `${a.matiere}||${a.sequence}\vert{}\vert{}${a.competence}`;
+        let cleCompProg = `${a.matiere}||${a.sequence}||${a.competence}`;
         let perAct = programmations[a.id] || programmations[cleCompProg] || a.periode || "";
         if (per !== 'Toutes' && !perAct.includes(per)) return false;
         if (filtreEtoilesDispo > 0 && (parseInt(a.difficulte) || 0) !== filtreEtoilesDispo) return false;
@@ -776,9 +921,9 @@ function afficherRessourcesDisponibles() {
         let perAct = programmations[a.id] || a.periode || "-";
         html += `<tr>
             <td><strong>${escHTML(a.niveau)}</strong><br><small style="color:#7f8c8d;">${escHTML(perAct)}</small></td>
-            <td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${coul.bg}; margin-right:4px;"></span><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
+            <td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${coul.bg}; margin-right:4px;"></span><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
             <td>${escHTML(a.competence)}</td>
-            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infos.badgeLivre}${a.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : ''}</td>
+            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infos.badgeLivre} ${a.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : ''}</td>
             <td>
                 <select id="jour_dispo_${a.id}" style="width:100%; padding:4px; font-size:12px;">
                     <option value="">-- Libre --</option>
@@ -826,6 +971,8 @@ function cocherNiveauModal(classeCheckbox, niveauCible) {
         if (!niveauCible) cb.checked = false;
         else if (niveauCible === 'TOUS') cb.checked = true;
         else if (niveauCible === 'JAUNE') cb.checked = Boolean(e && e.fichierJaune);
+        else if (niveauCible === 'PARCOURS_JAUNE') cb.checked = Boolean(e && estEleveCM(e) && e.parcours === 'jaune');
+        else if (niveauCible === 'PARCOURS_ORANGE') cb.checked = Boolean(e && estEleveCM(e) && e.parcours === 'orange');
         else if (e && (e.niveau || 'CP').toUpperCase() === niveauCible.toUpperCase()) cb.checked = true;
     });
 }
@@ -840,6 +987,8 @@ function genererBarreSelectionNiveauxHtml(classeCheckbox) {
         <button type="button" class="filter-btn" onclick="cocherNiveauModal('${classeCheckbox}', 'CE2')">CE2</button>
         <button type="button" class="filter-btn" onclick="cocherNiveauModal('${classeCheckbox}', 'CM1')">CM1</button>
         <button type="button" class="filter-btn" onclick="cocherNiveauModal('${classeCheckbox}', 'CM2')">CM2</button>
+        <button type="button" class="filter-btn" onclick="cocherNiveauModal('${classeCheckbox}', 'PARCOURS_JAUNE')">🟡 Parcours Jaune (CM)</button>
+        <button type="button" class="filter-btn" onclick="cocherNiveauModal('${classeCheckbox}', 'PARCOURS_ORANGE')">🟠 Parcours Orange (CM)</button>
         <button type="button" class="filter-btn" onclick="cocherNiveauModal('${classeCheckbox}', 'JAUNE')">📒 Fichier Jaune</button>
     </div>`;
 }
@@ -1017,9 +1166,7 @@ function annulerAttente(idActivite, basculerDansPlan = false) {
     if (!idEleveCourant) return;
     let eleve = eleves[idEleveCourant];
     eleve.enAttente = (eleve.enAttente || []).filter(id => id !== idActivite);
-    if (basculerDansPlan) {
-        eleve.planHebdo.push(idActivite);
-    }
+    if (basculerDansPlan) eleve.planHebdo.push(idActivite);
     sauvegarderEleves(); afficherPlanHebdo(); afficherRessourcesDisponibles();
 }
 
@@ -1112,7 +1259,7 @@ function afficherHistorique() {
 }
 
 // ==========================================
-// 5. ONGLET 2 : IMPRESSION FICHES ÉLÈVES & PERSONNALISATION EN-TÊTE
+// 5. ONGLET 2 : IMPRESSION FICHES ÉLÈVES
 // ==========================================
 function chargerConfigImpressionUI() {
     let t = document.getElementById('printInputTitre'); if (t) t.value = printConfig.titre || "Plan de travail";
@@ -1125,22 +1272,12 @@ function chargerConfigImpressionUI() {
 }
 
 function sauvegarderConfigImpression() {
-    let t = document.getElementById('printInputTitre');
-    let c = document.getElementById('printInputConsigne');
-    let m = document.getElementById('printSelectMeteo');
-    let cbCpt = document.getElementById('printCbCompteur');
-    let cbSig = document.getElementById('printCbSignature');
-    let cbCom = document.getElementById('printCbCommentaire');
-    let cbBil = document.getElementById('printCbColBilan');
-
+    let t = document.getElementById('printInputTitre'), c = document.getElementById('printInputConsigne'), m = document.getElementById('printSelectMeteo');
+    let cbCpt = document.getElementById('printCbCompteur'), cbSig = document.getElementById('printCbSignature'), cbCom = document.getElementById('printCbCommentaire'), cbBil = document.getElementById('printCbColBilan');
     printConfig = {
-        titre: t ? t.value : "Plan de travail",
-        consigne: c ? c.value : "",
-        meteo: m ? m.value : "meteo",
-        afficherCompteur: cbCpt ? cbCpt.checked : true,
-        afficherSignature: cbSig ? cbSig.checked : true,
-        afficherCommentaire: cbCom ? cbCom.checked : false,
-        afficherColBilan: cbBil ? cbBil.checked : true
+        titre: t ? t.value : "Plan de travail", consigne: c ? c.value : "", meteo: m ? m.value : "meteo",
+        afficherCompteur: cbCpt ? cbCpt.checked : true, afficherSignature: cbSig ? cbSig.checked : true,
+        afficherCommentaire: cbCom ? cbCom.checked : false, afficherColBilan: cbBil ? cbBil.checked : true
     };
     localStorage.setItem(KEY_PRINT_CFG, JSON.stringify(printConfig));
     declencherAutoSaveFirebase();
@@ -1148,49 +1285,30 @@ function sauvegarderConfigImpression() {
 }
 
 function changementEleveImpression() {
-    const sel = document.getElementById('selectEleveImpression');
-    const selSem = document.getElementById('selectSemaineImpression');
-    const dateInp = document.getElementById('dateImpressionInput');
+    const sel = document.getElementById('selectEleveImpression'), selSem = document.getElementById('selectSemaineImpression'), dateInp = document.getElementById('dateImpressionInput');
     if (!sel) return;
     idEleveImpressionCourant = sel.value || 'TOUS_ELEVES';
-
     if (eleves[idEleveImpressionCourant]) {
-        let e = eleves[idEleveImpressionCourant];
-        assurerStructureSemaines(e);
-        if (selSem) {
-            selSem.innerHTML = e.semaines.map((s, i) => `<option value="${i}">Semaine ${i + 1} ${s.dateDebut ? `(${s.dateDebut})` : ''}</option>`).join('');
-            selSem.value = e.semaineIndex || 0;
-        }
+        let e = eleves[idEleveImpressionCourant]; assurerStructureSemaines(e);
+        if (selSem) { selSem.innerHTML = e.semaines.map((s, i) => `<option value="${i}">Semaine ${i + 1} ${s.dateDebut ? `(${s.dateDebut})` : ''}</option>`).join(''); selSem.value = e.semaineIndex || 0; }
         if (dateInp) dateInp.value = e.dateDebutISO || "";
-    } else {
-        if (selSem) selSem.innerHTML = '<option value="0">Semaine active de chaque élève</option>';
-    }
+    } else if (selSem) selSem.innerHTML = '<option value="0">Semaine active de chaque élève</option>';
     rafraichirFicheImpression();
 }
 
 function changerSemaineDepuisImpression(val) {
-    if (eleves[idEleveImpressionCourant]) {
-        chargerSemaineDepuisIndex(eleves[idEleveImpressionCourant], parseInt(val) || 0);
-        sauvegarderEleves();
-        rafraichirFicheImpression();
-    }
+    if (eleves[idEleveImpressionCourant]) { chargerSemaineDepuisIndex(eleves[idEleveImpressionCourant], parseInt(val) || 0); sauvegarderEleves(); rafraichirFicheImpression(); }
 }
 
 function appliquerDateImpression(dateISO) {
     if (!dateISO) return;
     let res = calculerVendrediDepuisISO(dateISO);
     if (eleves[idEleveImpressionCourant]) {
-        let e = eleves[idEleveImpressionCourant];
-        e.dateDebutISO = dateISO; e.dateDebut = res.debutFR; e.dateFin = res.finFR;
-        syncEleveVersSemaineActive(e);
+        let e = eleves[idEleveImpressionCourant]; e.dateDebutISO = dateISO; e.dateDebut = res.debutFR; e.dateFin = res.finFR; syncEleveVersSemaineActive(e);
     } else {
-        Object.values(eleves).forEach(e => {
-            e.dateDebutISO = dateISO; e.dateDebut = res.debutFR; e.dateFin = res.finFR;
-            syncEleveVersSemaineActive(e);
-        });
+        Object.values(eleves).forEach(e => { e.dateDebutISO = dateISO; e.dateDebut = res.debutFR; e.dateFin = res.finFR; syncEleveVersSemaineActive(e); });
     }
-    sauvegarderEleves();
-    rafraichirFicheImpression();
+    sauvegarderEleves(); rafraichirFicheImpression();
 }
 
 function genererHtmlFicheEleve(e, format = 'A4') {
@@ -1208,18 +1326,14 @@ function genererHtmlFicheEleve(e, format = 'A4') {
     let showColBilan = !printConfig || printConfig.afficherColBilan !== false;
 
     let blocsDroite = [];
-    if (!printConfig || printConfig.afficherCompteur !== false) {
-        blocsDroite.push(`<span>Ateliers réussis : <strong>___ / ${planObjs.length}</strong></span>`);
-    }
+    if (!printConfig || printConfig.afficherCompteur !== false) blocsDroite.push(`<span>Ateliers réussis : <strong>___ / ${planObjs.length}</strong></span>`);
     if (!printConfig || printConfig.meteo !== 'aucun') {
         let iconeBilan = "☀️ ⛅ 🌧️";
         if (printConfig && printConfig.meteo === 'smileys') iconeBilan = "😊 😐 😟";
         if (printConfig && printConfig.meteo === 'etoiles') iconeBilan = "⭐ ⭐ ⭐";
         blocsDroite.push(`<span>Mon bilan : ${iconeBilan}</span>`);
     }
-    if (!printConfig || printConfig.afficherSignature !== false) {
-        blocsDroite.push(`<span>Signature : ____________</span>`);
-    }
+    if (!printConfig || printConfig.afficherSignature !== false) blocsDroite.push(`<span>Signature : ____________</span>`);
 
     let html = `<div class="fiche-plan-print ${format === 'A4' ? 'a4-page' : ''}">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; border-bottom:2px solid #1b4f72; padding-bottom:6px; margin-bottom:8px;">
@@ -1286,7 +1400,6 @@ function genererHtmlFicheEleve(e, format = 'A4') {
             <strong>💬 Mot de l'enseignante :</strong>
         </div>`;
     }
-
     html += `</div>`;
     return html;
 }
@@ -1305,18 +1418,12 @@ function rafraichirFicheImpression() {
         cibles = getElevesTries().filter(e => (e.niveau || 'CP').toUpperCase() === niv);
     } else if (eleves[val]) cibles = [eleves[val]];
 
-    if (cibles.length === 0) {
-        zone.innerHTML = `<div class="empty-state"><p>Aucun élève à imprimer.</p></div>`;
-        return;
-    }
+    if (cibles.length === 0) { zone.innerHTML = `<div class="empty-state"><p>Aucun élève à imprimer.</p></div>`; return; }
 
     if (fmt === 'A5') {
         let html = '';
         for (let i = 0; i < cibles.length; i += 2) {
-            html += `<div class="conteneur-a5-pair">`;
-            html += genererHtmlFicheEleve(cibles[i], 'A5');
-            if (cibles[i + 1]) html += genererHtmlFicheEleve(cibles[i + 1], 'A5');
-            html += `</div>`;
+            html += `<div class="conteneur-a5-pair">` + genererHtmlFicheEleve(cibles[i], 'A5') + (cibles[i + 1] ? genererHtmlFicheEleve(cibles[i + 1], 'A5') : '') + `</div>`;
         }
         zone.innerHTML = html;
     } else {
@@ -1325,7 +1432,7 @@ function rafraichirFicheImpression() {
 }
 
 // ==========================================
-// 6. ONGLET 3 : TABLEAU DE BORD COMPLET
+// 6. ONGLET 3 : TABLEAU DE BORD
 // ==========================================
 function toggleAfficherArchives() {
     afficherArchivesMode = !afficherArchivesMode;
@@ -1333,27 +1440,9 @@ function toggleAfficherArchives() {
     if (btn) btn.innerText = afficherArchivesMode ? "🙈 Masquer les archives" : "👁️ Voir les archives";
     rafraichirDashboard();
 }
-
-function archiverItem(cle) {
-    if (!dashboardArchives.includes(cle)) dashboardArchives.push(cle);
-    localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
-    rafraichirDashboard();
-}
-
-function restaurerArchive(cle) {
-    dashboardArchives = dashboardArchives.filter(k => k !== cle);
-    localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
-    rafraichirDashboard();
-}
-
-function viderArchives() {
-    if (confirm("Vider la liste des éléments archivés du Tableau de bord ?")) {
-        dashboardArchives = [];
-        localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
-        rafraichirDashboard();
-    }
-}
-
+function archiverItem(cle) { if (!dashboardArchives.includes(cle)) dashboardArchives.push(cle); localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); rafraichirDashboard(); }
+function restaurerArchive(cle) { dashboardArchives = dashboardArchives.filter(k => k !== cle); localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); rafraichirDashboard(); }
+function viderArchives() { if (confirm("Vider la liste des éléments archivés ?")) { dashboardArchives = []; localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); rafraichirDashboard(); } }
 function setSuivi(idEl, idAct, statut) {
     let e = eleves[idEl]; if (!e) return;
     if (!e.suivi) e.suivi = {};
@@ -1361,51 +1450,24 @@ function setSuivi(idEl, idAct, statut) {
     else e.suivi[idAct] = { statut: statut, commentaire: (e.suivi[idAct] && e.suivi[idAct].commentaire) || "" };
     sauvegarderEleves(); rafraichirDashboard();
 }
-
-function validerDepuisDashboard(idEl, idAct) {
-    let e = eleves[idEl]; if (!e) return;
-    marquerCommeValideSansRafraichir(idAct, e);
-    sauvegarderEleves(); rafraichirDashboard();
-    showToast(`Activité validée pour ${e.nom} !`, "success");
-}
-
-function toggleExpandEleveDash(idEl) {
-    if (dashboardExpanded.has(idEl)) dashboardExpanded.delete(idEl);
-    else dashboardExpanded.add(idEl);
-    rafraichirDashboard();
-}
-
-function ouvrirEleveDepuisDashboard(idEl) {
-    idEleveCourant = idEl;
-    let sel = document.getElementById('selectEleveProfile');
-    if (sel) sel.value = idEl;
-    let navBtns = document.querySelectorAll('.nav-btn');
-    changerOnglet('pageSuivi', navBtns[0]);
-}
+function validerDepuisDashboard(idEl, idAct) { let e = eleves[idEl]; if (!e) return; marquerCommeValideSansRafraichir(idAct, e); sauvegarderEleves(); rafraichirDashboard(); showToast(`Activité validée pour ${e.nom} !`, "success"); }
+function toggleExpandEleveDash(idEl) { if (dashboardExpanded.has(idEl)) dashboardExpanded.delete(idEl); else dashboardExpanded.add(idEl); rafraichirDashboard(); }
+function ouvrirEleveDepuisDashboard(idEl) { idEleveCourant = idEl; let sel = document.getElementById('selectEleveProfile'); if (sel) sel.value = idEl; changerOnglet('pageSuivi', document.querySelectorAll('.nav-btn')[0]); }
 
 function rafraichirDashboard() {
-    const cont = document.getElementById('dashboardContent');
-    if (!cont) return;
+    const cont = document.getElementById('dashboardContent'); if (!cont) return;
     const listeEl = getElevesTries();
-    if (listeEl.length === 0) {
-        cont.innerHTML = `<div class="empty-state"><h3>Aucun élève enregistré.</h3></div>`;
-        return;
-    }
+    if (listeEl.length === 0) { cont.innerHTML = `<div class="empty-state"><h3>Aucun élève enregistré.</h3></div>`; return; }
 
-    let lignesRemediation = '';
-    let tachesTablettesMap = {};
-
+    let lignesRemediation = '', tachesTablettesMap = {};
     listeEl.forEach(e => {
         assurerStructureSemaines(e);
         (e.planHebdo || []).forEach(idAct => {
-            let act = baseDonnees.find(b => b.id === idAct);
-            if (!act) return;
+            let act = baseDonnees.find(b => b.id === idAct); if (!act) return;
             let estVal = e.valides && e.valides[idAct];
-
             let s = e.suivi && e.suivi[idAct] ? e.suivi[idAct] : null;
             if (s && (s.statut === 'a_revoir' || s.statut === 'a_refaire')) {
-                let cleRem = `${e.id}_${idAct}`;
-                let estArch = dashboardArchives.includes(cleRem);
+                let cleRem = `${e.id}_${idAct}`, estArch = dashboardArchives.includes(cleRem);
                 if (afficherArchivesMode || !estArch) {
                     let coul = getCouleurMatiereBandeau(act.matiere);
                     lignesRemediation += `<tr style="${estArch ? 'opacity:0.5;' : ''}">
@@ -1414,16 +1476,14 @@ function rafraichirDashboard() {
                         <td><strong>${escHTML(act.ressource)}</strong><br><small>${escHTML(act.competence)}</small></td>
                         <td>${s.statut === 'a_revoir' ? '👩‍🏫 À revoir' : '🔄 À refaire'}</td>
                         <td>
-                            <button type="button" class="btn-valid" style="padding:3px 7px;" onclick="validerDepuisDashboard('${e.id}', '${idAct}')">✅ Valider</button>
+                            <button type="button" class="btn-valid" style="padding:3px 7px;" onclick="validerDepuisDashboard('${e.id}', '${idAct}')">✅</button>
                             <button type="button" class="filter-btn" style="padding:3px 7px;" onclick="${estArch ? `restaurerArchive('${cleRem}')` : `archiverItem('${cleRem}')`}">${estArch ? '↩️' : '📥'}</button>
                         </td>
                     </tr>`;
                 }
             }
-
             if (!estVal && estActiviteTablette(act)) {
-                let cleTab = `tab_${act.id}`;
-                let estArchTab = dashboardArchives.includes(cleTab);
+                let cleTab = `tab_${act.id}`, estArchTab = dashboardArchives.includes(cleTab);
                 if (afficherArchivesMode || !estArchTab) {
                     if (!tachesTablettesMap[act.id]) tachesTablettesMap[act.id] = { act, elevesNoms: [], cleTab, estArchTab };
                     tachesTablettesMap[act.id].elevesNoms.push(`${e.nom} (${e.niveau})`);
@@ -1432,86 +1492,127 @@ function rafraichirDashboard() {
         });
     });
 
-    let html = `<div class="grid-2-cols" style="margin-bottom:20px;">`;
-
-    html += `<div class="card-panel" style="border-left:5px solid #c0392b;">
-        <h3 style="color:#c0392b; margin-bottom:10px;">👩‍🏫 Besoins d'ateliers dirigés & Remédiations</h3>
-        ${lignesRemediation ? `<table class="table-classique"><thead><tr><th>Élève</th><th>Matière</th><th>Atelier</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${lignesRemediation}</tbody></table>` : `<p style="color:#7f8c8d; font-size:13px;">Aucune demande de remédiation en cours.</p>`}
-    </div>`;
-
     let tabKeys = Object.keys(tachesTablettesMap);
-    html += `<div class="card-panel" style="border-left:5px solid #8e44ad;">
-        <h3 style="color:#6c3483; margin-bottom:10px;">📱 Préparation Tablettes (Anton / Scratch)</h3>
-        ${tabKeys.length > 0 ? `<table class="table-classique"><thead><tr><th>Support / Matière</th><th>Activité à épingler</th><th>Élèves concernés</th><th>Action</th></tr></thead><tbody>` + tabKeys.map(k => {
-            let item = tachesTablettesMap[k];
-            return `<tr style="${item.estArchTab ? 'opacity:0.5;' : ''}">
-                <td><strong>${escHTML(item.act.typeRes)}</strong><br><small>${escHTML(item.act.matiere)}</small></td>
-                <td><strong>${escHTML(item.act.ressource)}</strong><br><small>${escHTML(item.act.sequence)}</small></td>
-                <td>${escHTML(item.elevesNoms.join(', '))}</td>
-                <td><button type="button" class="filter-btn" onclick="${item.estArchTab ? `restaurerArchive('${item.cleTab}')` : `archiverItem('${item.cleTab}')`}">${item.estArchTab ? '↩️' : '☑️ Prêt'}</button></td>
-            </tr>`;
-        }).join('') + `</tbody></table>` : `<p style="color:#7f8c8d; font-size:13px;">Aucune activité tablette à préparer.</p>`}
-    </div></div>`;
+    let html = `<div class="grid-2-cols" style="margin-bottom:20px;">
+        <div class="card-panel" style="border-left:5px solid #c0392b;">
+            <h3 style="color:#c0392b; margin-bottom:10px;">👩‍🏫 Besoins d'ateliers dirigés & Remédiations</h3>
+            ${lignesRemediation ? `<table class="table-classique"><thead><tr><th>Élève</th><th>Matière</th><th>Atelier</th><th>Statut</th><th>Actions</th></tr></thead><tbody>${lignesRemediation}</tbody></table>` : `<p style="color:#7f8c8d; font-size:13px;">Aucune demande de remédiation en cours.</p>`}
+        </div>
+        <div class="card-panel" style="border-left:5px solid #8e44ad;">
+            <h3 style="color:#6c3483; margin-bottom:10px;">📱 Préparation Tablettes (Anton / Scratch)</h3>
+            ${tabKeys.length > 0 ? `<table class="table-classique"><thead><tr><th>Support</th><th>Activité à épingler</th><th>Élèves</th><th>Action</th></tr></thead><tbody>` + tabKeys.map(k => {
+                let item = tachesTablettesMap[k];
+                return `<tr style="${item.estArchTab ? 'opacity:0.5;' : ''}"><td><strong>${escHTML(item.act.typeRes)}</strong><br><small>${escHTML(item.act.matiere)}</small></td><td><strong>${escHTML(item.act.ressource)}</strong></td><td>${escHTML(item.elevesNoms.join(', '))}</td><td><button type="button" class="filter-btn" onclick="${item.estArchTab ? `restaurerArchive('${item.cleTab}')` : `archiverItem('${item.cleTab}')`}">${item.estArchTab ? '↩️' : '☑️ Prêt'}</button></td></tr>`;
+            }).join('') + `</tbody></table>` : `<p style="color:#7f8c8d; font-size:13px;">Aucune activité tablette à préparer.</p>`}
+        </div>
+    </div><div class="dashboard-grid">`;
 
-    html += `<div class="dashboard-grid">`;
     listeEl.forEach(e => {
-        let total = (e.planHebdo || []).length;
-        let nbValides = (e.planHebdo || []).filter(id => e.valides && e.valides[id]).length;
+        let total = (e.planHebdo || []).length, nbValides = (e.planHebdo || []).filter(id => e.valides && e.valides[id]).length;
         let pct = total > 0 ? Math.round((nbValides / total) * 100) : 0;
         let nbTab = (e.planHebdo || []).map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length;
         let isExp = dashboardExpanded.has(e.id);
-
-        let detailsPlanHtml = '';
-        if (isExp) {
-            let planObjs = getListeTrie(e.planHebdo, e.priorites || [], e.suivi || {});
-            detailsPlanHtml = `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed #ccc; font-size:12.5px;">` + planObjs.map((a, idx) => {
-                let fait = e.valides && e.valides[a.id];
-                let st = (e.suivi && e.suivi[a.id]) ? e.suivi[a.id].statut : "";
-                return `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #f1f5f9;">
-                    <span style="${fait ? 'text-decoration:line-through; color:#27ae60;' : ''}"><strong>${idx + 1}.</strong> ${escHTML(a.ressource)}</span>
-                    <div style="display:flex; gap:3px;">
-                        ${!fait ? `<button type="button" class="filter-btn" style="padding:1px 5px;" onclick="validerDepuisDashboard('${e.id}', '${a.id}')" title="Valider">✅</button>
-                        <button type="button" class="filter-btn" style="padding:1px 5px; ${st === 'a_revoir' ? 'background:#c0392b; color:#fff;' : ''}" onclick="setSuivi('${e.id}', '${a.id}', '${st === 'a_revoir' ? '' : 'a_revoir'}')" title="À revoir">👩‍🏫</button>
-                        <button type="button" class="filter-btn" style="padding:1px 5px; ${st === 'a_refaire' ? 'background:#e67e22; color:#fff;' : ''}" onclick="setSuivi('${e.id}', '${a.id}', '${st === 'a_refaire' ? '' : 'a_refaire'}')" title="À refaire">🔄</button>` : '✅'}
-                    </div>
-                </div>`;
-            }).join('') + `</div>`;
-        }
+        let badgeParc = estEleveCM(e) ? ((e.parcours === 'orange') ? ' 🟠' : ' 🟡') : '';
+        let detailsPlanHtml = isExp ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed #ccc; font-size:12.5px;">` + getListeTrie(e.planHebdo, e.priorites || [], e.suivi || []).map((a, idx) => {
+            let fait = e.valides && e.valides[a.id], st = (e.suivi && e.suivi[a.id]) ? e.suivi[a.id].statut : "";
+            return `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #f1f5f9;">
+                <span style="${fait ? 'text-decoration:line-through; color:#27ae60;' : ''}"><strong>${idx + 1}.</strong> ${escHTML(a.ressource)}</span>
+                <div style="display:flex; gap:3px;">
+                    ${!fait ? `<button type="button" class="filter-btn" style="padding:1px 5px;" onclick="validerDepuisDashboard('${e.id}', '${a.id}')">✅</button>
+                    <button type="button" class="filter-btn" style="padding:1px 5px; ${st === 'a_revoir' ? 'background:#c0392b; color:#fff;' : ''}" onclick="setSuivi('${e.id}', '${a.id}', '${st === 'a_revoir' ? '' : 'a_revoir'}')">👩‍🏫</button>
+                    <button type="button" class="filter-btn" style="padding:1px 5px; ${st === 'a_refaire' ? 'background:#e67e22; color:#fff;' : ''}" onclick="setSuivi('${e.id}', '${a.id}', '${st === 'a_refaire' ? '' : 'a_refaire'}')">🔄</button>` : '✅'}
+                </div>
+            </div>`;
+        }).join('') + `</div>` : '';
 
         html += `<div class="dash-card">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <strong style="font-size:16px; color:#1b4f72; cursor:pointer;" onclick="toggleExpandEleveDash('${e.id}')">${isExp ? '▼' : '▶'} [${escHTML(e.niveau)}] ${escHTML(e.nom)} ${e.fichierJaune ? '📒' : ''}</strong>
+                <strong style="font-size:16px; color:#1b4f72; cursor:pointer;" onclick="toggleExpandEleveDash('${e.id}')">${isExp ? '▼' : '▶'} [${escHTML(e.niveau)}] ${escHTML(e.nom)}${badgeParc} ${e.fichierJaune ? '📒' : ''}</strong>
                 <button type="button" class="filter-btn" onclick="ouvrirEleveDepuisDashboard('${e.id}')">Plan ➔</button>
             </div>
-            <div style="font-size:12.5px; color:#555; margin-top:6px;">
-                Semaine ${(e.semaineIndex || 0) + 1} ${e.dateDebut ? `(${e.dateDebut})` : ''} • 📱 Tablettes : ${nbTab}/${e.maxTablettes ?? 2}
-            </div>
+            <div style="font-size:12.5px; color:#555; margin-top:6px;">Semaine ${(e.semaineIndex || 0) + 1} ${e.dateDebut ? `(${e.dateDebut})` : ''} • 📱 Tablettes : ${nbTab}/${e.maxTablettes ?? 2}</div>
             <div class="dash-progress-bar"><div class="dash-progress-fill" style="width:${pct}%;"></div></div>
-            <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:600;">
-                <span>${nbValides} / ${total} validés</span>
-                <span style="color:#27ae60;">${pct}%</span>
-            </div>
+            <div style="display:flex; justify-content:space-between; font-size:13px; font-weight:600;"><span>${nbValides} / ${total} validés</span><span style="color:#27ae60;">${pct}%</span></div>
             ${detailsPlanHtml}
         </div>`;
     });
-    html += `</div>`;
-    cont.innerHTML = html;
+    cont.innerHTML = html + `</div>`;
 }
 
 // ==========================================
-// 7. ONGLET 4 : BASE DE DONNÉES, SAISIE MULTIPLE & MODALES
+// 7. ONGLET 4 : BASE DE DONNÉES (+ AUTO-REMPLISSAGE PAGE ORANGE +1 EN CM)
 // ==========================================
+function estCMSelectionneFormSimple() {
+    let nivs = getNiveauxCochesFormulaire('.cb-niveau-form');
+    return nivs.includes('CM1') || nivs.includes('CM2');
+}
+
+function estCMSelectionneFormMulti() {
+    let nivs = getNiveauxCochesFormulaire('.cb-niveau-multi');
+    return nivs.includes('CM1') || nivs.includes('CM2');
+}
+
+function autoRemplirPageOrangeSimple(val) {
+    let inpOrange = document.getElementById('inputPageOrange');
+    if (!inpOrange) return;
+    if (estCMSelectionneFormSimple()) {
+        inpOrange.value = calculerPagePlusUn(val);
+    }
+}
+
+function verifierNiveauxCMFormSimple() {
+    let inpManuel = document.getElementById('inputPageManuel');
+    let inpOrange = document.getElementById('inputPageOrange');
+    if (!inpManuel || !inpOrange) return;
+    if (estCMSelectionneFormSimple()) {
+        inpOrange.disabled = false;
+        if (inpManuel.value.trim() && !inpOrange.value.trim()) {
+            inpOrange.value = calculerPagePlusUn(inpManuel.value);
+        }
+    } else {
+        inpOrange.value = "";
+        inpOrange.disabled = true;
+    }
+}
+
+function autoRemplirPageOrangeMultiLigne(inputPageElem) {
+    let tr = inputPageElem.closest('tr');
+    if (!tr) return;
+    let inpOrange = tr.querySelector('.m-orange');
+    if (!inpOrange) return;
+    if (estCMSelectionneFormMulti()) {
+        inpOrange.value = calculerPagePlusUn(inputPageElem.value);
+    }
+}
+
+function verifierNiveauxCMMulti() {
+    let isCM = estCMSelectionneFormMulti();
+    document.querySelectorAll('#tbodySaisieMultiple .ligne-saisie-multi').forEach(tr => {
+        let inpPage = tr.querySelector('.m-page');
+        let inpOrange = tr.querySelector('.m-orange');
+        if (!inpPage || !inpOrange) return;
+        if (isCM) {
+            inpOrange.disabled = false;
+            if (inpPage.value.trim() && !inpOrange.value.trim()) {
+                inpOrange.value = calculerPagePlusUn(inpPage.value);
+            }
+        } else {
+            inpOrange.value = "";
+            inpOrange.disabled = true;
+        }
+    });
+}
+
 function toggleModeSaisieMultiple() {
     modeSaisieMultipleActif = !modeSaisieMultipleActif;
-    let bSimple = document.getElementById('blocSaisieSimpleBase');
-    let bMulti = document.getElementById('blocSaisieMultipleBase');
-    let btn = document.getElementById('btnToggleSaisieMulti');
+    let bSimple = document.getElementById('blocSaisieSimpleBase'), bMulti = document.getElementById('blocSaisieMultipleBase'), btn = document.getElementById('btnToggleSaisieMulti');
     if (modeSaisieMultipleActif) {
         if (bSimple) bSimple.style.display = 'none';
         if (bMulti) bMulti.style.display = 'block';
         if (btn) btn.innerText = "📝 Revenir au formulaire de saisie simple";
         let tbody = document.getElementById('tbodySaisieMultiple');
         if (tbody && tbody.children.length === 0) ajouterLigneSaisieMultiple(4);
+        verifierNiveauxCMMulti();
     } else {
         if (bSimple) bSimple.style.display = 'block';
         if (bMulti) bMulti.style.display = 'none';
@@ -1522,6 +1623,7 @@ function toggleModeSaisieMultiple() {
 function ajouterLigneSaisieMultiple(nbLignes = 1) {
     const tbody = document.getElementById('tbodySaisieMultiple');
     if (!tbody) return;
+    let isCM = estCMSelectionneFormMulti();
     let optsTypes = `<option value="">-- Support --</option>` + Object.keys(imagesParType || {}).map(t => `<option value="${escHTML(t)}">${escHTML(t)}</option>`).join('');
     for (let i = 0; i < nbLignes; i++) {
         let tr = document.createElement('tr');
@@ -1529,9 +1631,10 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
         tr.innerHTML = `
             <td><input type="text" class="m-lecon" placeholder="Ex: N1" style="width:100%;"></td>
             <td><input type="text" class="m-comp" list="listeCompetencesConnues" placeholder="Compétence..." style="width:100%;"></td>
-            <td><input type="text" class="m-res" placeholder="Nom de l'exercice / atelier..." style="width:100%;"></td>
+            <td><input type="text" class="m-res" placeholder="Ex: Ex 1" style="width:100%;"></td>
             <td><select class="m-type" style="width:100%;">${optsTypes}</select></td>
-            <td><input type="text" class="m-page" placeholder="p. 12 ex 1" style="width:100%;"></td>
+            <td><input type="text" class="m-page" placeholder="p9" oninput="autoRemplirPageOrangeMultiLigne(this)" style="width:100%;"></td>
+            <td><input type="text" class="m-orange" placeholder="p10" ${isCM ? '' : 'disabled'} style="width:100%;"></td>
             <td><input type="text" class="m-jaune" placeholder="Fichier p. 8" style="width:100%;"></td>
             <td>
                 <select class="m-diff" style="width:100%;">
@@ -1551,14 +1654,12 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
 function enregistrerSaisieMultiple() {
     let nivArr = getNiveauxCochesFormulaire('.cb-niveau-multi');
     let niveauStr = nivArr.length > 0 ? nivArr.join(', ') : 'CP';
+    let isCM = nivArr.includes('CM1') || nivArr.includes('CM2');
     let matiere = document.getElementById('multiMatiere').value.trim();
     let sequence = document.getElementById('multiSequence').value.trim();
     let periode = document.getElementById('multiPeriode').value;
 
-    if (!matiere || !sequence) {
-        showToast("Veuillez renseigner la Matière et la Séquence communes en haut.", "error");
-        return;
-    }
+    if (!matiere || !sequence) { showToast("Veuillez renseigner la Matière et la Séquence communes en haut.", "error"); return; }
 
     let lignes = document.querySelectorAll('#tbodySaisieMultiple .ligne-saisie-multi');
     let nbAjoutes = 0;
@@ -1569,6 +1670,7 @@ function enregistrerSaisieMultiple() {
         let competence = tr.querySelector('.m-comp').value.trim();
         let typeRes = tr.querySelector('.m-type').value;
         let pageManuel = tr.querySelector('.m-page').value.trim();
+        let pageOrange = isCM ? (tr.querySelector('.m-orange').value.trim()) : "";
         let varianteJaune = tr.querySelector('.m-jaune').value.trim();
         let difficulte = parseInt(tr.querySelector('.m-diff').value) || 0;
         let estEval = tr.querySelector('.m-eval').checked;
@@ -1577,20 +1679,15 @@ function enregistrerSaisieMultiple() {
 
         baseDonnees.push({
             id: newId, matiere, sequence, lecon, competence, ressource, typeRes,
-            pageManuel, varianteJaune, periode, difficulte, niveau: niveauStr,
+            pageManuel, pageOrange, varianteJaune, periode, difficulte, niveau: niveauStr,
             visuel: couleur, imageSpecifique: "", estEvaluation: estEval
         });
         if (periode) programmations[newId] = periode;
         nbAjoutes++;
     });
 
-    if (nbAjoutes === 0) {
-        showToast("Remplissez au moins un nom d'exercice dans le tableau.", "error");
-        return;
-    }
-
-    sauvegarderProgrammations();
-    postEditGlobal();
+    if (nbAjoutes === 0) { showToast("Remplissez au moins un nom d'exercice dans le tableau.", "error"); return; }
+    sauvegarderProgrammations(); postEditGlobal();
     document.getElementById('tbodySaisieMultiple').innerHTML = '';
     ajouterLigneSaisieMultiple(4);
     showToast(`✅ ${nbAjoutes} exercice(s) ajouté(s) d'un coup dans "${sequence}" !`, "success");
@@ -1599,28 +1696,17 @@ function enregistrerSaisieMultiple() {
 function ouvrirModalGestionMatieres() { afficherListeMatieresModal(); ouvrirModal('modalMatieres'); }
 function afficherListeMatieresModal() {
     let mats = [...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
-    let cont = document.getElementById('listeMatieresModalContainer');
-    if (!cont) return;
-    cont.innerHTML = mats.map(m => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
-        <input type="text" class="input-rename-mat" data-old="${escHTML(m)}" value="${escHTML(m)}" style="flex:1;">
-        <button type="button" class="btn-remove" style="padding:4px 8px;" onclick="supprimerMatiereModal('${escJS(m)}')">🗑️</button>
-    </div>`).join('');
+    let cont = document.getElementById('listeMatieresModalContainer'); if (!cont) return;
+    cont.innerHTML = mats.map(m => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;"><input type="text" class="input-rename-mat" data-old="${escHTML(m)}" value="${escHTML(m)}" style="flex:1;"><button type="button" class="btn-remove" style="padding:4px 8px;" onclick="supprimerMatiereModal('${escJS(m)}')">🗑️</button></div>`).join('');
 }
 function sauvegarderToutesMatieres() {
     document.querySelectorAll('.input-rename-mat').forEach(inp => {
         let oldV = inp.getAttribute('data-old'), newV = inp.value.trim();
-        if (oldV && newV && oldV !== newV) {
-            baseDonnees.forEach(b => { if ((b.matiere || "").trim() === oldV) b.matiere = newV; });
-        }
+        if (oldV && newV && oldV !== newV) baseDonnees.forEach(b => { if ((b.matiere || "").trim() === oldV) b.matiere = newV; });
     });
     postEditGlobal(); fermerModal('modalMatieres'); showToast("Matières mises à jour !", "success");
 }
-function supprimerMatiereModal(m) {
-    if (confirm(`Supprimer toutes les activités de la matière "${m}" ?`)) {
-        baseDonnees = baseDonnees.filter(b => (b.matiere || "").trim() !== m);
-        postEditGlobal(); afficherListeMatieresModal();
-    }
-}
+function supprimerMatiereModal(m) { if (confirm(`Supprimer toutes les activités de la matière "${m}" ?`)) { baseDonnees = baseDonnees.filter(b => (b.matiere || "").trim() !== m); postEditGlobal(); afficherListeMatieresModal(); } }
 
 function ouvrirModalGestionSequences() {
     let sel = document.getElementById('filtreMatiereModalSeq');
@@ -1631,28 +1717,17 @@ function ouvrirModalGestionSequences() {
 function afficherListeSequencesModal() {
     let matFiltre = document.getElementById('filtreMatiereModalSeq') ? document.getElementById('filtreMatiereModalSeq').value : 'Toutes';
     let seqs = [...new Set(baseDonnees.filter(b => matFiltre === 'Toutes' || (b.matiere || "").trim() === matFiltre).map(b => (b.sequence || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
-    let cont = document.getElementById('listeSequencesModalContainer');
-    if (!cont) return;
-    cont.innerHTML = seqs.map(s => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
-        <input type="text" class="input-rename-seq" data-old="${escHTML(s)}" value="${escHTML(s)}" style="flex:1;">
-        <button type="button" class="btn-remove" style="padding:4px 8px;" onclick="supprimerSequenceModal('${escJS(s)}')">🗑️</button>
-    </div>`).join('');
+    let cont = document.getElementById('listeSequencesModalContainer'); if (!cont) return;
+    cont.innerHTML = seqs.map(s => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;"><input type="text" class="input-rename-seq" data-old="${escHTML(s)}" value="${escHTML(s)}" style="flex:1;"><button type="button" class="btn-remove" style="padding:4px 8px;" onclick="supprimerSequenceModal('${escJS(s)}')">🗑️</button></div>`).join('');
 }
 function sauvegarderToutesSequences() {
     document.querySelectorAll('.input-rename-seq').forEach(inp => {
         let oldV = inp.getAttribute('data-old'), newV = inp.value.trim();
-        if (oldV && newV && oldV !== newV) {
-            baseDonnees.forEach(b => { if ((b.sequence || "").trim() === oldV) b.sequence = newV; });
-        }
+        if (oldV && newV && oldV !== newV) baseDonnees.forEach(b => { if ((b.sequence || "").trim() === oldV) b.sequence = newV; });
     });
     postEditGlobal(); fermerModal('modalSequences'); showToast("Séquences mises à jour !", "success");
 }
-function supprimerSequenceModal(s) {
-    if (confirm(`Supprimer toutes les activités de la séquence "${s}" ?`)) {
-        baseDonnees = baseDonnees.filter(b => (b.sequence || "").trim() !== s);
-        postEditGlobal(); afficherListeSequencesModal();
-    }
-}
+function supprimerSequenceModal(s) { if (confirm(`Supprimer toutes les activités de la séquence "${s}" ?`)) { baseDonnees = baseDonnees.filter(b => (b.sequence || "").trim() !== s); postEditGlobal(); afficherListeSequencesModal(); } }
 
 function ouvrirModalGestionCompetences() {
     let sel = document.getElementById('filtreMatiereModalComp');
@@ -1663,26 +1738,20 @@ function ouvrirModalGestionCompetences() {
 function afficherListeCompetencesModal() {
     let matFiltre = document.getElementById('filtreMatiereModalComp') ? document.getElementById('filtreMatiereModalComp').value : 'Toutes';
     let comps = [...new Set(baseDonnees.filter(b => matFiltre === 'Toutes' || (b.matiere || "").trim() === matFiltre).map(b => (b.competence || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
-    let cont = document.getElementById('listeCompetencesModalContainer');
-    if (!cont) return;
-    cont.innerHTML = comps.map(c => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
-        <input type="text" class="input-rename-comp" data-old="${escHTML(c)}" value="${escHTML(c)}" style="flex:1;">
-    </div>`).join('');
+    let cont = document.getElementById('listeCompetencesModalContainer'); if (!cont) return;
+    cont.innerHTML = comps.map(c => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;"><input type="text" class="input-rename-comp" data-old="${escHTML(c)}" value="${escHTML(c)}" style="flex:1;"></div>`).join('');
 }
 function sauvegarderToutesCompetences() {
     document.querySelectorAll('.input-rename-comp').forEach(inp => {
         let oldV = inp.getAttribute('data-old'), newV = inp.value.trim();
-        if (oldV && newV && oldV !== newV) {
-            baseDonnees.forEach(b => { if ((b.competence || "").trim() === oldV) b.competence = newV; });
-        }
+        if (oldV && newV && oldV !== newV) baseDonnees.forEach(b => { if ((b.competence || "").trim() === oldV) b.competence = newV; });
     });
     postEditGlobal(); fermerModal('modalCompetences'); showToast("Compétences mises à jour !", "success");
 }
 
 function ouvrirModalGestionTypes() { afficherListeTypesModal(); ouvrirModal('modalTypes'); }
 function afficherListeTypesModal() {
-    const cont = document.getElementById('listeTypesModalContainer');
-    if (!cont || !imagesParType) return;
+    const cont = document.getElementById('listeTypesModalContainer'); if (!cont || !imagesParType) return;
     cont.innerHTML = Object.keys(imagesParType).map(k => {
         let t = imagesParType[k];
         return `<div class="ligne-type-modal" data-key="${escHTML(k)}" style="display:flex; gap:8px; align-items:center; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #eee; flex-wrap:wrap;">
@@ -1706,54 +1775,25 @@ function sauvegarderTousLesTypes() {
         }
     });
     localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
-    declencherAutoSaveFirebase();
-    majListeTypesSelect(); fermerModal('modalTypes'); afficherBase();
+    declencherAutoSaveFirebase(); majListeTypesSelect(); fermerModal('modalTypes'); afficherBase();
     showToast("Types et logos mis à jour !", "success");
 }
 
 function ajouterOuModifierType() {
-    let nom = document.getElementById('inputNouveauTypeNom').value.trim();
-    if (!nom) { showToast("Indiquez un nom de type.", "error"); return; }
+    let nom = document.getElementById('inputNouveauTypeNom').value.trim(); if (!nom) { showToast("Indiquez un nom de type.", "error"); return; }
     let img = document.getElementById('inputNouveauTypeImg').value.trim();
     let remp = document.getElementById('cbNouveauTypeRempNum') ? document.getElementById('cbNouveauTypeRempNum').checked : false;
-    let isTab = document.getElementById('cbNouveauTypeTablette').checked;
-    let appCoul = document.getElementById('cbNouveauTypeCouleur').checked;
+    let isTab = document.getElementById('cbNouveauTypeTablette').checked, appCoul = document.getElementById('cbNouveauTypeCouleur').checked;
     imagesParType[nom] = { img: img, remplacerNum: remp, appliquerCouleur: appCoul, isTablette: isTab };
     localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
-    declencherAutoSaveFirebase();
-    majListeTypesSelect(); afficherListeTypesModal(); afficherBase();
-    document.getElementById('inputNouveauTypeNom').value = '';
-    document.getElementById('inputNouveauTypeImg').value = '';
+    declencherAutoSaveFirebase(); majListeTypesSelect(); afficherListeTypesModal(); afficherBase();
+    document.getElementById('inputNouveauTypeNom').value = ''; document.getElementById('inputNouveauTypeImg').value = '';
     showToast(`Type "${nom}" enregistré !`, "success");
 }
-
-function supprimerTypeRessource(nom) {
-    if (confirm(`Supprimer le type "${nom}" ?`)) {
-        delete imagesParType[nom];
-        localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
-        majListeTypesSelect(); afficherListeTypesModal();
-    }
-}
-
-function changerCouleurDB(idAct, nouvCouleur) {
-    let a = baseDonnees.find(b => b.id === idAct);
-    if (a) { a.visuel = nouvCouleur; sauvegarderBase(); afficherBase(); }
-}
-
-function changerImageDB(idAct) {
-    let a = baseDonnees.find(b => b.id === idAct);
-    if (!a) return;
-    let url = prompt("URL de l'image spécifique pour cet atelier (ou laisser vide pour retirer) :", a.imageSpecifique || "");
-    if (url !== null) { a.imageSpecifique = url.trim(); sauvegarderBase(); afficherBase(); }
-}
-
-function viderBase() {
-    if (confirm("⚠️ Voulez-vous vraiment vider l'intégralité de la base de données d'ateliers ?")) {
-        baseDonnees = [];
-        postEditGlobal();
-        showToast("Base de données vidée.", "success");
-    }
-}
+function supprimerTypeRessource(nom) { if (confirm(`Supprimer le type "${nom}" ?`)) { delete imagesParType[nom]; localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType)); majListeTypesSelect(); afficherListeTypesModal(); } }
+function changerCouleurDB(idAct, nouvCouleur) { let a = baseDonnees.find(b => b.id === idAct); if (a) { a.visuel = nouvCouleur; sauvegarderBase(); afficherBase(); } }
+function changerImageDB(idAct) { let a = baseDonnees.find(b => b.id === idAct); if (!a) return; let url = prompt("URL de l'image spécifique :", a.imageSpecifique || ""); if (url !== null) { a.imageSpecifique = url.trim(); sauvegarderBase(); afficherBase(); } }
+function viderBase() { if (confirm("⚠️ Vider l'intégralité de la base de données d'ateliers ?")) { baseDonnees = []; postEditGlobal(); showToast("Base de données vidée.", "success"); } }
 
 function enregistrerActiviteBase() {
     let matiere = document.getElementById('inputMatiere').value.trim();
@@ -1763,24 +1803,23 @@ function enregistrerActiviteBase() {
     let ressource = document.getElementById('inputRessource').value.trim();
     let typeRes = document.getElementById('selectTypeRessource').value;
     let pageManuel = document.getElementById('inputPageManuel').value.trim();
+    let nivArr = getNiveauxCochesFormulaire('.cb-niveau-form');
+    let niveauStr = nivArr.length > 0 ? nivArr.join(', ') : 'CP';
+    let isCM = nivArr.includes('CM1') || nivArr.includes('CM2');
+    let pageOrange = isCM && document.getElementById('inputPageOrange') ? document.getElementById('inputPageOrange').value.trim() : "";
     let varianteJaune = document.getElementById('inputVarianteJaune').value.trim();
     let periode = document.getElementById('selectPeriodeForm').value;
     let difficulte = parseInt(document.getElementById('selectDifficulte').value) || 0;
-    let nivArr = getNiveauxCochesFormulaire('.cb-niveau-form');
-    let niveauStr = nivArr.length > 0 ? nivArr.join(', ') : 'CP';
     let couleur = document.getElementById('selectCouleurRapide').value || calculerCouleurAutomatique(matiere, niveauStr, typeRes);
     let imgAct = document.getElementById('inputImageAct').value.trim();
     let estEval = document.getElementById('cbEstEvaluation').checked;
 
-    if (!matiere || !ressource) {
-        showToast("Veuillez remplir au minimum la Matière et le Nom de la ressource.", "error");
-        return;
-    }
+    if (!matiere || !ressource) { showToast("Veuillez remplir au minimum la Matière et le Nom de la ressource.", "error"); return; }
 
     if (idEnCoursEdition) {
         let act = baseDonnees.find(b => b.id === idEnCoursEdition);
         if (act) {
-            Object.assign(act, { matiere, sequence, lecon, competence, ressource, typeRes, pageManuel, varianteJaune, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval });
+            Object.assign(act, { matiere, sequence, lecon, competence, ressource, typeRes, pageManuel, pageOrange, varianteJaune, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval });
             if (periode) programmations[act.id] = periode;
         }
         idEnCoursEdition = null;
@@ -1789,21 +1828,20 @@ function enregistrerActiviteBase() {
         showToast("Activité modifiée !", "success");
     } else {
         let newId = 'act_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
-        baseDonnees.push({ id: newId, matiere, sequence, lecon, competence, ressource, typeRes, pageManuel, varianteJaune, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval });
+        baseDonnees.push({ id: newId, matiere, sequence, lecon, competence, ressource, typeRes, pageManuel, pageOrange, varianteJaune, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval });
         if (periode) programmations[newId] = periode;
         showToast("Nouvelle activité ajoutée !", "success");
     }
-    sauvegarderProgrammations();
-    postEditGlobal();
+    sauvegarderProgrammations(); postEditGlobal();
     document.getElementById('inputRessource').value = '';
     document.getElementById('inputPageManuel').value = '';
+    if (document.getElementById('inputPageOrange')) document.getElementById('inputPageOrange').value = '';
     document.getElementById('inputVarianteJaune').value = '';
 }
 
 function editerActiviteBase(idAct) {
     if (modeSaisieMultipleActif) toggleModeSaisieMultiple();
-    let a = baseDonnees.find(b => b.id === idAct);
-    if (!a) return;
+    let a = baseDonnees.find(b => b.id === idAct); if (!a) return;
     idEnCoursEdition = idAct;
     document.getElementById('inputMatiere').value = a.matiere || '';
     document.getElementById('inputSequence').value = a.sequence || '';
@@ -1812,15 +1850,15 @@ function editerActiviteBase(idAct) {
     document.getElementById('inputRessource').value = a.ressource || '';
     document.getElementById('selectTypeRessource').value = a.typeRes || '';
     document.getElementById('inputPageManuel').value = a.pageManuel || '';
+    if (document.getElementById('inputPageOrange')) document.getElementById('inputPageOrange').value = a.pageOrange || '';
     document.getElementById('inputVarianteJaune').value = a.varianteJaune || '';
     document.getElementById('selectPeriodeForm').value = programmations[a.id] || a.periode || '';
     document.getElementById('selectDifficulte').value = a.difficulte || 0;
     document.getElementById('selectCouleurRapide').value = a.visuel || '';
     document.getElementById('inputImageAct').value = a.imageSpecifique || '';
     document.getElementById('cbEstEvaluation').checked = Boolean(a.estEvaluation);
-    document.querySelectorAll('.cb-niveau-form').forEach(cb => {
-        cb.checked = (a.niveau || "").toUpperCase().includes(cb.value);
-    });
+    document.querySelectorAll('.cb-niveau-form').forEach(cb => { cb.checked = (a.niveau || "").toUpperCase().includes(cb.value); });
+    verifierNiveauxCMFormSimple();
     document.getElementById('titreFormulaireBase').innerText = "✏️ Modification de : " + a.ressource;
     document.getElementById('btnAnnulerEditBase').style.display = 'inline-block';
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1833,29 +1871,16 @@ function annulerEditionBase() {
 }
 
 function supprimerActiviteBase(idAct) {
-    if (confirm("Supprimer cette activité de la base de données ?")) {
-        baseDonnees = baseDonnees.filter(b => b.id !== idAct);
-        postEditGlobal();
-        showToast("Activité supprimée.", "success");
-    }
+    if (confirm("Supprimer cette activité de la base de données ?")) { baseDonnees = baseDonnees.filter(b => b.id !== idAct); postEditGlobal(); showToast("Activité supprimée.", "success"); }
 }
 
 function initNiveaux() {
     const barre = document.getElementById('barreFiltresNiveauxBase');
-    if (barre) {
-        let nivs = ['Tous', 'CP', 'CE1', 'CE2', 'CM1', 'CM2'];
-        barre.innerHTML = nivs.map(n => `<button type="button" class="filter-btn ${filtreCourantDB === n ? 'active' : ''}" onclick="filtrerBaseNiveau('${n}')">${n}</button>`).join('');
-    }
+    if (barre) barre.innerHTML = ['Tous', 'CP', 'CE1', 'CE2', 'CM1', 'CM2'].map(n => `<button type="button" class="filter-btn ${filtreCourantDB === n ? 'active' : ''}" onclick="filtrerBaseNiveau('${n}')">${n}</button>`).join('');
     const selMat = document.getElementById('selectFiltreMatiereBase');
-    if (selMat) {
-        let mats = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))];
-        selMat.innerHTML = mats.map(m => `<option value="${escHTML(m)}" ${filtreCourantMatiere === m ? 'selected' : ''}>Matière : ${escHTML(m)}</option>`).join('');
-    }
+    if (selMat) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}" ${filtreCourantMatiere === m ? 'selected' : ''}>Matière : ${escHTML(m)}</option>`).join('');
     const selType = document.getElementById('selectFiltreTypeBase');
-    if (selType) {
-        let types = ['Tous', ...Object.keys(imagesParType || {})];
-        selType.innerHTML = types.map(t => `<option value="${escHTML(t)}" ${filtreCourantTypeDB === t ? 'selected' : ''}>Support : ${escHTML(t)}</option>`).join('');
-    }
+    if (selType) selType.innerHTML = ['Tous', ...Object.keys(imagesParType || {})].map(t => `<option value="${escHTML(t)}" ${filtreCourantTypeDB === t ? 'selected' : ''}>Support : ${escHTML(t)}</option>`).join('');
 }
 
 function filtrerBaseNiveau(n) { filtreCourantDB = n; initNiveaux(); afficherBase(); }
@@ -1863,34 +1888,30 @@ function filtrerBaseMatiere(m) { filtreCourantMatiere = m; afficherBase(); }
 function filtrerBaseType(t) { filtreCourantTypeDB = t; afficherBase(); }
 
 function afficherBase() {
-    const tbody = document.getElementById('tableBaseDonnees');
-    if (!tbody) return;
+    const tbody = document.getElementById('tableBaseDonnees'); if (!tbody) return;
     let q = (document.getElementById('inputRechercheBase') ? document.getElementById('inputRechercheBase').value : "").toLowerCase().trim();
     let liste = baseDonnees.filter(a => {
         if (!a) return false;
         if (filtreCourantDB !== 'Tous' && !(a.niveau || "").toUpperCase().includes(filtreCourantDB)) return false;
         if (filtreCourantMatiere !== 'Toutes' && (a.matiere || "").trim() !== filtreCourantMatiere) return false;
         if (filtreCourantTypeDB !== 'Tous' && (a.typeRes || "").trim() !== filtreCourantTypeDB) return false;
-        if (q) {
-            let txt = `${a.matiere} ${a.sequence} ${a.lecon} ${a.competence} ${a.ressource} ${a.pageManuel}`.toLowerCase();
-            if (!txt.includes(q)) return false;
-        }
+        if (q && !`${a.matiere} ${a.sequence} ${a.lecon} ${a.competence} ${a.ressource} ${a.pageManuel} ${a.pageOrange || ''}`.toLowerCase().includes(q)) return false;
         return true;
     });
 
-    let cpt = document.getElementById('compteurBaseAffichee');
-    if (cpt) cpt.innerText = liste.length;
-
-    if (liste.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#7f8c8d; padding:20px;">Aucune activité trouvée.</td></tr>';
-        return;
-    }
+    let cpt = document.getElementById('compteurBaseAffichee'); if (cpt) cpt.innerText = liste.length;
+    if (liste.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#7f8c8d; padding:20px;">Aucune activité trouvée.</td></tr>'; return; }
 
     let html = '';
     liste.forEach(a => {
-        let coul = getCouleurMatiereBandeau(a.matiere);
-        let per = programmations[a.id] || a.periode || "-";
-        let detailsLivres = `${a.pageManuel ? `<span style="background:#eaf2f8; color:#1b4f72; padding:1px 5px; border-radius:4px; font-size:11px;">📘 ${escHTML(a.pageManuel)}</span> ` : ''}${a.varianteJaune ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 5px; border-radius:4px; font-size:11px;">📒 ${escHTML(a.varianteJaune)}</span>` : ''}`;
+        let coul = getCouleurMatiereBandeau(a.matiere), per = programmations[a.id] || a.periode || "-";
+        let badgePages = '';
+        if (a.pageManuel && a.pageOrange) {
+            badgePages = `<span style="background:#fef9e7; color:#7d6608; padding:1px 5px; border-radius:4px; font-size:11px; border:1px solid #f1c40f;">🟡 ${escHTML(a.pageManuel)}</span> <span style="background:#fdebd0; color:#9c640c; padding:1px 5px; border-radius:4px; font-size:11px; border:1px solid #f39c12;">🟠 ${escHTML(a.pageOrange)}</span> `;
+        } else if (a.pageManuel) {
+            badgePages = `<span style="background:#eaf2f8; color:#1b4f72; padding:1px 5px; border-radius:4px; font-size:11px;">📘 ${escHTML(a.pageManuel)}</span> `;
+        }
+        let detailsLivres = `${badgePages}${a.varianteJaune ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 5px; border-radius:4px; font-size:11px;">📒 ${escHTML(a.varianteJaune)}</span>` : ''}`;
         let coulVisuel = a.visuel || calculerCouleurAutomatique(a.matiere, a.niveau, a.typeRes);
         html += `<tr>
             <td><strong>${escHTML(a.niveau)}</strong></td>
@@ -1899,12 +1920,12 @@ function afficherBase() {
             <td>${escHTML(a.competence)}</td>
             <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${a.typeRes ? `<small>[${escHTML(a.typeRes)}]</small>` : ''} ${detailsLivres} ${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}</td>
             <td style="text-align:center;">
-                <input type="color" value="${coulVisuel.startsWith('#') ? coulVisuel : '#ffffff'}" onchange="changerCouleurDB('${a.id}', this.value)" title="Couleur étiquette" style="width:28px; height:24px; border:none; cursor:pointer; vertical-align:middle;">
-                <button type="button" class="filter-btn" style="padding:2px 6px;" onclick="changerImageDB('${a.id}')" title="Image spécifique">${a.imageSpecifique ? '🖼️' : '➕🖼️'}</button>
+                <input type="color" value="${coulVisuel.startsWith('#') ? coulVisuel : '#ffffff'}" onchange="changerCouleurDB('${a.id}', this.value)" style="width:28px; height:24px; border:none; cursor:pointer; vertical-align:middle;">
+                <button type="button" class="filter-btn" style="padding:2px 6px;" onclick="changerImageDB('${a.id}')">${a.imageSpecifique ? '🖼️' : '➕🖼️'}</button>
             </td>
             <td>
                 <div style="display:flex; gap:4px; flex-wrap:wrap;">
-                    <button type="button" class="btn-action" style="padding:4px 8px;" onclick="assignerActivite('${a.id}')" title="Assigner aux élèves">📌</button>
+                    <button type="button" class="btn-action" style="padding:4px 8px;" onclick="assignerActivite('${a.id}')">📌</button>
                     <button type="button" class="filter-btn" onclick="editerActiviteBase('${a.id}')">✏️</button>
                     <button type="button" class="btn-remove" style="padding:4px 8px;" onclick="supprimerActiviteBase('${a.id}')">🗑️</button>
                 </div>
@@ -1915,34 +1936,25 @@ function afficherBase() {
 }
 
 // ==========================================
-// 8. ONGLET 5 : PROGRAMMATIONS P1 À P5
+// 8. ONGLETS 5, 6, 7 & 8 : PROG, ÉTIQUETTES, MATRICE & BILANS
 // ==========================================
 function initProgFilters() {
-    const selMat = document.getElementById('selectMatiereProg');
-    if (!selMat) return;
+    const selMat = document.getElementById('selectMatiereProg'); if (!selMat) return;
     let val = selMat.value || 'Toutes';
-    let mats = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))];
-    selMat.innerHTML = mats.map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
+    selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
     selMat.value = val;
 }
-
 function toggleProg(idAct, per) {
     let actuel = programmations[idAct] || "";
-    if (actuel === per) delete programmations[idAct];
-    else programmations[idAct] = per;
-    let act = baseDonnees.find(b => b.id === idAct);
-    if (act) act.periode = programmations[idAct] || "";
-    sauvegarderProgrammations(); sauvegarderBase();
-    afficherProgrammation();
+    if (actuel === per) delete programmations[idAct]; else programmations[idAct] = per;
+    let act = baseDonnees.find(b => b.id === idAct); if (act) act.periode = programmations[idAct] || "";
+    sauvegarderProgrammations(); sauvegarderBase(); afficherProgrammation();
 }
-
 function afficherProgrammation() {
-    const cont = document.getElementById('contenuProgrammation');
-    if (!cont) return;
+    const cont = document.getElementById('contenuProgrammation'); if (!cont) return;
     let niv = document.getElementById('selectNiveauProg') ? document.getElementById('selectNiveauProg').value : 'Tous';
     let mat = document.getElementById('selectMatiereProg') ? document.getElementById('selectMatiereProg').value : 'Toutes';
     let perFiltre = document.getElementById('selectPeriodeProg') ? document.getElementById('selectPeriodeProg').value : 'Toutes';
-
     let liste = baseDonnees.filter(a => {
         if (!a) return false;
         if (niv !== 'Tous' && !(a.niveau || "").toUpperCase().includes(niv)) return false;
@@ -1952,82 +1964,36 @@ function afficherProgrammation() {
         if (perFiltre !== 'Toutes' && perFiltre !== 'Non_affecte' && p !== perFiltre) return false;
         return true;
     });
-
-    if (liste.length === 0) {
-        cont.innerHTML = `<div class="empty-state"><p>Aucune activité pour ce filtre.</p></div>`;
-        return;
-    }
-
-    let html = `<table class="table-classique"><thead><tr><th style="width:70px;">Niveau</th><th style="width:180px;">Matière / Séquence</th><th>Compétence</th><th>Ressource</th><th style="width:230px; text-align:center;">Périodes (P1 à P5)</th></tr></thead><tbody>`;
-    liste.forEach(a => {
-        let p = programmations[a.id] || a.periode || "";
-        let coul = getCouleurMatiereBandeau(a.matiere);
+    if (liste.length === 0) { cont.innerHTML = `<div class="empty-state"><p>Aucune activité pour ce filtre.</p></div>`; return; }
+    cont.innerHTML = `<table class="table-classique"><thead><tr><th style="width:70px;">Niveau</th><th style="width:180px;">Matière / Séquence</th><th>Compétence</th><th>Ressource</th><th style="width:230px; text-align:center;">Périodes (P1 à P5)</th></tr></thead><tbody>` + liste.map(a => {
+        let p = programmations[a.id] || a.periode || "", coul = getCouleurMatiereBandeau(a.matiere);
         let btns = ['P1', 'P2', 'P3', 'P4', 'P5'].map(per => `<button type="button" class="prog-pill ${p === per ? 'active' : ''}" onclick="toggleProg('${a.id}', '${per}')">${per}</button>`).join('');
-        html += `<tr>
-            <td><strong>${escHTML(a.niveau)}</strong></td>
-            <td><span style="background:${coul.bg}; color:#fff; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold;">${escHTML(a.matiere)}</span><br>${escHTML(a.sequence)}</td>
-            <td>${escHTML(a.competence)}</td>
-            <td><strong>${escHTML(a.ressource)}</strong></td>
-            <td style="text-align:center;">${btns}</td>
-        </tr>`;
-    });
-    html += `</tbody></table>`;
-    cont.innerHTML = html;
+        return `<tr><td><strong>${escHTML(a.niveau)}</strong></td><td><span style="background:${coul.bg}; color:#fff; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold;">${escHTML(a.matiere)}</span><br>${escHTML(a.sequence)}</td><td>${escHTML(a.competence)}</td><td><strong>${escHTML(a.ressource)}</strong></td><td style="text-align:center;">${btns}</td></tr>`;
+    }).join('') + `</tbody></table>`;
 }
 
-// ==========================================
-// 9. ONGLET 6 : STUDIO D'IMPRESSION D'ÉTIQUETTES
-// ==========================================
 function afficherChoixEtiquettes() {
     const selMat = document.getElementById('selectMatiereEtiquettes');
-    if (selMat && selMat.options.length <= 1) {
-        let mats = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))];
-        selMat.innerHTML = mats.map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
-    }
+    if (selMat && selMat.options.length <= 1) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
     const niv = document.getElementById('selectNiveauEtiquettes') ? document.getElementById('selectNiveauEtiquettes').value : 'Tous';
-    const mat = selMat ? selMat.value : 'Toutes';
-    const typeF = document.getElementById('selectTypeEtiquettes') ? document.getElementById('selectTypeEtiquettes').value : 'Tous';
-    const cont = document.getElementById('listeChoixEtiquettes');
-    if (!cont) return;
-
-    let liste = baseDonnees.filter(a => {
-        if (!a) return false;
-        if (niv !== 'Tous' && !(a.niveau || "").toUpperCase().includes(niv)) return false;
-        if (mat !== 'Toutes' && (a.matiere || "").trim() !== mat) return false;
-        if (typeF !== 'Tous' && (a.typeRes || "").trim() !== typeF) return false;
-        return true;
-    });
-
+    const mat = selMat ? selMat.value : 'Toutes', typeF = document.getElementById('selectTypeEtiquettes') ? document.getElementById('selectTypeEtiquettes').value : 'Tous';
+    const cont = document.getElementById('listeChoixEtiquettes'); if (!cont) return;
+    let liste = baseDonnees.filter(a => a && (niv === 'Tous' || (a.niveau || "").toUpperCase().includes(niv)) && (mat === 'Toutes' || (a.matiere || "").trim() === mat) && (typeF === 'Tous' || (a.typeRes || "").trim() === typeF));
     cont.innerHTML = liste.map(a => `<label style="display:inline-block; width:280px; margin:3px 6px; font-size:13px; cursor:pointer;"><input type="checkbox" class="cb-etiq-item" value="${a.id}" checked onchange="genererApercuEtiquettes()"> [${escHTML(a.niveau)}] ${escHTML(a.ressource)}</label>`).join('');
     genererApercuEtiquettes();
 }
-
-function cocherToutesEtiquettes(etat) {
-    document.querySelectorAll('.cb-etiq-item').forEach(cb => cb.checked = etat);
-    genererApercuEtiquettes();
-}
-
+function cocherToutesEtiquettes(etat) { document.querySelectorAll('.cb-etiq-item').forEach(cb => cb.checked = etat); genererApercuEtiquettes(); }
 function genererApercuEtiquettes() {
-    const zone = document.getElementById('printEtiquettesContainer');
-    if (!zone) return;
-    let w = parseInt(document.getElementById('etiqLargeurInput') ? document.getElementById('etiqLargeurInput').value : 220) || 220;
-    let h = parseInt(document.getElementById('etiqHauteurInput') ? document.getElementById('etiqHauteurInput').value : 95) || 95;
-    let fs = parseInt(document.getElementById('etiqFontInput') ? document.getElementById('etiqFontInput').value : 14) || 14;
+    const zone = document.getElementById('printEtiquettesContainer'); if (!zone) return;
+    let w = parseInt(document.getElementById('etiqLargeurInput')?.value) || 220, h = parseInt(document.getElementById('etiqHauteurInput')?.value) || 95, fs = parseInt(document.getElementById('etiqFontInput')?.value) || 14;
     let showComp = document.getElementById('cbEtiqShowComp') ? document.getElementById('cbEtiqShowComp').checked : true;
     let showImg = document.getElementById('cbEtiqShowImg') ? document.getElementById('cbEtiqShowImg').checked : true;
-
-    let ids = [];
-    document.querySelectorAll('.cb-etiq-item:checked').forEach(cb => ids.push(cb.value));
-    let html = '';
-    ids.forEach(id => {
-        let a = baseDonnees.find(b => b.id === id);
-        if (!a) return;
-        let coul = getCouleurMatiereBandeau(a.matiere);
-        let bgEtiq = a.visuel || calculerCouleurAutomatique(a.matiere, a.niveau, a.typeRes);
-        let typeCfg = imagesParType[a.typeRes] || null;
-        let imgUrl = a.imageSpecifique || (typeCfg && typeCfg.img ? typeCfg.img : "");
-
-        html += `<div class="etiquette-item" style="width:${w}px; min-height:${h}px; background:${bgEtiq}; border-color:${coul.bg}; font-size:${fs}px;">
+    let ids = []; document.querySelectorAll('.cb-etiq-item:checked').forEach(cb => ids.push(cb.value));
+    zone.innerHTML = ids.map(id => {
+        let a = baseDonnees.find(b => b.id === id); if (!a) return '';
+        let coul = getCouleurMatiereBandeau(a.matiere), bgEtiq = a.visuel || calculerCouleurAutomatique(a.matiere, a.niveau, a.typeRes);
+        let typeCfg = imagesParType[a.typeRes] || null, imgUrl = a.imageSpecifique || (typeCfg && typeCfg.img ? typeCfg.img : "");
+        return `<div class="etiquette-item" style="width:${w}px; min-height:${h}px; background:${bgEtiq}; border-color:${coul.bg}; font-size:${fs}px;">
             <div style="background:${coul.bg}; color:${coul.text}; font-size:${Math.max(10, fs - 3)}px; font-weight:bold; padding:2px 6px; border-radius:4px; margin-bottom:5px;">${escHTML(a.matiere)} • ${escHTML(a.niveau)}</div>
             ${showImg && imgUrl ? `<div style="margin:4px 0;"><img src="${escHTML(formaterLienImage(imgUrl))}" style="max-height:38px; object-fit:contain;"></div>` : ''}
             <div style="font-weight:bold; font-size:${fs + 1}px; margin-bottom:3px;">${escHTML(a.ressource)}</div>
@@ -2035,170 +2001,84 @@ function genererApercuEtiquettes() {
             ${showComp && a.competence ? `<div style="font-size:${Math.max(9, fs - 3)}px; color:#555; margin-top:3px; font-style:italic;">${escHTML(a.competence)}</div>` : ''}
             <div style="margin-top:4px;">${formaterEtoiles(a.difficulte)}</div>
         </div>`;
-    });
-    zone.innerHTML = html;
+    }).join('');
 }
+function lancerImpressionEtiquettes() { genererApercuEtiquettes(); window.print(); }
 
-function lancerImpressionEtiquettes() {
-    genererApercuEtiquettes();
-    window.print();
-}
-
-// ==========================================
-// 10. ONGLETS 7 & 8 : MATRICE (+ FILTRE PÉRIODE) & BILANS
-// ==========================================
 function genererMatriceCompetences() {
     const selMat = document.getElementById('selectMatiereMatrice');
-    if (selMat && selMat.options.length <= 1) {
-        let mats = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))];
-        selMat.innerHTML = mats.map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
-    }
-    const niv = document.getElementById('selectNiveauMatrice') ? document.getElementById('selectNiveauMatrice').value : 'CP';
-    const per = document.getElementById('selectPeriodeMatrice') ? document.getElementById('selectPeriodeMatrice').value : 'Toutes';
-    const mat = selMat ? selMat.value : 'Toutes';
+    if (selMat && selMat.options.length <= 1) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
+    const niv = document.getElementById('selectNiveauMatrice')?.value || 'CP', per = document.getElementById('selectPeriodeMatrice')?.value || 'Toutes', mat = selMat ? selMat.value : 'Toutes';
     const evalOnly = document.getElementById('cbEvalOnlyMatrice') ? document.getElementById('cbEvalOnlyMatrice').checked : false;
-    const cont = document.getElementById('conteneurMatrice');
-    if (!cont) return;
+    const cont = document.getElementById('conteneurMatrice'); if (!cont) return;
 
     let elevesNiv = getElevesTries().filter(e => (e.niveau || 'CP').toUpperCase() === niv);
     let acts = baseDonnees.filter(a => {
-        if (!a) return false;
-        if (!(a.niveau || "").toUpperCase().includes(niv)) return false;
+        if (!a || !(a.niveau || "").toUpperCase().includes(niv)) return false;
         if (mat !== 'Toutes' && (a.matiere || "").trim() !== mat) return false;
-        let cleCompProg = `${a.matiere}||${a.sequence}||${a.competence}`;
-        let p = programmations[a.id] || programmations[cleCompProg] || a.periode || "";
+        let p = programmations[a.id] || a.periode || "";
         if (per === 'Non_affecte' && p !== "") return false;
         if (per !== 'Toutes' && per !== 'Non_affecte' && !p.includes(per)) return false;
         if (evalOnly && !a.estEvaluation) return false;
         return true;
     });
+    if (elevesNiv.length === 0 || acts.length === 0) { cont.innerHTML = `<div class="empty-state"><p>Aucun élève ou activité pour ces critères.</p></div>`; return; }
 
-    if (elevesNiv.length === 0 || acts.length === 0) {
-        cont.innerHTML = `<div class="empty-state"><p>Aucun élève ou activité trouvé pour ces critères (${escHTML(niv)}${per !== 'Toutes' ? ' • ' + escHTML(per) : ''}).</p></div>`;
-        return;
-    }
-
-    let html = `<table class="table-classique"><thead><tr><th>Matière / Période / Compétence / Ressource</th>`;
-    elevesNiv.forEach(e => { html += `<th style="text-align:center;">${escHTML(e.nom)}</th>`; });
-    html += `</tr></thead><tbody>`;
-
+    let html = `<table class="table-classique"><thead><tr><th>Matière / Période / Compétence / Ressource</th>` + elevesNiv.map(e => `<th style="text-align:center;">${escHTML(e.nom)}</th>`).join('') + `</tr></thead><tbody>`;
     acts.forEach(a => {
-        let coul = getCouleurMatiereBandeau(a.matiere);
-        let p = programmations[a.id] || a.periode || "";
+        let coul = getCouleurMatiereBandeau(a.matiere), p = programmations[a.id] || a.periode || "";
         let badgePer = p ? `<span class="filter-btn" style="padding:1px 5px; font-size:10.5px; margin-left:4px;">${escHTML(p)}</span>` : '';
-        html += `<tr><td><span style="background:${coul.bg}; color:#fff; padding:1px 6px; border-radius:4px; font-size:11px;">${escHTML(a.matiere)}</span>${badgePer} <strong>${escHTML(a.ressource)}</strong> ${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}<br><small>${escHTML(a.sequence)} — ${escHTML(a.competence)}</small></td>`;
-        elevesNiv.forEach(e => {
-            let valide = e.historique && e.historique.some(h => h.idActivite === a.id);
-            let enCours = e.planHebdo && e.planHebdo.includes(a.id);
-            html += `<td style="text-align:center; font-size:16px;">${valide ? '✅' : (enCours ? '⏳' : '—')}</td>`;
-        });
-        html += `</tr>`;
+        html += `<tr><td><span style="background:${coul.bg}; color:#fff; padding:1px 6px; border-radius:4px; font-size:11px;">${escHTML(a.matiere)}</span>${badgePer} <strong>${escHTML(a.ressource)}</strong> ${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}<br><small>${escHTML(a.sequence)} — ${escHTML(a.competence)}</small></td>` + elevesNiv.map(e => {
+            let valide = e.historique && e.historique.some(h => h.idActivite === a.id), enCours = e.planHebdo && e.planHebdo.includes(a.id);
+            return `<td style="text-align:center; font-size:16px;">${valide ? '✅' : (enCours ? '⏳' : '—')}</td>`;
+        }).join('') + `</tr>`;
     });
-    html += `</tbody></table>`;
-    cont.innerHTML = html;
+    cont.innerHTML = html + `</tbody></table>`;
 }
 
 function changerBilanEval(idEl, cleComp, valeur) {
     let e = eleves[idEl]; if (!e) return;
     if (!e.bilanEvaluations) e.bilanEvaluations = {};
-    e.bilanEvaluations[cleComp] = valeur;
-    sauvegarderEleves();
-    showToast("Niveau d'acquisition enregistré !", "success");
+    e.bilanEvaluations[cleComp] = valeur; sauvegarderEleves(); showToast("Niveau d'acquisition enregistré !", "success");
 }
-
 function genererBilanEleve() {
-    const sel = document.getElementById('selectEleveBilan');
-    const cont = document.getElementById('conteneurBilanEleve');
-    if (!sel || !cont) return;
+    const sel = document.getElementById('selectEleveBilan'), cont = document.getElementById('conteneurBilanEleve'); if (!sel || !cont) return;
     let idEl = sel.value || idEleveCourant;
-    if (!idEl || !eleves[idEl]) {
-        cont.innerHTML = `<div class="empty-state"><p>Sélectionnez un élève pour afficher et éditer son bilan de compétences.</p></div>`;
-        return;
-    }
-    sel.value = idEl;
-    let e = eleves[idEl];
-    if (!e.bilanEvaluations) e.bilanEvaluations = {};
+    if (!idEl || !eleves[idEl]) { cont.innerHTML = `<div class="empty-state"><p>Sélectionnez un élève pour afficher son bilan.</p></div>`; return; }
+    sel.value = idEl; let e = eleves[idEl]; if (!e.bilanEvaluations) e.bilanEvaluations = {};
     let hist = e.historique || [];
-    if (hist.length === 0) {
-        cont.innerHTML = `<div class="empty-state"><p>Aucune activité validée dans l'historique de ${escHTML(e.nom)} pour le moment.</p></div>`;
-        return;
-    }
+    if (hist.length === 0) { cont.innerHTML = `<div class="empty-state"><p>Aucune activité validée pour ${escHTML(e.nom)}.</p></div>`; return; }
 
     let parMat = {};
-    hist.forEach(h => {
-        let a = baseDonnees.find(b => b.id === h.idActivite);
-        if (!a) return;
-        let m = a.matiere || "Autres";
-        if (!parMat[m]) parMat[m] = [];
-        parMat[m].push({ act: a, date: h.date });
-    });
-
+    hist.forEach(h => { let a = baseDonnees.find(b => b.id === h.idActivite); if (!a) return; let m = a.matiere || "Autres"; if (!parMat[m]) parMat[m] = []; parMat[m].push({ act: a, date: h.date }); });
     let html = `<div class="card-panel"><h3>📋 Bilan des acquisitions de ${escHTML(e.nom)} (${escHTML(e.niveau)}) — ${hist.length} activités validées</h3>`;
     Object.keys(parMat).forEach(m => {
         let coul = getCouleurMatiereBandeau(m);
-        html += `<div class="bandeau-matiere-print" style="background:${coul.bg}; color:${coul.text}; margin-top:15px;">${escHTML(m.toUpperCase())}</div>
-        <table class="table-classique"><thead><tr><th style="width:90px;">Date</th><th style="width:160px;">Séquence</th><th>Compétence travaillée</th><th>Atelier validé</th><th style="width:170px;">Maîtrise (LSU)</th></tr></thead><tbody>`;
-        parMat[m].forEach(it => {
-            let cleComp = `${it.act.matiere}||${it.act.competence || it.act.ressource}`;
-            let nivMaitrise = e.bilanEvaluations[cleComp] || "Atteint";
-            html += `<tr>
-                <td>${escHTML(it.date)}</td>
-                <td>${escHTML(it.act.sequence)}</td>
-                <td><strong>${escHTML(it.act.competence)}</strong></td>
-                <td>${escHTML(it.act.ressource)} ${it.act.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : ''}</td>
-                <td>
-                    <select onchange="changerBilanEval('${e.id}', '${escJS(cleComp)}', this.value)" style="width:100%; font-weight:bold;">
-                        <option value="Dépassé" ${nivMaitrise === 'Dépassé' ? 'selected' : ''}>✨ Dépassé</option>
-                        <option value="Atteint" ${nivMaitrise === 'Atteint' ? 'selected' : ''}>✅ Atteint</option>
-                        <option value="Partiellement atteint" ${nivMaitrise === 'Partiellement atteint' ? 'selected' : ''}>🟠 Partiellement atteint</option>
-                        <option value="Non atteint" ${nivMaitrise === 'Non atteint' ? 'selected' : ''}>🔴 Non atteint</option>
-                    </select>
-                </td>
-            </tr>`;
-        });
-        html += `</tbody></table>`;
+        html += `<div class="bandeau-matiere-print" style="background:${coul.bg}; color:${coul.text}; margin-top:15px;">${escHTML(m.toUpperCase())}</div><table class="table-classique"><thead><tr><th style="width:90px;">Date</th><th style="width:160px;">Séquence</th><th>Compétence</th><th>Atelier validé</th><th style="width:170px;">Maîtrise (LSU)</th></tr></thead><tbody>` + parMat[m].map(it => {
+            let cleComp = `${it.act.matiere}||${it.act.competence || it.act.ressource}`, nivMaitrise = e.bilanEvaluations[cleComp] || "Atteint";
+            return `<tr><td>${escHTML(it.date)}</td><td>${escHTML(it.act.sequence)}</td><td><strong>${escHTML(it.act.competence)}</strong></td><td>${escHTML(it.act.ressource)}</td><td><select onchange="changerBilanEval('${e.id}', '${escJS(cleComp)}', this.value)" style="width:100%; font-weight:bold;"><option value="Dépassé" ${nivMaitrise === 'Dépassé' ? 'selected' : ''}>✨ Dépassé</option><option value="Atteint" ${nivMaitrise === 'Atteint' ? 'selected' : ''}>✅ Atteint</option><option value="Partiellement atteint" ${nivMaitrise === 'Partiellement atteint' ? 'selected' : ''}>🟠 Partiellement atteint</option><option value="Non atteint" ${nivMaitrise === 'Non atteint' ? 'selected' : ''}>🔴 Non atteint</option></select></td></tr>`;
+        }).join('') + `</tbody></table>`;
     });
-    html += `</div>`;
-    cont.innerHTML = html;
+    cont.innerHTML = html + `</div>`;
 }
-
 function exporterBilanEdulivret() {
-    const sel = document.getElementById('selectEleveBilan');
-    let idEl = sel ? sel.value : idEleveCourant;
+    const sel = document.getElementById('selectEleveBilan'); let idEl = sel ? sel.value : idEleveCourant;
     if (!idEl || !eleves[idEl]) { showToast("Sélectionnez d'abord un élève.", "error"); return; }
-    let e = eleves[idEl];
-    let hist = e.historique || [];
-    let parMat = {};
-    hist.forEach(h => {
-        let a = baseDonnees.find(b => b.id === h.idActivite);
-        if (!a) return;
-        let m = a.matiere || "Autres";
-        if (!parMat[m]) parMat[m] = new Set();
-        let cleComp = `${a.matiere}||${a.competence || a.ressource}`;
-        let niv = (e.bilanEvaluations && e.bilanEvaluations[cleComp]) ? e.bilanEvaluations[cleComp] : "Atteint";
+    let e = eleves[idEl], parMat = {};
+    (e.historique || []).forEach(h => {
+        let a = baseDonnees.find(b => b.id === h.idActivite); if (!a) return;
+        let m = a.matiere || "Autres"; if (!parMat[m]) parMat[m] = new Set();
+        let cleComp = `${a.matiere}||${a.competence || a.ressource}`, niv = (e.bilanEvaluations && e.bilanEvaluations[cleComp]) ? e.bilanEvaluations[cleComp] : "Atteint";
         parMat[m].add(`- ${a.competence || a.ressource} (${a.sequence}) : ${niv}`);
     });
-
     let lignes = [`BILAN DES COMPÉTENCES — ${e.nom.toUpperCase()} (${e.niveau})\n`];
-    Object.keys(parMat).forEach(m => {
-        lignes.push(`=== ${m.toUpperCase()} ===`);
-        parMat[m].forEach(item => lignes.push(item));
-        lignes.push('');
-    });
-
-    let zone = document.getElementById('zoneExportEdulivret');
-    let ta = document.getElementById('textareaExportLSU');
-    if (zone && ta) {
-        zone.style.display = 'block';
-        ta.value = lignes.join('\n');
-        ta.select();
-        navigator.clipboard?.writeText(ta.value).catch(() => {});
-        showToast("📋 Bilan généré et copié dans le presse-papiers !", "success");
-    }
+    Object.keys(parMat).forEach(m => { lignes.push(`=== ${m.toUpperCase()} ===`); parMat[m].forEach(it => lignes.push(it)); lignes.push(''); });
+    let zone = document.getElementById('zoneExportEdulivret'), ta = document.getElementById('textareaExportLSU');
+    if (zone && ta) { zone.style.display = 'block'; ta.value = lignes.join('\n'); ta.select(); navigator.clipboard?.writeText(ta.value).catch(() => {}); showToast("📋 Bilan copié dans le presse-papiers !", "success"); }
 }
 
 // ==========================================
-// 11. NAVIGATION & INITIALISATION GLOBALE
+// 9. NAVIGATION & INITIALISATION GLOBALE
 // ==========================================
 function changerOnglet(idPage, element) {
     document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
@@ -2207,7 +2087,7 @@ function changerOnglet(idPage, element) {
     if (idPage === 'pageSuivi') { majListeEleves(); if (idEleveCourant) chargerEleve(); }
     if (idPage === 'pageImpression') { if (idEleveCourant) idEleveImpressionCourant = idEleveCourant; majListeEleves(); chargerConfigImpressionUI(); changementEleveImpression(); }
     if (idPage === 'pageDashboard') { rafraichirDashboard(); }
-    if (idPage === 'pageBase') { initNiveaux(); majSelectCouleursRapides(); afficherBase(); }
+    if (idPage === 'pageBase') { initNiveaux(); majSelectCouleursRapides(); verifierNiveauxCMFormSimple(); afficherBase(); }
     if (idPage === 'pageProg') { initProgFilters(); afficherProgrammation(); }
     if (idPage === 'pageEtiquettes') { afficherChoixEtiquettes(); }
     if (idPage === 'pageMatrice') { genererMatriceCompetences(); }
@@ -2218,6 +2098,8 @@ function changerOnglet(idPage, element) {
 
 document.addEventListener("DOMContentLoaded", function() {
     appliquerThemeVisuel(localStorage.getItem(KEY_THEME) || 'pastel');
+    majVisibiliteParcoursCreation(document.getElementById('nouvelEleveNiveau')?.value || 'CP');
+    verifierNiveauxCMFormSimple();
     rafraichirToutApresImport();
     tenterConnexionAutoFirebase();
 });
