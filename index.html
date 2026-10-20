@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GestionClasse - Plans de Travail & Suivi</title>
-    <link rel="stylesheet" href="style.css?v=20261027">
+    <link rel="stylesheet" href="style.css?v=20261028">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
 </head>
@@ -142,7 +142,7 @@
                                     <tr>
                                         <th style="width:65px;">Niv./Pér.</th>
                                         <th style="width:150px;">Séquence / Leçon</th>
-                                        <th>Compétence</th>
+                                        <th>Compétence(s)</th>
                                         <th>Ressource & Support</th>
                                         <th style="width:75px; text-align:center;">N° Atelier</th>
                                         <th style="width:105px;">Jour imposé</th>
@@ -172,7 +172,7 @@
                                 <th style="width:40px; text-align:center;">Prio</th>
                                 <th style="width:48px; text-align:center;">N°</th>
                                 <th style="width:160px;">Matière / Séquence</th>
-                                <th>Compétence</th>
+                                <th>Compétence(s)</th>
                                 <th>Ressource & Suivi</th>
                                 <th style="width:85px; text-align:center;">N° Atelier</th>
                                 <th style="width:110px;">Jour imposé</th>
@@ -189,7 +189,7 @@
                             <thead>
                                 <tr>
                                     <th style="width:170px;">Matière / Séquence</th>
-                                    <th>Compétence</th>
+                                    <th>Compétence(s)</th>
                                     <th>Ressource</th>
                                     <th style="width:180px;">Actions</th>
                                 </tr>
@@ -209,7 +209,7 @@
                                             <th style="width:85px;">Date</th>
                                             <th style="width:55px;">Niv.</th>
                                             <th>Matière / Séquence</th>
-                                            <th>Compétence</th>
+                                            <th>Compétence(s)</th>
                                             <th>Ressource</th>
                                             <th style="width:50px;">Rest.</th>
                                         </tr>
@@ -226,7 +226,7 @@
                                         <tr>
                                             <th style="width:55px;">Niv.</th>
                                             <th>Matière / Séquence</th>
-                                            <th>Compétence</th>
+                                            <th>Compétence(s)</th>
                                             <th>Ressource</th>
                                             <th style="width:50px;">Rest.</th>
                                         </tr>
@@ -351,30 +351,33 @@
                     <h2 id="titreFormulaireBase" style="font-size:16px; margin-bottom:12px; color:#1b4f72; border:none; padding:0;">➕ Ajouter ou modifier une activité</h2>
                     <div class="form-grid-base">
                         <div>
-                            <label>Matière :</label>
+                            <label>Matière * :</label>
                             <input type="text" id="inputMatiere" list="listeMatieresConnues" placeholder="Ex: 🔤Français - Grammaire">
                             <datalist id="listeMatieresConnues"></datalist>
                         </div>
                         <div>
-                            <label>Séquence / Sous-matière :</label>
-                            <input type="text" id="inputSequence" list="listeSequencesConnues" placeholder="Ex: Numération, Grammaire...">
+                            <label>Séquence / Sous-matière * :</label>
+                            <input type="text" id="inputSequence" list="listeSequencesConnues" placeholder="Ex: La phrase et la ponctuation">
                             <datalist id="listeSequencesConnues"></datalist>
                         </div>
                         <div>
                             <label>Leçon (optionnel) :</label>
                             <input type="text" id="inputLecon" placeholder="Ex: N1, G2...">
                         </div>
-                        <div>
-                            <label>Compétence :</label>
-                            <input type="text" id="inputCompetence" list="listeCompetencesConnues" placeholder="Ex: Dénombrer jusqu'à 100">
+                        <div style="grid-column: span 2;">
+                            <label>Compétence(s) * <small style="font-weight:normal; color:#666;">(Pour une 🎯 Évaluation multi-compétences, séparez-les par <strong>;</strong> ou cliquez sur ➕)</small> :</label>
+                            <div style="display:flex; gap:6px;">
+                                <input type="text" id="inputCompetence" list="listeCompetencesConnues" placeholder="Ex: Repérer le verbe ; Repérer le sujet" style="flex:1;">
+                                <button type="button" class="filter-btn" onclick="ajouterCompetenceSupplementaireSimple()" title="Ajouter une autre compétence existante à la suite">➕ Comp.</button>
+                            </div>
                             <datalist id="listeCompetencesConnues"></datalist>
                         </div>
                         <div>
-                            <label>Nom de la ressource / Exercice :</label>
+                            <label>Nom de la ressource / Exercice * :</label>
                             <input type="text" id="inputRessource" placeholder="Ex: Ex 1 ou Cartes N1">
                         </div>
                         <div>
-                            <label>Type de support :</label>
+                            <label>Type de matériel (Support) * :</label>
                             <select id="selectTypeRessource"></select>
                         </div>
                         <div>
@@ -409,9 +412,10 @@
                             </select>
                         </div>
                         <div>
-                            <label>Difficulté (Étoiles) :</label>
+                            <label>Difficulté (Étoiles) * :</label>
                             <select id="selectDifficulte">
-                                <option value="0">Aucune étoile</option>
+                                <option value="">-- Choisir les étoiles --</option>
+                                <option value="0">0 étoile (Sans étoile)</option>
                                 <option value="1">⭐ (Niveau 1)</option>
                                 <option value="2">⭐⭐ (Niveau 2)</option>
                                 <option value="3">⭐⭐⭐ (Niveau 3)</option>
@@ -436,7 +440,7 @@
                             <label><input type="checkbox" class="cb-niveau-form" value="CM1" onchange="verifierNiveauxCMFormSimple()"> CM1</label>
                             <label><input type="checkbox" class="cb-niveau-form" value="CM2" onchange="verifierNiveauxCMFormSimple()"> CM2</label>
                             <label style="margin-left:15px; background:#fcf3cf; padding:4px 8px; border-radius:4px; border:1px solid #f1c40f; cursor:pointer;">
-                                <input type="checkbox" id="cbEstEvaluation"> 🎯 Est une Évaluation
+                                <input type="checkbox" id="cbEstEvaluation"> 🎯 Est une Évaluation (valide les compétences liées)
                             </label>
                         </div>
                         <div style="display:flex; gap:8px;">
@@ -448,12 +452,14 @@
 
                 <!-- MODE 2 : SAISIE MULTIPLE D'EXERCICES POUR UNE MÊME SÉQUENCE -->
                 <div id="blocSaisieMultipleBase" class="card-panel" style="margin-bottom:20px; display:none; border:2px solid #2980b9; background:#f8fbff;">
-                    <h3 style="color:#1b4f72; margin-bottom:10px;">⚡ Saisie multiple d'exercices pour une même séquence</h3>
-                    <p style="font-size:13px; color:#555; margin-bottom:12px;">Si CM1 ou CM2 est coché, saisir <code>p9</code> dans la colonne Page Manuel/Jaune remplira automatiquement <code>p10</code> dans la colonne Parcours Orange.</p>
+                    <h3 style="color:#1b4f72; margin-bottom:6px;">⚡ Saisie multiple d'exercices pour une même séquence</h3>
+                    <p style="font-size:12.5px; color:#555; margin-bottom:12px;">
+                        💡 <strong>Astuce :</strong> Remplir la <strong>Leçon</strong>, le <strong>Support</strong> ou la <strong>Page (📘/🟡)</strong> sur la 1<sup>re</sup> ligne pré-remplit automatiquement les lignes suivantes (modifiable ligne par ligne). En CM, la page Orange prend automatiquement <code>+1</code>. Pour plusieurs compétences sur une évaluation, séparez-les par <code>;</code>.
+                    </p>
 
                     <div class="form-grid-base" style="margin-bottom:14px; padding-bottom:12px; border-bottom:1px dashed #bdc3c7;">
                         <div>
-                            <label><strong>1. Niveaux communs :</strong></label>
+                            <label><strong>1. Niveaux communs * :</strong></label>
                             <div style="display:flex; gap:8px; padding-top:5px; flex-wrap:wrap;">
                                 <label><input type="checkbox" class="cb-niveau-multi" value="CP" checked onchange="verifierNiveauxCMMulti()"> CP</label>
                                 <label><input type="checkbox" class="cb-niveau-multi" value="CE1" onchange="verifierNiveauxCMMulti()"> CE1</label>
@@ -463,12 +469,12 @@
                             </div>
                         </div>
                         <div>
-                            <label><strong>2. Matière commune :</strong></label>
+                            <label><strong>2. Matière commune * :</strong></label>
                             <input type="text" id="multiMatiere" list="listeMatieresConnues" placeholder="Ex: 🔤Français - Grammaire">
                         </div>
                         <div>
-                            <label><strong>3. Séquence commune :</strong></label>
-                            <input type="text" id="multiSequence" list="listeSequencesConnues" placeholder="Ex: Séquence 1, Grammaire...">
+                            <label><strong>3. Séquence commune * :</strong></label>
+                            <input type="text" id="multiSequence" list="listeSequencesConnues" placeholder="Ex: La phrase et la ponctuation">
                         </div>
                         <div>
                             <label><strong>4. Période commune (optionnel) :</strong></label>
@@ -488,15 +494,15 @@
                             <thead>
                                 <tr>
                                     <th style="width:70px;">Leçon</th>
-                                    <th>Compétence</th>
-                                    <th>Nom de l'exercice / Ressource *</th>
-                                    <th style="width:105px;">Support</th>
-                                    <th style="width:75px;">N° Atel.</th>
+                                    <th>Compétence(s) * <small>(séparer par ; si plusieurs)</small></th>
+                                    <th>Nom de l'exercice *</th>
+                                    <th style="width:115px;">Support *</th>
+                                    <th style="width:70px;">N° Atel.</th>
                                     <th style="width:65px;">Nb Pers.</th>
-                                    <th style="width:95px;">📘/🟡 Page</th>
-                                    <th style="width:95px;">🟠 Page CM</th>
-                                    <th style="width:95px;">📒 Var. Jaune</th>
-                                    <th style="width:70px;">Étoiles</th>
+                                    <th style="width:90px;">📘/🟡 Page</th>
+                                    <th style="width:90px;">🟠 Page CM</th>
+                                    <th style="width:90px;">📒 Var. Jaune</th>
+                                    <th style="width:85px;">Étoiles *</th>
                                     <th style="width:45px; text-align:center;">🎯</th>
                                     <th style="width:38px;"></th>
                                 </tr>
@@ -515,13 +521,45 @@
                 </div>
 
                 <!-- Filtres de la base -->
-                <div class="card-panel" style="margin-bottom:15px;">
+                <div class="card-panel" style="margin-bottom:12px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                         <div id="barreFiltresNiveauxBase" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
                         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
                             <select id="selectFiltreMatiereBase" onchange="filtrerBaseMatiere(this.value)"></select>
+                            <select id="selectFiltreSequenceBase" onchange="filtrerBaseSequence(this.value)"></select>
                             <select id="selectFiltreTypeBase" onchange="filtrerBaseType(this.value)"></select>
                             <input type="text" id="inputRechercheBase" placeholder="🔍 Rechercher..." oninput="afficherBase()">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- BARRE DE MODIFICATION GROUPÉE D'ATELIERS COCHÉS -->
+                <div id="barreActionGroupeeBase" class="card-panel" style="display:none; margin-bottom:15px; background:#fef9e7; border:2px solid #f39c12;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                        <strong style="color:#d35400;">☑️ <span id="nbAteliersCochesBase">0</span> activité(s) sélectionnée(s) — Modifier en lot :</strong>
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                            <select id="bulkSelectType"><option value="">-- Changer Support --</option></select>
+                            <input type="text" id="bulkInputMatiere" list="listeMatieresConnues" placeholder="Changer Matière..." style="width:155px;">
+                            <input type="text" id="bulkInputSequence" list="listeSequencesConnues" placeholder="Changer Séquence..." style="width:155px;">
+                            <select id="bulkSelectPeriode">
+                                <option value="">-- Changer Période --</option>
+                                <option value="VIDER">🚫 Sans période</option>
+                                <option value="P1">Période 1</option>
+                                <option value="P2">Période 2</option>
+                                <option value="P3">Période 3</option>
+                                <option value="P4">Période 4</option>
+                                <option value="P5">Période 5</option>
+                            </select>
+                            <select id="bulkSelectEtoiles">
+                                <option value="">-- Changer Étoiles --</option>
+                                <option value="0">0 étoile</option>
+                                <option value="1">⭐ (1)</option>
+                                <option value="2">⭐⭐ (2)</option>
+                                <option value="3">⭐⭐⭐ (3)</option>
+                            </select>
+                            <input type="text" id="bulkInputPersonnes" placeholder="Nb Pers (👤)..." style="width:105px;">
+                            <button type="button" class="btn-valid" onclick="appliquerModificationGroupeeBase()">✅ Appliquer aux cochés</button>
+                            <button type="button" class="btn-danger" onclick="supprimerSelectionGroupeeBase()" title="Supprimer les activités cochées">🗑️</button>
                         </div>
                     </div>
                 </div>
@@ -530,10 +568,11 @@
                 <table class="table-classique">
                     <thead>
                         <tr>
+                            <th style="width:34px; text-align:center;"><input type="checkbox" id="cbToutCocherBase" onchange="cocherToutBase(this.checked)" title="Tout sélectionner pour modifier en lot"></th>
                             <th style="width:65px;">Niveau</th>
                             <th style="width:60px;">Période</th>
                             <th style="width:160px;">Matière / Séquence</th>
-                            <th>Compétence</th>
+                            <th>Compétence(s)</th>
                             <th>Ressource & Pages</th>
                             <th style="width:90px;">Type</th>
                             <th style="width:65px; text-align:center;">Nb Pers.</th>
@@ -582,10 +621,12 @@
             </div>
         </div>
 
-        <!-- 6. ÉTIQUETTES -->
+        <!-- ========================================== -->
+        <!-- 6. ÉTIQUETTES (PLANCHES 3x8 — 66x33,8mm)   -->
+        <!-- ========================================== -->
         <div id="pageEtiquettes" class="page">
             <div class="panel no-print">
-                <h2 style="color: #8e44ad;">🏷️ 6. Studio d'impression d'Étiquettes</h2>
+                <h2 style="color: #8e44ad;">🏷️ 6. Studio d'impression d'Étiquettes (Format 3x8 — 66 × 33,8 mm)</h2>
                 <div class="card-panel" style="margin-bottom:15px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
                         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
@@ -608,16 +649,28 @@
                         </div>
                         <div style="display:flex; gap:8px;">
                             <button type="button" class="btn-action" onclick="genererApercuEtiquettes()">🔄 Générer l'aperçu</button>
-                            <button type="button" class="btn-valid" onclick="lancerImpressionEtiquettes()">🖨️ Imprimer les étiquettes</button>
+                            <button type="button" class="btn-valid" onclick="lancerImpressionEtiquettes()">🖨️ Imprimer la planche (3x8)</button>
                         </div>
                     </div>
 
-                    <div style="display:flex; gap:16px; align-items:center; flex-wrap:wrap; font-size:13px; padding-top:10px; border-top:1px dashed #ccc;">
-                        <label>Largeur (px) : <input type="number" id="etiqLargeurInput" value="220" min="120" max="450" style="width:65px;" onchange="genererApercuEtiquettes()"></label>
-                        <label>Hauteur min (px) : <input type="number" id="etiqHauteurInput" value="95" min="50" max="300" style="width:65px;" onchange="genererApercuEtiquettes()"></label>
-                        <label>Police (px) : <input type="number" id="etiqFontInput" value="14" min="10" max="26" style="width:55px;" onchange="genererApercuEtiquettes()"></label>
-                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowComp" checked onchange="genererApercuEtiquettes()"> Afficher la compétence</label>
-                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowImg" checked onchange="genererApercuEtiquettes()"> Afficher le code / logo (ex: 🎲🔤1)</label>
+                    <!-- Dimensions en mm et cases à cocher 100% personnalisables -->
+                    <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; font-size:13px; padding-top:10px; border-top:1px dashed #ccc;">
+                        <label>Largeur (mm) : <input type="number" step="0.1" id="etiqLargeurInput" value="66" min="20" max="200" style="width:65px;" onchange="genererApercuEtiquettes()"></label>
+                        <label>Hauteur (mm) : <input type="number" step="0.1" id="etiqHauteurInput" value="33.8" min="15" max="200" style="width:65px;" onchange="genererApercuEtiquettes()"></label>
+                        <label>Police (pt) : <input type="number" step="0.5" id="etiqFontInput" value="10.5" min="6" max="26" style="width:55px;" onchange="genererApercuEtiquettes()"></label>
+                        <label>Colonnes/ligne : <input type="number" id="etiqColsInput" value="3" min="1" max="6" style="width:48px;" onchange="genererApercuEtiquettes()"></label>
+                    </div>
+                    <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; font-size:13px; margin-top:10px; padding-top:8px; border-top:1px dashed #eee;">
+                        <strong>Éléments à afficher :</strong>
+                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowCode" checked onchange="genererApercuEtiquettes()"> 🎲🔤1 Code / Logo</label>
+                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowMatiere" checked onchange="genererApercuEtiquettes()"> 📚 Bandeau Matière</label>
+                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowNiveau" checked onchange="genererApercuEtiquettes()"> 🎓 Niveau</label>
+                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowNom" checked onchange="genererApercuEtiquettes()"> 📝 Nom de l'atelier</label>
+                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowSeq" checked onchange="genererApercuEtiquettes()"> 📑 Séquence & Leçon</label>
+                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowComp" checked onchange="genererApercuEtiquettes()"> 🎯 Compétence</label>
+                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowEtoiles" checked onchange="genererApercuEtiquettes()"> ⭐ Étoiles</label>
+                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowPers" checked onchange="genererApercuEtiquettes()"> 👤 Nb Pers.</label>
+                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowBorder" checked onchange="genererApercuEtiquettes()"> 🔲 Bordure de découpe</label>
                     </div>
                 </div>
                 <div id="listeChoixEtiquettes" style="max-height:210px; overflow-y:auto; margin-bottom:20px; border:1px solid #ddd; border-radius:6px; padding:10px; background:#fff;"></div>
@@ -770,14 +823,37 @@
         </div>
     </div>
 
+    <!-- Modale Séquences enrichie : Filtre par Niveau + Matière, Création de séquence, Suppression sans perte d'activités -->
     <div id="modalSequences" class="modal" style="display:none;">
-        <div class="modal-content" style="max-width:680px;">
-            <h3>⚙️ Gérer et renommer les Séquences</h3>
-            <div style="margin:10px 0;"><label>Filtrer par matière : <select id="filtreMatiereModalSeq" onchange="afficherListeSequencesModal()"></select></label></div>
-            <div id="listeSequencesModalContainer" style="max-height:320px; overflow-y:auto; margin:12px 0; border:1px solid #ddd; padding:10px; border-radius:6px;"></div>
+        <div class="modal-content" style="max-width:760px;">
+            <h3>⚙️ Gérer, filtrer et réassigner les Séquences</h3>
+            <p style="font-size:12px; color:#555; margin-bottom:8px;">
+                💡 Supprimer une séquence ne supprime <strong>aucune activité</strong> : les activités liées passent en <em>« ⚠️ Sans séquence »</em> pour que vous puissiez les réassigner facilement.
+            </p>
+            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; background:#f8f9fa; padding:10px; border-radius:6px;">
+                <label><strong>Niveau :</strong>
+                    <select id="filtreNiveauModalSeq" onchange="afficherListeSequencesModal()">
+                        <option value="Tous">Tous les niveaux</option>
+                        <option value="CP">CP</option>
+                        <option value="CE1">CE1</option>
+                        <option value="CE2">CE2</option>
+                        <option value="CM1">CM1</option>
+                        <option value="CM2">CM2</option>
+                    </select>
+                </label>
+                <label><strong>Matière :</strong>
+                    <select id="filtreMatiereModalSeq" onchange="afficherListeSequencesModal()"></select>
+                </label>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
+                <input type="text" id="inputNouvelleSeqModal" placeholder="➕ Créer une nouvelle séquence..." style="flex:1;">
+                <button type="button" class="btn-action" onclick="creerNouvelleSequenceModal()">➕ Ajouter à la liste</button>
+            </div>
+            <div id="listeSequencesModalContainer" style="max-height:250px; overflow-y:auto; margin:10px 0; border:1px solid #ddd; padding:10px; border-radius:6px;"></div>
+            <div id="blocOrphelinsSeqModal" style="display:none; max-height:180px; overflow-y:auto; margin:10px 0; border:2px dashed #e67e22; background:#fef9e7; padding:10px; border-radius:6px;"></div>
             <div style="display:flex; justify-content:flex-end; gap:10px;">
                 <button type="button" class="btn-remove" onclick="fermerModal('modalSequences')">Fermer</button>
-                <button type="button" class="btn-valid" onclick="sauvegarderToutesSequences()">💾 Enregistrer</button>
+                <button type="button" class="btn-valid" onclick="sauvegarderToutesSequences()">💾 Enregistrer les modifications</button>
             </div>
         </div>
     </div>
@@ -884,6 +960,6 @@
 
     <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" style="display:none; position:fixed; bottom:20px; right:20px; z-index:99; background:#1b4f72; color:#fff; border:none; padding:12px 16px; border-radius:50%; cursor:pointer; font-size:16px; box-shadow:0 3px 8px rgba(0,0,0,0.2);">⬆️</button>
 
-    <script src="script.js?v=20261027"></script>
+    <script src="script.js?v=20261028"></script>
 </body>
 </html>
