@@ -15,11 +15,14 @@ const KEY_PROG = 'mesProgrammations_Finale';
 const KEY_THEME = 'monThemeVisuel_Finale';
 const KEY_FIREBASE_CFG = 'maConfigFirebase_Finale';
 const KEY_PRINT_CFG = 'maConfigImpression_Finale';
+const KEY_SEQ_CUSTOM = 'mesSequencesCustom_Finale';
 
 let dashboardExpanded = new Set();
 let dashboardArchives = JSON.parse(localStorage.getItem(KEY_ARCHIVES_TODO)) || [];
 let afficherArchivesMode = false;
 let programmations = JSON.parse(localStorage.getItem(KEY_PROG)) || {};
+let sequencesCustom = JSON.parse(localStorage.getItem(KEY_SEQ_CUSTOM)) || [];
+let selectionGroupeeBase = new Set();
 
 let printConfig = JSON.parse(localStorage.getItem(KEY_PRINT_CFG)) || {
     titre: "Plan de travail",
@@ -66,7 +69,7 @@ if (!baseDonnees || !Array.isArray(baseDonnees)) baseDonnees = [];
 let eleves = JSON.parse(localStorage.getItem(KEY_ELEVES));
 if (!eleves || typeof eleves !== 'object') eleves = {};
 
-// Correspondance exacte avec les émojis de matières renseignés dans la base :
+// Émojis exacts par matière renseignés dans la base :
 // ✅Français - Orthographe | ✏️Français - Écriture | ➗Mathématiques - Algèbre et Proportionnalité
 // 📏Mathématiques - Mesure | 📚Français - Conjugaison | 🔤Français - Grammaire
 // 🔷Mathématiques - Géométrie | 🤖Mathématiques - Programmation | 🧑‍🎓Français - Lexique / Vocabulaire
@@ -84,7 +87,6 @@ function getEmojiMatiere(matiere, sequence = "") {
     if (matRaw.startsWith("🤖")) return "🤖";
     if (matRaw.startsWith("🧮")) return "🧮";
 
-    // Si la matière commence par n'importe quel autre émoji, on le récupère directement
     let matchEmojiDebut = matRaw.match(/^([^\w\sÀ-ÿ]+)/u);
     if (matchEmojiDebut && matchEmojiDebut[1].trim()) {
         return matchEmojiDebut[1].trim();
@@ -116,6 +118,12 @@ function getCouleurMatiereBandeau(matiere) {
     if (m.includes("anglais") || m.includes("langue") || m.includes("allemand") || m.includes("espagnol") || m.includes("lv")) return { bg: "#e84393", text: "#ffffff", border: "#c2185b" };
     if (m.includes("emc") || m.includes("moral") || m.includes("civique") || m.includes("citoyen")) return { bg: "#8e44ad", text: "#ffffff", border: "#6c3483" };
     return { bg: "#34495e", text: "#ffffff", border: "#2c3e50" };
+}
+
+// Découpe une chaîne de compétences (séparées par ";" ou "|") pour gérer les évaluations multi-compétences
+function extraireListeCompetences(compStr) {
+    if (!compStr) return [];
+    return compStr.toString().split(/[;|]+/).map(s => s.trim()).filter(Boolean);
 }
 
 // ==========================================
@@ -178,13 +186,11 @@ function getInfosActivitePourEleve(act, eleve) {
     };
 }
 
-// Nettoie le numéro d'atelier si l'utilisateur ou l'ancienne base y avait déjà inclus l'émoji du type ou de la matière
 function extraireNumeroAtelierPropre(symboleBrut, emojiType, emojiMat) {
     let s = (symboleBrut || "").trim();
     if (!s) return "";
     if (emojiType && s.startsWith(emojiType)) s = s.slice(emojiType.length).trim();
     if (emojiMat && s.startsWith(emojiMat)) s = s.slice(emojiMat.length).trim();
-    // Nettoyage des émojis de matières connus en préfixe pour éviter tout doublon (ex: "🎲🔤1" -> "1")
     const emojisConnus = ["🎲", "🧩", "📒", "💻", "📱", "🤖", "🧑‍🎓", "✅", "✏️", "➗", "📏", "📚", "🔤", "🔷", "🧮"];
     let modifie = true;
     while (modifie) {
@@ -199,8 +205,7 @@ function extraireNumeroAtelierPropre(symboleBrut, emojiType, emojiMat) {
     return s;
 }
 
-// Construit le code visuel : [Image ou Émoji du type] + [Émoji Matière] + [N° Atelier]
-// Exemple : Jeu (🎲) + Français Grammaire (🔤) + n° 1 => 🎲🔤1 sur fond bleu (#9fc5e8 en CM)
+// Construit le code visuel : [Image ou Émoji du type] + [Émoji Matière] + [N° Atelier] (ex: 🎲🔤1)
 function getRepereAtelierHtml(act, eleve, tailleMaxImg = 28) {
     let infos = getInfosActivitePourEleve(act, eleve);
     let typeKey = "";
@@ -214,7 +219,6 @@ function getRepereAtelierHtml(act, eleve, tailleMaxImg = 28) {
     }
     let typeCfg = typeKey ? imagesParType[typeKey] : null;
 
-    // Image du type ou image spécifique (y compris anciennes activités ayant une URL dans act.visuel)
     let imgUrl = "";
     if (act && act.imageSpecifique && act.imageSpecifique.trim() !== "") {
         imgUrl = formaterLienImage(act.imageSpecifique);
@@ -243,17 +247,16 @@ function getRepereAtelierHtml(act, eleve, tailleMaxImg = 28) {
         if (remplacerNumParLogo && !numPropre) {
             html = tagImg;
         } else if (numPropre || symBrut) {
-            html = `${tagImg} <strong style="vertical-align:middle;">${escHTML( emojiMat + numPropre )}</strong>`;
+            html = `${tagImg} <strong style="vertical-align:middle;">${escHTML(emojiMat + numPropre)}</strong>`;
         } else {
             html = tagImg;
         }
     } else {
-        // Affichage combiné : [Émoji Type] [Émoji Matière] [Numéro] -> ex: 🎲🔤1
         if (numPropre || symBrut) {
             let codeComplet = `${emojiType}${emojiMat}${numPropre}`;
-            html = `<strong style="font-size:${Math.max(13, Math.round(tailleMaxImg * 0.6))}px; letter-spacing:0.5px;">${escHTML(codeComplet)}</strong>`;
+            html = `<strong style="font-size:${Math.max(12, Math.round(tailleMaxImg * 0.6))}px; letter-spacing:0.4px;">${escHTML(codeComplet)}</strong>`;
         } else if (emojiType) {
-            html = `<span style="font-size:${Math.max(14, tailleMaxImg - 4)}px;">${escHTML(emojiType)}</span>`;
+            html = `<span style="font-size:${Math.max(13, tailleMaxImg - 4)}px;">${escHTML(emojiType)}</span>`;
         } else {
             html = "";
         }
@@ -366,6 +369,7 @@ function sauvegarderEleves() {
 }
 function sauvegarderBase() {
     localStorage.setItem(KEY_ATELIERS, JSON.stringify(baseDonnees));
+    localStorage.setItem(KEY_SEQ_CUSTOM, JSON.stringify(sequencesCustom));
     declencherAutoSaveFirebase();
 }
 function sauvegarderProgrammations() {
@@ -394,6 +398,7 @@ function importerDonneesUniversel(rawData) {
     let nouvProg = parseSiString(data.programmations || data[KEY_PROG]);
     let nouvArchives = parseSiString(data.archives || data.dashboardArchives || data[KEY_ARCHIVES_TODO]);
     let nouvPrintCfg = parseSiString(data.printConfig || data[KEY_PRINT_CFG]);
+    let nouvSeqCustom = parseSiString(data.sequencesCustom || data[KEY_SEQ_CUSTOM]);
 
     if (!Array.isArray(nouvBase) && (!nouvEleves || typeof nouvEleves !== 'object')) {
         showToast("⚠️ Format non reconnu : ni ateliers ni élèves trouvés.", "error");
@@ -418,6 +423,7 @@ function importerDonneesUniversel(rawData) {
     if (nouvProg && typeof nouvProg === 'object') { programmations = nouvProg; localStorage.setItem(KEY_PROG, JSON.stringify(programmations)); }
     if (Array.isArray(nouvArchives)) { dashboardArchives = nouvArchives; localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); }
     if (nouvPrintCfg && typeof nouvPrintCfg === 'object') { printConfig = { ...printConfig, ...nouvPrintCfg }; localStorage.setItem(KEY_PRINT_CFG, JSON.stringify(printConfig)); }
+    if (Array.isArray(nouvSeqCustom)) { sequencesCustom = nouvSeqCustom; localStorage.setItem(KEY_SEQ_CUSTOM, JSON.stringify(sequencesCustom)); }
     if (data.theme) appliquerThemeVisuel(data.theme);
 
     rafraichirToutApresImport();
@@ -488,7 +494,7 @@ function restaurerDepuisTexteColle() {
 
 function exporterSauvegardeJSON() {
     Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
-    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, printConfig: printConfig, theme: localStorage.getItem(KEY_THEME) || 'pastel', exportedAt: new Date().toISOString() };
+    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, sequencesCustom: sequencesCustom, printConfig: printConfig, theme: localStorage.getItem(KEY_THEME) || 'pastel', exportedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -512,7 +518,7 @@ const URL_FIREBASE_FIXE = "https://gestionclasse-cc401-default-rtdb.europe-west1
 async function sauvegarderVersFirebase(forcerManuellement = false) {
     if (!forcerManuellement && baseDonnees.length === 0 && Object.keys(eleves).length === 0) return;
     Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
-    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, printConfig: printConfig, theme: localStorage.getItem(KEY_THEME) || 'pastel', updatedAt: new Date().toISOString() };
+    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, sequencesCustom: sequencesCustom, printConfig: printConfig, theme: localStorage.getItem(KEY_THEME) || 'pastel', updatedAt: new Date().toISOString() };
     try {
         let res = await fetch(`${URL_FIREBASE_FIXE}/classe_data.json`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -611,21 +617,25 @@ function majSelectCouleursRapides(valeurForcee) {
 function majListeTypesSelect() {
     const selectType = document.getElementById('selectTypeRessource');
     const selectTypeEtiq = document.getElementById('selectTypeEtiquettes');
+    const bulkType = document.getElementById('bulkSelectType');
     let html = '<option value="">-- Type --</option>';
     let htmlEtiq = '<option value="Tous">Tous les supports</option>';
+    let htmlBulk = '<option value="">-- Changer Support --</option>';
     if (imagesParType) {
         Object.keys(imagesParType).forEach(t => {
             let em = imagesParType[t].emoji ? imagesParType[t].emoji + " " : "";
             html += `<option value="${escHTML(t)}">${escHTML(em + t)}</option>`;
             htmlEtiq += `<option value="${escHTML(t)}">${escHTML(em + t)}</option>`;
+            htmlBulk += `<option value="${escHTML(t)}">${escHTML(em + t)}</option>`;
         });
     }
     if (selectType) selectType.innerHTML = html;
     if (selectTypeEtiq) selectTypeEtiq.innerHTML = htmlEtiq;
+    if (bulkType) bulkType.innerHTML = htmlBulk;
 }
 
 let idEleveCourant = null, idEleveImpressionCourant = null;
-let filtreCourantDB = 'Tous', filtreCourantMatiere = 'Toutes', filtreCourantTypeDB = 'Tous';
+let filtreCourantDB = 'Tous', filtreCourantMatiere = 'Toutes', filtreCourantSequenceDB = 'Toutes', filtreCourantTypeDB = 'Tous';
 let idEnCoursEdition = null;
 
 function getListeTrie(idsArray, priosArray = []) {
@@ -878,7 +888,15 @@ function supprimerEleve() {
     }
 }
 
-function postEditGlobal() { trierBaseDonnees(); sauvegarderBase(); initialiserSelectsFormulaire(); initNiveaux(); initProgFilters(); afficherProgrammation(); afficherBase(); }
+function postEditGlobal() {
+    trierBaseDonnees();
+    sauvegarderBase();
+    initialiserSelectsFormulaire();
+    initNiveaux();
+    initProgFilters();
+    afficherProgrammation();
+    afficherBase();
+}
 
 function majBarreSemainesUI() {
     if (!idEleveCourant || !eleves[idEleveCourant]) return;
@@ -897,7 +915,7 @@ function majBarreSemainesUI() {
     if (inputDate) inputDate.value = e.dateDebutISO || "";
     if (spanFin) spanFin.innerText = e.dateFin ? `➔ au Vendredi ${e.dateFin}` : "➔ Vendredi : --/--";
     const labelTitre = document.getElementById('labelSemaineTitre');
-    if (labelTitre) labelTitre.innerText = `Semaine ${e.semaineIndex + 1}${(e.dateDebut && e.dateFin) ? ` du ${e.dateDebut} au ${e.dateFin}` : ""}`;
+    if (labelTitre) labelTitre.innerText = `Semaine ${e.semaineIndex + 1}${(e.dateDebut && e.dateFin) ? ` du ${e.dateDebut} au${e.dateFin}` : ""}`;
 }
 
 function appliquerDateDebutSemaine(dateISO) {
@@ -978,8 +996,10 @@ function initialiserSelectsFormulaire() {
         "🤖Mathématiques - Programmation"
     ];
     let matieres = [...new Set([...matieresParDefaut, ...baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean)])].sort((a, b) => nettoyerNomPourTri(a).localeCompare(nettoyerNomPourTri(b), 'fr'));
-    let sequences = [...new Set(baseDonnees.map(b => (b.sequence || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
-    let competences = [...new Set(baseDonnees.map(b => (b.competence || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+    let sequences = [...new Set([...sequencesCustom, ...baseDonnees.map(b => (b.sequence || "").trim()).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'fr'));
+    let toutesComps = [];
+    baseDonnees.forEach(b => extraireListeCompetences(b.competence).forEach(c => toutesComps.push(c)));
+    let competences = [...new Set(toutesComps)].sort((a, b) => a.localeCompare(b, 'fr'));
 
     let dlMat = document.getElementById('listeMatieresConnues'); if (dlMat) dlMat.innerHTML = matieres.map(m => `<option value="${escHTML(m)}">`).join('');
     let dlSeq = document.getElementById('listeSequencesConnues'); if (dlSeq) dlSeq.innerHTML = sequences.map(s => `<option value="${escHTML(s)}">`).join('');
@@ -1040,9 +1060,10 @@ function afficherRessourcesDisponibles() {
     liste.forEach(a => {
         let infos = getInfosActivitePourEleve(a, eleve), rep = getRepereAtelierHtml(a, eleve, 24);
         let coul = getCouleurMatiereBandeau(a.matiere), perAct = programmations[a.id] || a.periode || "-";
+        let seqAffiche = a.sequence ? escHTML(a.sequence) : '<span style="color:#e67e22; font-weight:bold;">⚠️ Sans séquence</span>';
         html += `<tr>
             <td><strong>${escHTML(a.niveau)}</strong><br><small style="color:#7f8c8d;">${escHTML(perAct)}</small></td>
-            <td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${coul.bg}; margin-right:4px;"></span><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
+            <td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${coul.bg}; margin-right:4px;"></span><strong>${escHTML(a.matiere)}</strong><br>${seqAffiche} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
             <td>${escHTML(a.competence)}</td>
             <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infos.badgeLivre} ${a.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : ''}</td>
             <td style="text-align:center; background:${rep.bg};">${rep.html}</td>
@@ -1187,7 +1208,7 @@ function cloreSemainePourUnEleve(eleve) {
         let nextIdx = Math.min(eleve.semaineIndex, eleve.semaines.length - 1), s = eleve.semaines[nextIdx];
         eleve.semaineIndex = nextIdx; if (!s.priorites) s.priorites = [];
         aTransferer.forEach(idAct => { if (!s.planHebdo.includes(idAct)) s.planHebdo.unshift(idAct); if (!s.priorites.includes(idAct)) s.priorites.push(idAct); });
-        eleve.planHebdo = [...s.planHebdo]; eleve.priorites = [...s.priorites]; eleve.joursAssignes = { ...(s.joursAssignes || {}) }; eleve.valides = { ...(s.valides || {}) }; eleve.suivi = { ...(eleve.suivi || {}), ...(s.suivi || {}) }; eleve.dateDebutISO = s.dateDebutISO || ""; eleve.dateDebut = s.dateDebut || ""; eleve.dateFin = s.dateFin || "";
+        eleve.planHebdo = [...s.planHebdo]; eleve.priorites = [...s.priorites]; eleve.joursAssignes = { ...(s.joursAssignes || {}) }; eleve.valides = { ...(s.valides || {}) }; eleve.suivi = { ...(s.suivi || {}), ...(s.suivi || {}) }; eleve.dateDebutISO = s.dateDebutISO || ""; eleve.dateDebut = s.dateDebut || ""; eleve.dateFin = s.dateFin || "";
     } else {
         let nextISO = "", nextDeb = "", nextFin = "";
         if (eleve.dateDebutISO) { let c = calculerVendrediDepuisISO(eleve.dateDebutISO); if (c.lundiSuivantISO) { nextISO = c.lundiSuivantISO; let c2 = calculerVendrediDepuisISO(nextISO); nextDeb = c2.debutFR; nextFin = c2.finFR; } }
@@ -1235,17 +1256,39 @@ function estActiviteTablette(act) {
     for (let k in imagesParType) { if (k.trim().toLowerCase() === tName) return Boolean(imagesParType[k] && imagesParType[k].isTablette); } return false;
 }
 
+// Validation avec prise en charge des ÉVALUATIONS MULTI-COMPÉTENCES (séparées par ";") :
+// Si une évaluation est validée, toutes les activités correspondant à l'une de ses compétences s'archivent automatiquement pour l'élève.
 function marquerCommeValideSansRafraichir(idActivite, eleve) {
-    const act = baseDonnees.find(b => b.id === idActivite); if (!act) return; const dateValid = new Date().toLocaleDateString('fr-FR');
-    if (!eleve.valides) eleve.valides = {}; eleve.valides[idActivite] = dateValid;
+    const act = baseDonnees.find(b => b.id === idActivite); if (!act) return;
+    const dateValid = new Date().toLocaleDateString('fr-FR');
+    if (!eleve.valides) eleve.valides = {};
+    eleve.valides[idActivite] = dateValid;
+
     if (act.estEvaluation) {
-        let niveauxAct = (act.niveau || "").toUpperCase().split(/[,/]+/).map(x => x.trim());
-        baseDonnees.filter(b => (b.matiere || "").trim().toLowerCase() === (act.matiere || "").trim().toLowerCase() && (b.competence || "").trim().toLowerCase() === (act.competence || "").trim().toLowerCase() && niveauxAct.some(n => (b.niveau || "").toUpperCase().includes(n))).forEach(b => {
-            if (!eleve.historique.some(h => h.idActivite === b.id)) eleve.historique.push({ idActivite: b.id, date: dateValid });
-            eleve.valides[b.id] = dateValid; if (eleve.suivi && eleve.suivi[b.id]) delete eleve.suivi[b.id];
+        let compsEval = extraireListeCompetences(act.competence).map(c => c.toLowerCase());
+        let nivEleve = (eleve.niveau || "CP").toUpperCase();
+        let niveauxAct = (act.niveau || "").toUpperCase().split(/[,/]+/).map(x => x.trim()).filter(Boolean);
+
+        baseDonnees.filter(b => {
+            if (!b) return false;
+            if ((b.matiere || "").trim().toLowerCase() !== (act.matiere || "").trim().toLowerCase()) return false;
+            let compsB = extraireListeCompetences(b.competence).map(c => c.toLowerCase());
+            let matchComp = compsB.some(cb => compsEval.includes(cb));
+            if (!matchComp) return false;
+            let nivB = (b.niveau || "").toUpperCase();
+            return nivB.includes(nivEleve) || niveauxAct.some(n => nivB.includes(n));
+        }).forEach(b => {
+            if (!eleve.historique.some(h => h.idActivite === b.id)) {
+                eleve.historique.push({ idActivite: b.id, date: dateValid });
+            }
+            eleve.valides[b.id] = dateValid;
+            if (eleve.suivi && eleve.suivi[b.id]) delete eleve.suivi[b.id];
+            if (eleve.enAttente) eleve.enAttente = eleve.enAttente.filter(idA => idA !== b.id);
         });
     } else {
-        if (!eleve.historique.some(h => h.idActivite === idActivite)) eleve.historique.push({ idActivite: idActivite, date: dateValid });
+        if (!eleve.historique.some(h => h.idActivite === idActivite)) {
+            eleve.historique.push({ idActivite: idActivite, date: dateValid });
+        }
         if (eleve.suivi && eleve.suivi[idActivite]) delete eleve.suivi[idActivite];
     }
 }
@@ -1493,7 +1536,7 @@ function genererHtmlFicheEleve(e, format = 'A4') {
             let coul = getCouleurMatiereBandeau(a.matiere);
             rowsHtml += `<tr class="sequence-separator-row">
                 <td colspan="7" style="background-color: ${coul.bg} !important; color: ${coul.text} !important; border-color: ${coul.border} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-                    📑 ${escHTML(a.matiere || '')} — Séquence : ${escHTML(a.sequence || '')}
+                    📑 ${escHTML(a.matiere || '')} — Séquence : ${escHTML(a.sequence || 'Sans séquence')}
                 </td>
             </tr>`;
         }
@@ -1674,8 +1717,18 @@ function rafraichirDashboard() {
 }
 
 // ==========================================
-// 7. ONGLET 4 : BASE DE DONNÉES, SAISIE MULTIPLE & MODALES (TYPES + ÉMOJIS)
+// 7. ONGLET 4 : BASE DE DONNÉES, HÉRITAGE SAISIE MULTIPLE, MODIF GROUPÉE & SÉQUENCES
 // ==========================================
+function ajouterCompetenceSupplementaireSimple() {
+    let inp = document.getElementById('inputCompetence');
+    if (!inp) return;
+    let nouv = prompt("Nom de la compétence supplémentaire à associer à cette évaluation :");
+    if (nouv && nouv.trim()) {
+        inp.value = inp.value.trim() ? `${inp.value.trim()} ; ${nouv.trim()}` : nouv.trim();
+        document.getElementById('cbEstEvaluation').checked = true;
+    }
+}
+
 function estCMSelectionneFormSimple() {
     let nivs = getNiveauxCochesFormulaire('.cb-niveau-form');
     return nivs.includes('CM1') || nivs.includes('CM2');
@@ -1706,10 +1759,41 @@ function verifierNiveauxCMFormSimple() {
     majCouleurAutoFormSimple();
 }
 
-function autoRemplirPageOrangeMultiLigne(inputPageElem) {
-    let tr = inputPageElem.closest('tr'); if (!tr) return;
-    let inpOrange = tr.querySelector('.m-orange'); if (!inpOrange) return;
-    if (estCMSelectionneFormMulti()) inpOrange.value = calculerPagePlusUn(inputPageElem.value);
+// Héritage intelligent depuis la 1re ligne en Saisie Multiple (Leçon, Support, Page + Page Orange CM)
+function gererSaisieChampMulti(elem, typeChamp) {
+    let tbody = document.getElementById('tbodySaisieMultiple');
+    if (!tbody) return;
+    let lignes = Array.from(tbody.querySelectorAll('.ligne-saisie-multi'));
+    let tr = elem.closest('tr');
+    let idxLigne = lignes.indexOf(tr);
+
+    if (idxLigne > 0) {
+        elem.dataset.manual = "true";
+    }
+
+    if (typeChamp === 'page') {
+        let inpOrange = tr.querySelector('.m-orange');
+        if (inpOrange && estCMSelectionneFormMulti()) {
+            inpOrange.value = calculerPagePlusUn(elem.value);
+        }
+    }
+
+    // Si on modifie la 1re ligne, on propage aux lignes suivantes non modifiées manuellement
+    if (idxLigne === 0) {
+        let classe = typeChamp === 'lecon' ? '.m-lecon' : (typeChamp === 'type' ? '.m-type' : '.m-page');
+        for (let i = 1; i < lignes.length; i++) {
+            let cible = lignes[i].querySelector(classe);
+            if (cible && cible.dataset.manual !== "true") {
+                cible.value = elem.value;
+                if (typeChamp === 'page') {
+                    let cibOrange = lignes[i].querySelector('.m-orange');
+                    if (cibOrange && estCMSelectionneFormMulti()) {
+                        cibOrange.value = calculerPagePlusUn(elem.value);
+                    }
+                }
+            }
+        }
+    }
 }
 
 function verifierNiveauxCMMulti() {
@@ -1747,35 +1831,46 @@ function toggleModeSaisieMultiple() {
 function ajouterLigneSaisieMultiple(nbLignes = 1) {
     const tbody = document.getElementById('tbodySaisieMultiple'); if (!tbody) return;
     let isCM = estCMSelectionneFormMulti();
-    let optsTypes = `<option value="">-- Support --</option>` + Object.keys(imagesParType || {}).map(t => `<option value="${escHTML(t)}">${escHTML((imagesParType[t].emoji ? imagesParType[t].emoji + ' ' : '') + t)}</option>`).join('');
+    let optsTypes = `<option value="">-- Support * --</option>` + Object.keys(imagesParType || {}).map(t => `<option value="${escHTML(t)}">${escHTML((imagesParType[t].emoji ? imagesParType[t].emoji + ' ' : '') + t)}</option>`).join('');
+
+    // Récupérer les valeurs de la 1re ligne si elle existe déjà pour pré-remplir les nouvelles lignes
+    let premiereLigne = tbody.querySelector('.ligne-saisie-multi');
+    let defLecon = premiereLigne ? (premiereLigne.querySelector('.m-lecon')?.value || "") : "";
+    let defType = premiereLigne ? (premiereLigne.querySelector('.m-type')?.value || "") : "";
+    let defPage = premiereLigne ? (premiereLigne.querySelector('.m-page')?.value || "") : "";
+    let defOrange = (isCM && defPage) ? calculerPagePlusUn(defPage) : "";
+
     for (let i = 0; i < nbLignes; i++) {
         let tr = document.createElement('tr');
         tr.className = 'ligne-saisie-multi';
         tr.innerHTML = `
-            <td><input type="text" class="m-lecon" placeholder="Ex: N1" style="width:100%;"></td>
-            <td><input type="text" class="m-comp" list="listeCompetencesConnues" placeholder="Compétence..." style="width:100%;"></td>
+            <td><input type="text" class="m-lecon" value="${escHTML(defLecon)}" placeholder="Ex: G1" oninput="gererSaisieChampMulti(this, 'lecon')" style="width:100%;"></td>
+            <td><input type="text" class="m-comp" list="listeCompetencesConnues" placeholder="Compétence(s) (; si plusieurs)" style="width:100%;"></td>
             <td><input type="text" class="m-res" placeholder="Ex: Ex 1" style="width:100%;"></td>
-            <td><select class="m-type" style="width:100%;">${optsTypes}</select></td>
+            <td><select class="m-type" onchange="gererSaisieChampMulti(this, 'type')" style="width:100%;">${optsTypes}</select></td>
             <td><input type="text" class="m-symbole" placeholder="1" style="width:100%;"></td>
             <td><input type="text" class="m-pers" placeholder="👤" style="width:100%;"></td>
-            <td><input type="text" class="m-page" placeholder="p9" oninput="autoRemplirPageOrangeMultiLigne(this)" style="width:100%;"></td>
-            <td><input type="text" class="m-orange" placeholder="p10" ${isCM ? '' : 'disabled'} style="width:100%;"></td>
-            <td><input type="text" class="m-jaune" placeholder="Fichier p. 8" style="width:100%;"></td>
+            <td><input type="text" class="m-page" value="${escHTML(defPage)}" placeholder="p9" oninput="gererSaisieChampMulti(this, 'page')" style="width:100%;"></td>
+            <td><input type="text" class="m-orange" value="${escHTML(defOrange)}" placeholder="p10" ${isCM ? '' : 'disabled'} style="width:100%;"></td>
+            <td><input type="text" class="m-jaune" placeholder="1 p4" style="width:100%;"></td>
             <td>
                 <select class="m-diff" style="width:100%;">
-                    <option value="0">0</option>
-                    <option value="1">⭐</option>
-                    <option value="2">⭐⭐</option>
-                    <option value="3">⭐⭐⭐</option>
+                    <option value="">-- Étoiles --</option>
+                    <option value="0">0 étoile</option>
+                    <option value="1">⭐ (1)</option>
+                    <option value="2">⭐⭐ (2)</option>
+                    <option value="3">⭐⭐⭐ (3)</option>
                 </select>
             </td>
             <td style="text-align:center;"><input type="checkbox" class="m-eval" style="transform:scale(1.2);"></td>
             <td style="text-align:center;"><button type="button" class="btn-remove" style="padding:3px 7px;" onclick="this.closest('tr').remove()">✖</button></td>
         `;
+        if (defType) tr.querySelector('.m-type').value = defType;
         tbody.appendChild(tr);
     }
 }
 
+// Enregistrement multiple avec contrôle des champs importants et demande de confirmation détaillée
 function enregistrerSaisieMultiple() {
     let nivArr = getNiveauxCochesFormulaire('.cb-niveau-multi');
     let niveauStr = nivArr.length > 0 ? nivArr.join(', ') : 'CP';
@@ -1784,13 +1879,44 @@ function enregistrerSaisieMultiple() {
     let sequence = document.getElementById('multiSequence').value.trim();
     let periode = document.getElementById('multiPeriode').value;
 
-    if (!matiere || !sequence) { showToast("Veuillez renseigner la Matière et la Séquence communes en haut.", "error"); return; }
+    let lignes = Array.from(document.querySelectorAll('#tbodySaisieMultiple .ligne-saisie-multi'));
+    let lignesActives = lignes.filter(tr => {
+        return tr.querySelector('.m-res').value.trim() !== "" || tr.querySelector('.m-comp').value.trim() !== "";
+    });
 
-    let lignes = document.querySelectorAll('#tbodySaisieMultiple .ligne-saisie-multi');
+    if (lignesActives.length === 0) {
+        showToast("Aucune ligne d'exercice renseignée dans le tableau.", "error");
+        return;
+    }
+
+    let champsManquants = [];
+    if (!matiere) champsManquants.push("• Matière commune (en haut)");
+    if (!sequence) champsManquants.push("• Nom de la séquence commune (en haut)");
+
+    lignesActives.forEach((tr, idx) => {
+        let numL = idx + 1;
+        let comp = tr.querySelector('.m-comp').value.trim();
+        let res = tr.querySelector('.m-res').value.trim();
+        let typeR = tr.querySelector('.m-type').value.trim();
+        let diffVal = tr.querySelector('.m-diff').value;
+        let oublisLigne = [];
+        if (!comp) oublisLigne.push("Compétence");
+        if (!res) oublisLigne.push("Nom de l'exercice");
+        if (!typeR) oublisLigne.push("Type de matériel (Support)");
+        if (diffVal === "") oublisLigne.push("Étoiles (Difficulté)");
+        if (oublisLigne.length > 0) {
+            champsManquants.push(`• Ligne ${numL} : ${oublisLigne.join(', ')}`);
+        }
+    });
+
+    if (champsManquants.length > 0) {
+        let msg = "⚠️ Attention, certaines cases importantes ne sont pas remplies :\n\n" + champsManquants.join("\n") + "\n\nVoulez-vous quand même enregistrer ces exercices ?";
+        if (!confirm(msg)) return;
+    }
+
     let nbAjoutes = 0;
-    lignes.forEach(tr => {
-        let ressource = tr.querySelector('.m-res').value.trim();
-        if (!ressource) return;
+    lignesActives.forEach(tr => {
+        let ressource = tr.querySelector('.m-res').value.trim() || "Exercice";
         let lecon = tr.querySelector('.m-lecon').value.trim();
         let competence = tr.querySelector('.m-comp').value.trim();
         let typeRes = tr.querySelector('.m-type').value;
@@ -1813,11 +1939,11 @@ function enregistrerSaisieMultiple() {
         nbAjoutes++;
     });
 
-    if (nbAjoutes === 0) { showToast("Remplissez au moins un nom d'exercice dans le tableau.", "error"); return; }
+    if (sequence && !sequencesCustom.includes(sequence)) sequencesCustom.push(sequence);
     sauvegarderProgrammations(); postEditGlobal();
     document.getElementById('tbodySaisieMultiple').innerHTML = '';
     ajouterLigneSaisieMultiple(4);
-    showToast(`✅ ${nbAjoutes} exercice(s) ajouté(s) d'un coup dans "${sequence}" !`, "success");
+    showToast(`✅ ${nbAjoutes} exercice(s) ajouté(s) d'un coup !`, "success");
 }
 
 function ouvrirModalGestionMatieres() { afficherListeMatieresModal(); ouvrirModal('modalMatieres'); }
@@ -1835,26 +1961,168 @@ function sauvegarderToutesMatieres() {
 }
 function supprimerMatiereModal(m) { if (confirm(`Supprimer toutes les activités de la matière "${m}" ?`)) { baseDonnees = baseDonnees.filter(b => (b.matiere || "").trim() !== m); postEditGlobal(); afficherListeMatieresModal(); } }
 
+// GESTION DES SÉQUENCES : Filtrage par Niveau & Matière + Suppression sans perte d'activités + Réassignation
 function ouvrirModalGestionSequences() {
     let sel = document.getElementById('filtreMatiereModalSeq');
     let mats = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))];
     if (sel) sel.innerHTML = mats.map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
-    afficherListeSequencesModal(); ouvrirModal('modalSequences');
+    afficherListeSequencesModal();
+    ouvrirModal('modalSequences');
 }
+
+function creerNouvelleSequenceModal() {
+    let inp = document.getElementById('inputNouvelleSeqModal');
+    if (!inp || !inp.value.trim()) { showToast("Écrivez le nom de la nouvelle séquence.", "error"); return; }
+    let nomSeq = inp.value.trim();
+    if (!sequencesCustom.includes(nomSeq)) sequencesCustom.push(nomSeq);
+    inp.value = "";
+    sauvegarderBase();
+    initialiserSelectsFormulaire();
+    afficherListeSequencesModal();
+    showToast(`Séquence "${nomSeq}" créée et disponible !`, "success");
+}
+
 function afficherListeSequencesModal() {
+    let nivFiltre = document.getElementById('filtreNiveauModalSeq') ? document.getElementById('filtreNiveauModalSeq').value : 'Tous';
     let matFiltre = document.getElementById('filtreMatiereModalSeq') ? document.getElementById('filtreMatiereModalSeq').value : 'Toutes';
-    let seqs = [...new Set(baseDonnees.filter(b => matFiltre === 'Toutes' || (b.matiere || "").trim() === matFiltre).map(b => (b.sequence || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
-    let cont = document.getElementById('listeSequencesModalContainer'); if (!cont) return;
-    cont.innerHTML = seqs.map(s => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;"><input type="text" class="input-rename-seq" data-old="${escHTML(s)}" value="${escHTML(s)}" style="flex:1;"><button type="button" class="btn-remove" style="padding:4px 8px;" onclick="supprimerSequenceModal('${escJS(s)}')">🗑️</button></div>`).join('');
+
+    let actsFiltrees = baseDonnees.filter(b => {
+        if (!b) return false;
+        if (nivFiltre !== 'Tous' && !(b.niveau || "").toUpperCase().includes(nivFiltre)) return false;
+        if (matFiltre !== 'Toutes' && (b.matiere || "").trim() !== matFiltre) return false;
+        return true;
+    });
+
+    let seqMap = new Map();
+    actsFiltrees.forEach(b => {
+        let s = (b.sequence || "").trim();
+        if (!s) return;
+        if (!seqMap.has(s)) seqMap.set(s, { count: 0, niveaux: new Set(), matieres: new Set() });
+        let info = seqMap.get(s);
+        info.count++;
+        (b.niveau || "").split(/[,/]+/).map(x => x.trim()).filter(Boolean).forEach(n => info.niveaux.add(n));
+        if (b.matiere) info.matieres.add(b.matiere);
+    });
+
+    if (nivFiltre === 'Tous' && matFiltre === 'Toutes') {
+        sequencesCustom.forEach(s => {
+            if (s && !seqMap.has(s)) seqMap.set(s, { count: 0, niveaux: new Set(), matieres: new Set() });
+        });
+    }
+
+    let seqKeys = Array.from(seqMap.keys()).sort((a, b) => a.localeCompare(b, 'fr'));
+    let cont = document.getElementById('listeSequencesModalContainer');
+    if (cont) {
+        if (seqKeys.length === 0) {
+            cont.innerHTML = `<p style="color:#7f8c8d; text-align:center; padding:12px;">Aucune séquence pour ce filtre.</p>`;
+        } else {
+            cont.innerHTML = seqKeys.map(s => {
+                let info = seqMap.get(s);
+                let nivTxt = Array.from(info.niveaux).join(', ') || 'Nouvelle';
+                let matTxt = Array.from(info.matieres).join(' / ') || '';
+                return `<div style="display:flex; gap:8px; align-items:center; margin-bottom:7px; padding-bottom:6px; border-bottom:1px solid #f1f5f9;">
+                    <span class="filter-btn" style="font-size:11px; padding:2px 6px; white-space:nowrap;">${escHTML(nivTxt)} • ${info.count} act.</span>
+                    <small style="color:#555; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escHTML(matTxt)}">${escHTML(matTxt)}</small>
+                    <input type="text" class="input-rename-seq" data-old="${escHTML(s)}" value="${escHTML(s)}" style="flex:1;">
+                    <button type="button" class="btn-remove" style="padding:4px 8px;" title="Retirer cette séquence (les activités passeront en 'Sans séquence')" onclick="supprimerSequenceModal('${escJS(s)}')">🗑️</button>
+                </div>`;
+            }).join('');
+        }
+    }
+
+    // Affichage des activités sans séquence (orphelines) pour réassignation rapide
+    let orphelines = baseDonnees.filter(b => {
+        if (!b || (b.sequence && b.sequence.trim() !== "")) return false;
+        if (nivFiltre !== 'Tous' && !(b.niveau || "").toUpperCase().includes(nivFiltre)) return false;
+        if (matFiltre !== 'Toutes' && (b.matiere || "").trim() !== matFiltre) return false;
+        return true;
+    });
+
+    let blocOrph = document.getElementById('blocOrphelinsSeqModal');
+    if (blocOrph) {
+        if (orphelines.length === 0) {
+            blocOrph.style.display = 'none';
+        } else {
+            blocOrph.style.display = 'block';
+            let toutesSeqs = [...new Set([...sequencesCustom, ...baseDonnees.map(b => (b.sequence || "").trim()).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'fr'));
+            let optsSeq = `<option value="">-- Choisir ou taper une séquence --</option>` + toutesSeqs.map(sq => `<option value="${escHTML(sq)}">${escHTML(sq)}</option>`).join('');
+
+            blocOrph.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+                <strong style="color:#d35400;">⚠️ ${orphelines.length} activité(s) sans séquence à réassigner :</strong>
+                <div style="display:flex; gap:6px; align-items:center;">
+                    <input type="text" id="inputReassignLotSeq" list="listeSequencesConnues" placeholder="Séquence pour toutes..." style="width:180px; padding:4px 8px;">
+                    <button type="button" class="btn-valid" style="padding:4px 10px; font-size:12px;" onclick="reassignerToutesOrphelinesModal()">Réassigner tout</button>
+                </div>
+            </div>` + orphelines.map(o => `
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12.5px; padding:4px 0; border-top:1px dashed #e67e22;">
+                    <span><strong>[${escHTML(o.niveau)}]</strong> ${escHTML(o.matiere)} — <strong>${escHTML(o.ressource)}</strong> (${escHTML(o.competence)})</span>
+                    <div style="display:flex; gap:4px;">
+                        <select onchange="reassignerActiviteSequence('${o.id}', this.value)" style="padding:3px; font-size:12px;">${optsSeq}</select>
+                    </div>
+                </div>
+            `).join('');
+        }
+    }
 }
+
+function reassignerActiviteSequence(idAct, nouvSeq) {
+    if (!nouvSeq) return;
+    let a = baseDonnees.find(b => b.id === idAct);
+    if (a) {
+        a.sequence = nouvSeq.trim();
+        postEditGlobal();
+        afficherListeSequencesModal();
+        showToast(`Activité réassignée à "${nouvSeq}" !`, "success");
+    }
+}
+
+function reassignerToutesOrphelinesModal() {
+    let inp = document.getElementById('inputReassignLotSeq');
+    if (!inp || !inp.value.trim()) { showToast("Indiquez une séquence de destination.", "error"); return; }
+    let nouvSeq = inp.value.trim();
+    let nivFiltre = document.getElementById('filtreNiveauModalSeq') ? document.getElementById('filtreNiveauModalSeq').value : 'Tous';
+    let matFiltre = document.getElementById('filtreMatiereModalSeq') ? document.getElementById('filtreMatiereModalSeq').value : 'Toutes';
+
+    let count = 0;
+    baseDonnees.forEach(b => {
+        if (!b || (b.sequence && b.sequence.trim() !== "")) return;
+        if (nivFiltre !== 'Tous' && !(b.niveau || "").toUpperCase().includes(nivFiltre)) return;
+        if (matFiltre !== 'Toutes' && (b.matiere || "").trim() !== matFiltre) return;
+        b.sequence = nouvSeq;
+        count++;
+    });
+    if (!sequencesCustom.includes(nouvSeq)) sequencesCustom.push(nouvSeq);
+    postEditGlobal();
+    afficherListeSequencesModal();
+    showToast(`✅ ${count} activité(s) réassignée(s) dans "${nouvSeq}" !`, "success");
+}
+
 function sauvegarderToutesSequences() {
     document.querySelectorAll('.input-rename-seq').forEach(inp => {
         let oldV = inp.getAttribute('data-old'), newV = inp.value.trim();
-        if (oldV && newV && oldV !== newV) baseDonnees.forEach(b => { if ((b.sequence || "").trim() === oldV) b.sequence = newV; });
+        if (oldV && newV && oldV !== newV) {
+            baseDonnees.forEach(b => { if ((b.sequence || "").trim() === oldV) b.sequence = newV; });
+            sequencesCustom = sequencesCustom.map(s => s === oldV ? newV : s);
+        }
     });
     postEditGlobal(); fermerModal('modalSequences'); showToast("Séquences mises à jour !", "success");
 }
-function supprimerSequenceModal(s) { if (confirm(`Supprimer toutes les activités de la séquence "${s}" ?`)) { baseDonnees = baseDonnees.filter(b => (b.sequence || "").trim() !== s); postEditGlobal(); afficherListeSequencesModal(); } }
+
+function supprimerSequenceModal(s) {
+    if (confirm(`Retirer la séquence "${s}" ?\n\nAucune activité ne sera supprimée : les activités liées seront simplement placées en "⚠️ Sans séquence" pour que vous puissiez les réassigner.`)) {
+        let nbTouch = 0;
+        baseDonnees.forEach(b => {
+            if ((b.sequence || "").trim() === s) {
+                b.sequence = "";
+                nbTouch++;
+            }
+        });
+        sequencesCustom = sequencesCustom.filter(seq => seq !== s);
+        postEditGlobal();
+        afficherListeSequencesModal();
+        showToast(`Séquence retirée (${nbTouch} activité(s) à réassigner).`, "success");
+    }
+}
 
 function ouvrirModalGestionCompetences() {
     let sel = document.getElementById('filtreMatiereModalComp');
@@ -1876,17 +2144,7 @@ function sauvegarderToutesCompetences() {
     postEditGlobal(); fermerModal('modalCompetences'); showToast("Compétences mises à jour !", "success");
 }
 
-// Fenêtre modale Types & Logos avec choix de l'émoji (ex: 🎲) ET/OU de l'URL d'image
 function ouvrirModalGestionTypes() {
-    let inpNom = document.getElementById('inputNouveauTypeNom');
-    if (inpNom && !document.getElementById('inputNouveauTypeEmoji')) {
-        let inpEm = document.createElement('input');
-        inpEm.type = 'text';
-        inpEm.id = 'inputNouveauTypeEmoji';
-        inpEm.placeholder = 'Émoji (ex: 🎲)';
-        inpEm.style.width = '105px';
-        inpNom.insertAdjacentElement('afterend', inpEm);
-    }
     afficherListeTypesModal();
     ouvrirModal('modalTypes');
 }
@@ -1943,6 +2201,7 @@ function changerCouleurDB(idAct, nouvCouleur) { let a = baseDonnees.find(b => b.
 function changerImageDB(idAct) { let a = baseDonnees.find(b => b.id === idAct); if (!a) return; let url = prompt("URL de l'image spécifique :", a.imageSpecifique || ""); if (url !== null) { a.imageSpecifique = url.trim(); sauvegarderBase(); afficherBase(); } }
 function viderBase() { if (confirm("⚠️ Vider l'intégralité de la base de données d'ateliers ?")) { baseDonnees = []; postEditGlobal(); showToast("Base de données vidée.", "success"); } }
 
+// Enregistrement simple avec vérification des 6 champs clés et message de confirmation détaillé
 function enregistrerActiviteBase() {
     let matiere = document.getElementById('inputMatiere').value.trim();
     let sequence = document.getElementById('inputSequence').value.trim();
@@ -1959,12 +2218,24 @@ function enregistrerActiviteBase() {
     let pageOrange = isCM && document.getElementById('inputPageOrange') ? document.getElementById('inputPageOrange').value.trim() : "";
     let varianteJaune = document.getElementById('inputVarianteJaune').value.trim();
     let periode = document.getElementById('selectPeriodeForm').value;
-    let difficulte = parseInt(document.getElementById('selectDifficulte').value) || 0;
+    let diffRaw = document.getElementById('selectDifficulte').value;
+    let difficulte = parseInt(diffRaw) || 0;
     let couleur = document.getElementById('selectCouleurRapide').value || calculerCouleurAutomatique(matiere, niveauStr, typeRes);
     let imgAct = document.getElementById('inputImageAct').value.trim();
     let estEval = document.getElementById('cbEstEvaluation').checked;
 
-    if (!matiere || !ressource) { showToast("Veuillez remplir au minimum la Matière et le Nom de la ressource.", "error"); return; }
+    let oublis = [];
+    if (!matiere) oublis.push("• La matière");
+    if (!sequence) oublis.push("• Le nom de la séquence");
+    if (!competence) oublis.push("• La compétence");
+    if (!ressource) oublis.push("• Le nom de l'exercice");
+    if (!typeRes) oublis.push("• Le type de matériel (Support)");
+    if (diffRaw === "") oublis.push("• Les étoiles (Difficulté)");
+
+    if (oublis.length > 0) {
+        let msg = "⚠️ Attention, les cases suivantes ne sont pas remplies :\n\n" + oublis.join("\n") + "\n\nVoulez-vous quand même enregistrer cette activité ?";
+        if (!confirm(msg)) return;
+    }
 
     if (idEnCoursEdition) {
         let act = baseDonnees.find(b => b.id === idEnCoursEdition);
@@ -1982,6 +2253,7 @@ function enregistrerActiviteBase() {
         if (periode) programmations[newId] = periode;
         showToast("Nouvelle activité ajoutée !", "success");
     }
+    if (sequence && !sequencesCustom.includes(sequence)) sequencesCustom.push(sequence);
     sauvegarderProgrammations(); postEditGlobal();
     document.getElementById('inputRessource').value = '';
     if (document.getElementById('inputSymbole')) document.getElementById('inputSymbole').value = '';
@@ -2006,7 +2278,7 @@ function editerActiviteBase(idAct) {
     if (document.getElementById('inputPageOrange')) document.getElementById('inputPageOrange').value = a.pageOrange || '';
     document.getElementById('inputVarianteJaune').value = a.varianteJaune || '';
     document.getElementById('selectPeriodeForm').value = programmations[a.id] || a.periode || '';
-    document.getElementById('selectDifficulte').value = a.difficulte || 0;
+    document.getElementById('selectDifficulte').value = (a.difficulte !== undefined && a.difficulte !== null) ? String(a.difficulte) : "0";
     document.getElementById('selectCouleurRapide').value = (a.visuel && a.visuel.startsWith('#')) ? a.visuel : calculerCouleurAutomatique(a.matiere, a.niveau, a.typeRes);
     document.getElementById('inputImageAct').value = a.imageSpecifique || '';
     document.getElementById('cbEstEvaluation').checked = Boolean(a.estEvaluation);
@@ -2024,7 +2296,98 @@ function annulerEditionBase() {
 }
 
 function supprimerActiviteBase(idAct) {
-    if (confirm("Supprimer cette activité de la base de données ?")) { baseDonnees = baseDonnees.filter(b => b.id !== idAct); postEditGlobal(); showToast("Activité supprimée.", "success"); }
+    if (confirm("Supprimer cette activité de la base de données ?")) {
+        baseDonnees = baseDonnees.filter(b => b.id !== idAct);
+        selectionGroupeeBase.delete(idAct);
+        postEditGlobal();
+        showToast("Activité supprimée.", "success");
+    }
+}
+
+// SÉLECTION ET MODIFICATION GROUPÉE D'ATELIERS DANS LA BASE DE DONNÉES
+function toggleCheckActiviteBase(idAct, checked) {
+    if (checked) selectionGroupeeBase.add(idAct);
+    else selectionGroupeeBase.delete(idAct);
+    majBarreActionGroupeeBase();
+}
+
+function cocherToutBase(checked) {
+    document.querySelectorAll('.cb-select-base').forEach(cb => {
+        cb.checked = checked;
+        if (checked) selectionGroupeeBase.add(cb.value);
+        else selectionGroupeeBase.delete(cb.value);
+    });
+    majBarreActionGroupeeBase();
+}
+
+function majBarreActionGroupeeBase() {
+    let barre = document.getElementById('barreActionGroupeeBase');
+    let cpt = document.getElementById('nbAteliersCochesBase');
+    if (!barre || !cpt) return;
+    cpt.innerText = selectionGroupeeBase.size;
+    barre.style.display = selectionGroupeeBase.size > 0 ? 'block' : 'none';
+}
+
+function appliquerModificationGroupeeBase() {
+    if (selectionGroupeeBase.size === 0) return;
+    let nouvType = document.getElementById('bulkSelectType')?.value || "";
+    let nouvMat = document.getElementById('bulkInputMatiere')?.value.trim() || "";
+    let nouvSeq = document.getElementById('bulkInputSequence')?.value.trim() || "";
+    let nouvPer = document.getElementById('bulkSelectPeriode')?.value || "";
+    let nouvEt = document.getElementById('bulkSelectEtoiles')?.value ?? "";
+    let nouvPers = document.getElementById('bulkInputPersonnes')?.value.trim() || "";
+
+    if (!nouvType && !nouvMat && !nouvSeq && !nouvPer && nouvEt === "" && !nouvPers) {
+        showToast("Choisissez au moins un élément à appliquer aux activités cochées.", "error");
+        return;
+    }
+
+    let count = 0;
+    baseDonnees.forEach(a => {
+        if (a && selectionGroupeeBase.has(a.id)) {
+            if (nouvType) a.typeRes = nouvType;
+            if (nouvMat) a.matiere = nouvMat;
+            if (nouvSeq) a.sequence = nouvSeq;
+            if (nouvPer === "VIDER") {
+                a.periode = "";
+                delete programmations[a.id];
+            } else if (nouvPer) {
+                a.periode = nouvPer;
+                programmations[a.id] = nouvPer;
+            }
+            if (nouvEt !== "") a.difficulte = parseInt(nouvEt) || 0;
+            if (nouvPers) a.personnes = nouvPers;
+            a.visuel = calculerCouleurAutomatique(a.matiere, a.niveau, a.typeRes);
+            count++;
+        }
+    });
+
+    if (nouvSeq && !sequencesCustom.includes(nouvSeq)) sequencesCustom.push(nouvSeq);
+    document.getElementById('bulkSelectType').value = "";
+    document.getElementById('bulkInputMatiere').value = "";
+    document.getElementById('bulkInputSequence').value = "";
+    document.getElementById('bulkSelectPeriode').value = "";
+    document.getElementById('bulkSelectEtoiles').value = "";
+    document.getElementById('bulkInputPersonnes').value = "";
+
+    selectionGroupeeBase.clear();
+    let cbAll = document.getElementById('cbToutCocherBase'); if (cbAll) cbAll.checked = false;
+    majBarreActionGroupeeBase();
+    sauvegarderProgrammations();
+    postEditGlobal();
+    showToast(`✅ ${count} activité(s) modifiée(s) en lot !`, "success");
+}
+
+function supprimerSelectionGroupeeBase() {
+    if (selectionGroupeeBase.size === 0) return;
+    if (confirm(`Supprimer définitivement les ${selectionGroupeeBase.size} activité(s) cochée(s) ?`)) {
+        baseDonnees = baseDonnees.filter(a => !selectionGroupeeBase.has(a.id));
+        selectionGroupeeBase.clear();
+        let cbAll = document.getElementById('cbToutCocherBase'); if (cbAll) cbAll.checked = false;
+        majBarreActionGroupeeBase();
+        postEditGlobal();
+        showToast("Activités cochées supprimées.", "success");
+    }
 }
 
 function initNiveaux() {
@@ -2032,12 +2395,21 @@ function initNiveaux() {
     if (barre) barre.innerHTML = ['Tous', 'CP', 'CE1', 'CE2', 'CM1', 'CM2'].map(n => `<button type="button" class="filter-btn ${filtreCourantDB === n ? 'active' : ''}" onclick="filtrerBaseNiveau('${n}')">${n}</button>`).join('');
     const selMat = document.getElementById('selectFiltreMatiereBase');
     if (selMat) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}" ${filtreCourantMatiere === m ? 'selected' : ''}>Matière : ${escHTML(m)}</option>`).join('');
+    const selSeq = document.getElementById('selectFiltreSequenceBase');
+    if (selSeq) {
+        let seqsDispo = [...new Set(baseDonnees.filter(b => (filtreCourantDB === 'Tous' || (b.niveau || '').toUpperCase().includes(filtreCourantDB)) && (filtreCourantMatiere === 'Toutes' || (b.matiere || '').trim() === filtreCourantMatiere)).map(b => (b.sequence || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+        let nbSansSeq = baseDonnees.filter(b => !b.sequence || !b.sequence.trim()).length;
+        selSeq.innerHTML = `<option value="Toutes" ${filtreCourantSequenceDB === 'Toutes' ? 'selected' : ''}>Séquence : Toutes</option>`
+            + (nbSansSeq > 0 ? `<option value="SANS_SEQUENCE" ${filtreCourantSequenceDB === 'SANS_SEQUENCE' ? 'selected' : ''}>⚠️ Sans séquence (${nbSansSeq})</option>` : '')
+            + seqsDispo.map(s => `<option value="${escHTML(s)}" ${filtreCourantSequenceDB === s ? 'selected' : ''}>Séquence : ${escHTML(s)}</option>`).join('');
+    }
     const selType = document.getElementById('selectFiltreTypeBase');
     if (selType) selType.innerHTML = ['Tous', ...Object.keys(imagesParType || {})].map(t => `<option value="${escHTML(t)}" ${filtreCourantTypeDB === t ? 'selected' : ''}>Support : ${escHTML(t)}</option>`).join('');
 }
 
 function filtrerBaseNiveau(n) { filtreCourantDB = n; initNiveaux(); afficherBase(); }
-function filtrerBaseMatiere(m) { filtreCourantMatiere = m; afficherBase(); }
+function filtrerBaseMatiere(m) { filtreCourantMatiere = m; filtreCourantSequenceDB = 'Toutes'; initNiveaux(); afficherBase(); }
+function filtrerBaseSequence(s) { filtreCourantSequenceDB = s; afficherBase(); }
 function filtrerBaseType(t) { filtreCourantTypeDB = t; afficherBase(); }
 
 function afficherBase() {
@@ -2047,13 +2419,15 @@ function afficherBase() {
         if (!a) return false;
         if (filtreCourantDB !== 'Tous' && !(a.niveau || "").toUpperCase().includes(filtreCourantDB)) return false;
         if (filtreCourantMatiere !== 'Toutes' && (a.matiere || "").trim() !== filtreCourantMatiere) return false;
+        if (filtreCourantSequenceDB === 'SANS_SEQUENCE' && (a.sequence || "").trim() !== "") return false;
+        if (filtreCourantSequenceDB !== 'Toutes' && filtreCourantSequenceDB !== 'SANS_SEQUENCE' && (a.sequence || "").trim() !== filtreCourantSequenceDB) return false;
         if (filtreCourantTypeDB !== 'Tous' && (a.typeRes || "").trim() !== filtreCourantTypeDB) return false;
         if (q && !`${a.matiere} ${a.sequence} ${a.lecon} ${a.competence} ${a.ressource} ${a.symbole || ''} ${a.pageManuel} ${a.pageOrange || ''}`.toLowerCase().includes(q)) return false;
         return true;
     });
 
     let cpt = document.getElementById('compteurBaseAffichee'); if (cpt) cpt.innerText = liste.length;
-    if (liste.length === 0) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#7f8c8d; padding:20px;">Aucune activité trouvée.</td></tr>'; return; }
+    if (liste.length === 0) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:#7f8c8d; padding:20px;">Aucune activité trouvée.</td></tr>'; return; }
 
     let html = '';
     liste.forEach(a => {
@@ -2067,11 +2441,16 @@ function afficherBase() {
         let detailsLivres = `${badgePages}${a.varianteJaune ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 5px; border-radius:4px; font-size:11px;">📒 ${escHTML(a.varianteJaune)}</span>` : ''}`;
         let rep = getRepereAtelierHtml(a, null, 26);
         let coulVisuel = rep.bg;
+        let isChecked = selectionGroupeeBase.has(a.id);
+        let seqHtml = (a.sequence && a.sequence.trim())
+            ? escHTML(a.sequence)
+            : `<span style="color:#e67e22; font-weight:bold; cursor:pointer;" onclick="ouvrirModalGestionSequences()" title="Cliquez pour réassigner">⚠️ Sans séquence</span>`;
 
         html += `<tr>
+            <td style="text-align:center;"><input type="checkbox" class="cb-select-base" value="${a.id}" ${isChecked ? 'checked' : ''} onchange="toggleCheckActiviteBase('${a.id}', this.checked)" style="transform:scale(1.2); cursor:pointer;"></td>
             <td><strong>${escHTML(a.niveau)}</strong></td>
             <td><span class="filter-btn" style="padding:2px 6px; font-size:11px;">${escHTML(per)}</span></td>
-            <td><span style="display:inline-block; padding:2px 7px; border-radius:4px; background:${coul.bg}; color:${coul.text}; font-size:11.5px; font-weight:bold;">${escHTML(a.matiere)}</span><br>${escHTML(a.sequence)} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
+            <td><span style="display:inline-block; padding:2px 7px; border-radius:4px; background:${coul.bg}; color:${coul.text}; font-size:11.5px; font-weight:bold;">${escHTML(a.matiere)}</span><br>${seqHtml} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
             <td>${escHTML(a.competence)}</td>
             <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${detailsLivres} ${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}</td>
             <td>${escHTML(a.typeRes || '')}</td>
@@ -2093,10 +2472,11 @@ function afficherBase() {
         </tr>`;
     });
     tbody.innerHTML = html;
+    majBarreActionGroupeeBase();
 }
 
 // ==========================================
-// 8. ONGLETS 5, 6, 7 & 8 : PROG, ÉTIQUETTES ([TYPE][MATIÈRE][N°]), MATRICE & BILANS
+// 8. ONGLETS 5, 6, 7 & 8 : PROG, ÉTIQUETTES 3x8 (66x33,8mm), MATRICE & BILANS
 // ==========================================
 function initProgFilters() {
     const selMat = document.getElementById('selectMatiereProg'); if (!selMat) return;
@@ -2148,33 +2528,63 @@ function afficherChoixEtiquettes() {
 
 function cocherToutesEtiquettes(etat) { document.querySelectorAll('.cb-etiq-item').forEach(cb => cb.checked = etat); genererApercuEtiquettes(); }
 
-// Générateur d'étiquettes : couleur automatique selon matière/niveau et code [Image/Émoji Type][Émoji Matière][N° Atelier] (ex: 🎲🔤1)
+// Studio Étiquettes 100% personnalisables au format exact 66mm x 33,8mm (planches 3x8 sans espacement)
 function genererApercuEtiquettes() {
     const zone = document.getElementById('printEtiquettesContainer'); if (!zone) return;
-    let w = parseInt(document.getElementById('etiqLargeurInput')?.value) || 220, h = parseInt(document.getElementById('etiqHauteurInput')?.value) || 95, fs = parseInt(document.getElementById('etiqFontInput')?.value) || 14;
+    let wMm = parseFloat(document.getElementById('etiqLargeurInput')?.value) || 66;
+    let hMm = parseFloat(document.getElementById('etiqHauteurInput')?.value) || 33.8;
+    let fsPt = parseFloat(document.getElementById('etiqFontInput')?.value) || 10.5;
+    let nbCols = parseInt(document.getElementById('etiqColsInput')?.value) || 3;
+
+    let showCode = document.getElementById('cbEtiqShowCode') ? document.getElementById('cbEtiqShowCode').checked : true;
+    let showMatiere = document.getElementById('cbEtiqShowMatiere') ? document.getElementById('cbEtiqShowMatiere').checked : true;
+    let showNiveau = document.getElementById('cbEtiqShowNiveau') ? document.getElementById('cbEtiqShowNiveau').checked : true;
+    let showNom = document.getElementById('cbEtiqShowNom') ? document.getElementById('cbEtiqShowNom').checked : true;
+    let showSeq = document.getElementById('cbEtiqShowSeq') ? document.getElementById('cbEtiqShowSeq').checked : true;
     let showComp = document.getElementById('cbEtiqShowComp') ? document.getElementById('cbEtiqShowComp').checked : true;
-    let showImg = document.getElementById('cbEtiqShowImg') ? document.getElementById('cbEtiqShowImg').checked : true;
+    let showEtoiles = document.getElementById('cbEtiqShowEtoiles') ? document.getElementById('cbEtiqShowEtoiles').checked : true;
+    let showPers = document.getElementById('cbEtiqShowPers') ? document.getElementById('cbEtiqShowPers').checked : true;
+    let showBorder = document.getElementById('cbEtiqShowBorder') ? document.getElementById('cbEtiqShowBorder').checked : true;
+
+    zone.style.gridTemplateColumns = `repeat(${nbCols}, ${wMm}mm)`;
+    zone.style.gap = "0mm";
+
     let ids = []; document.querySelectorAll('.cb-etiq-item:checked').forEach(cb => ids.push(cb.value));
 
     zone.innerHTML = ids.map(id => {
         let a = baseDonnees.find(b => b.id === id); if (!a) return '';
         let coul = getCouleurMatiereBandeau(a.matiere);
-        let rep = getRepereAtelierHtml(a, null, Math.round(fs * 2.2));
+        let rep = getRepereAtelierHtml(a, null, Math.round(fsPt * 2.1));
         let bgEtiq = rep.bg;
+        let borderCss = showBorder ? `0.4mm solid ${coul.bg}` : `none`;
 
-        return `<div class="etiquette-item" style="width:${w}px; min-height:${h}px; background:${bgEtiq} !important; border:2px solid ${coul.bg}; font-size:${fs}px;">
-            <div style="background:${coul.bg} !important; color:${coul.text} !important; font-size:${Math.max(10, fs - 3)}px; font-weight:bold; padding:3px 6px; border-radius:4px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
-                <span>${escHTML(a.matiere)}</span>
-                <span>${escHTML(a.niveau)}</span>
-            </div>
-            ${showImg && rep.html ? `<div style="font-size:${Math.round(fs * 1.5)}px; font-weight:bold; margin:4px 0; padding:3px 8px; background:rgba(255,255,255,0.65); border-radius:6px; display:inline-block; align-self:center;">${rep.html}</div>` : ''}
-            <div style="font-weight:bold; font-size:${fs + 1}px; margin-bottom:2px; color:#1e293b;">${escHTML(a.ressource)}</div>
-            <div style="font-size:${Math.max(10, fs - 2)}px; color:#333;">${escHTML(a.sequence)} ${a.lecon ? '— ' + escHTML(a.lecon) : ''}</div>
-            ${showComp && a.competence ? `<div style="font-size:${Math.max(9, fs - 3)}px; color:#444; margin-top:3px; font-style:italic;">${escHTML(a.competence)}</div>` : ''}
-            <div style="margin-top:4px; display:flex; justify-content:space-between; align-items:center; font-size:${Math.max(10, fs - 3)}px;">
-                <span>${formaterEtoiles(a.difficulte)}</span>
-                <span>${escHTML(a.personnes || '')}</span>
-            </div>
+        let bandeauHtml = (showMatiere || showNiveau) ? `
+            <div style="background:${coul.bg} !important; color:${coul.text} !important; font-size:${Math.max(7, fsPt - 2.5)}pt; font-weight:bold; padding:1px 5px; border-radius:3px; display:flex; justify-content:space-between; align-items:center; width:100%;">
+                <span>${showMatiere ? escHTML(a.matiere) : ''}</span>
+                <span>${showNiveau ? escHTML(a.niveau) : ''}</span>
+            </div>` : '';
+
+        let codeHtml = (showCode && rep.html) ? `
+            <div style="font-size:${Math.round(fsPt * 1.35)}pt; font-weight:bold; margin:1px 0; padding:1px 6px; background:rgba(255,255,255,0.72); border-radius:4px; display:inline-block; align-self:center; line-height:1.1;">
+                ${rep.html}
+            </div>` : '';
+
+        let nomHtml = showNom ? `<div style="font-weight:bold; font-size:${fsPt}pt; color:#1e293b; line-height:1.15;">${escHTML(a.ressource)}</div>` : '';
+        let seqHtml = (showSeq && (a.sequence || a.lecon)) ? `<div style="font-size:${Math.max(7, fsPt - 2)}pt; color:#333; line-height:1.1;">${escHTML(a.sequence || '')} ${a.lecon ? '— ' + escHTML(a.lecon) : ''}</div>` : '';
+        let compHtml = (showComp && a.competence) ? `<div style="font-size:${Math.max(6.5, fsPt - 2.5)}pt; color:#444; font-style:italic; line-height:1.1;">${escHTML(a.competence)}</div>` : '';
+        let piedHtml = (showEtoiles || showPers) ? `
+            <div style="display:flex; justify-content:space-between; align-items:center; font-size:${Math.max(7, fsPt - 2.5)}pt; width:100%;">
+                <span>${showEtoiles ? formaterEtoiles(a.difficulte) : ''}</span>
+                <span>${showPers ? escHTML(a.personnes || '') : ''}</span>
+            </div>` : '';
+
+        return `<div class="etiquette-item" style="width:${wMm}mm; height:${hMm}mm; background:${bgEtiq} !important; border:${borderCss}; font-size:${fsPt}pt;">
+            ${bandeauHtml}
+            ${codeHtml}
+            ${nomHtml}
+            ${seqHtml}
+            ${compHtml}
+            ${piedHtml}
         </div>`;
     }).join('');
 }
