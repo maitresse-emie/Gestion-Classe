@@ -1854,4 +1854,431 @@ function sauvegarderToutesSequences() {
     });
     postEditGlobal(); fermerModal('modalSequences'); showToast("Séquences mises à jour !", "success");
 }
-function supprimerSequenceModal(s) { if (confirm(`Supprimer toutes les activités de la séquence "${s}" ?`)) { baseDonnees = baseDonnees.filter(b => (b.sequence || "").trim() !== s); post
+function supprimerSequenceModal(s) { if (confirm(`Supprimer toutes les activités de la séquence "${s}" ?`)) { baseDonnees = baseDonnees.filter(b => (b.sequence || "").trim() !== s); postEditGlobal(); afficherListeSequencesModal(); } }
+
+function ouvrirModalGestionCompetences() {
+    let sel = document.getElementById('filtreMatiereModalComp');
+    let mats = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))];
+    if (sel) sel.innerHTML = mats.map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
+    afficherListeCompetencesModal(); ouvrirModal('modalCompetences');
+}
+function afficherListeCompetencesModal() {
+    let matFiltre = document.getElementById('filtreMatiereModalComp') ? document.getElementById('filtreMatiereModalComp').value : 'Toutes';
+    let comps = [...new Set(baseDonnees.filter(b => matFiltre === 'Toutes' || (b.matiere || "").trim() === matFiltre).map(b => (b.competence || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+    let cont = document.getElementById('listeCompetencesModalContainer'); if (!cont) return;
+    cont.innerHTML = comps.map(c => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;"><input type="text" class="input-rename-comp" data-old="${escHTML(c)}" value="${escHTML(c)}" style="flex:1;"></div>`).join('');
+}
+function sauvegarderToutesCompetences() {
+    document.querySelectorAll('.input-rename-comp').forEach(inp => {
+        let oldV = inp.getAttribute('data-old'), newV = inp.value.trim();
+        if (oldV && newV && oldV !== newV) baseDonnees.forEach(b => { if ((b.competence || "").trim() === oldV) b.competence = newV; });
+    });
+    postEditGlobal(); fermerModal('modalCompetences'); showToast("Compétences mises à jour !", "success");
+}
+
+// Fenêtre modale Types & Logos avec choix de l'émoji (ex: 🎲) ET/OU de l'URL d'image
+function ouvrirModalGestionTypes() {
+    let inpNom = document.getElementById('inputNouveauTypeNom');
+    if (inpNom && !document.getElementById('inputNouveauTypeEmoji')) {
+        let inpEm = document.createElement('input');
+        inpEm.type = 'text';
+        inpEm.id = 'inputNouveauTypeEmoji';
+        inpEm.placeholder = 'Émoji (ex: 🎲)';
+        inpEm.style.width = '105px';
+        inpNom.insertAdjacentElement('afterend', inpEm);
+    }
+    afficherListeTypesModal();
+    ouvrirModal('modalTypes');
+}
+
+function afficherListeTypesModal() {
+    const cont = document.getElementById('listeTypesModalContainer'); if (!cont || !imagesParType) return;
+    cont.innerHTML = Object.keys(imagesParType).map(k => {
+        let t = imagesParType[k];
+        return `<div class="ligne-type-modal" data-key="${escHTML(k)}" style="display:flex; gap:8px; align-items:center; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #eee; flex-wrap:wrap;">
+            <strong style="width:130px;">${escHTML(k)}</strong>
+            <input type="text" class="t-emoji" value="${escHTML(t.emoji || '')}" placeholder="Émoji (🎲)" title="Émoji affiché en premier sur l'étiquette" style="width:75px; text-align:center;">
+            <input type="text" class="t-img" value="${escHTML(t.img || '')}" placeholder="ou URL image/logo..." style="flex:1; min-width:140px;">
+            <label style="font-size:12px;"><input type="checkbox" class="t-remp" ${t.remplacerNum ? 'checked' : ''}> Logo seul</label>
+            <label style="font-size:12px;"><input type="checkbox" class="t-coul" ${t.appliquerCouleur !== false ? 'checked' : ''}> Colorer</label>
+            <label style="font-size:12px;"><input type="checkbox" class="t-tab" ${t.isTablette ? 'checked' : ''}> 📱 Tablette</label>
+            <button type="button" class="btn-remove" style="padding:3px 7px;" onclick="supprimerTypeRessource('${escJS(k)}')">🗑️</button>
+        </div>`;
+    }).join('');
+}
+
+function sauvegarderTousLesTypes() {
+    document.querySelectorAll('.ligne-type-modal').forEach(div => {
+        let k = div.getAttribute('data-key');
+        if (imagesParType[k]) {
+            let emInput = div.querySelector('.t-emoji');
+            imagesParType[k].emoji = emInput ? emInput.value.trim() : "";
+            imagesParType[k].img = div.querySelector('.t-img').value.trim();
+            imagesParType[k].remplacerNum = div.querySelector('.t-remp').checked;
+            imagesParType[k].appliquerCouleur = div.querySelector('.t-coul').checked;
+            imagesParType[k].isTablette = div.querySelector('.t-tab').checked;
+        }
+    });
+    localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
+    declencherAutoSaveFirebase(); majListeTypesSelect(); fermerModal('modalTypes'); afficherBase();
+    showToast("Types, émojis et logos mis à jour !", "success");
+}
+
+function ajouterOuModifierType() {
+    let nom = document.getElementById('inputNouveauTypeNom').value.trim(); if (!nom) { showToast("Indiquez un nom de type.", "error"); return; }
+    let em = document.getElementById('inputNouveauTypeEmoji') ? document.getElementById('inputNouveauTypeEmoji').value.trim() : "";
+    let img = document.getElementById('inputNouveauTypeImg').value.trim();
+    let remp = document.getElementById('cbNouveauTypeRempNum') ? document.getElementById('cbNouveauTypeRempNum').checked : false;
+    let isTab = document.getElementById('cbNouveauTypeTablette').checked, appCoul = document.getElementById('cbNouveauTypeCouleur').checked;
+    imagesParType[nom] = { img: img, emoji: em, remplacerNum: remp, appliquerCouleur: appCoul, isTablette: isTab };
+    localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
+    declencherAutoSaveFirebase(); majListeTypesSelect(); afficherListeTypesModal(); afficherBase();
+    document.getElementById('inputNouveauTypeNom').value = '';
+    if (document.getElementById('inputNouveauTypeEmoji')) document.getElementById('inputNouveauTypeEmoji').value = '';
+    document.getElementById('inputNouveauTypeImg').value = '';
+    showToast(`Type "${nom}" enregistré !`, "success");
+}
+function supprimerTypeRessource(nom) { if (confirm(`Supprimer le type "${nom}" ?`)) { delete imagesParType[nom]; localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType)); majListeTypesSelect(); afficherListeTypesModal(); } }
+function changerCouleurDB(idAct, nouvCouleur) { let a = baseDonnees.find(b => b.id === idAct); if (a) { a.visuel = nouvCouleur; sauvegarderBase(); afficherBase(); } }
+function changerImageDB(idAct) { let a = baseDonnees.find(b => b.id === idAct); if (!a) return; let url = prompt("URL de l'image spécifique :", a.imageSpecifique || ""); if (url !== null) { a.imageSpecifique = url.trim(); sauvegarderBase(); afficherBase(); } }
+function viderBase() { if (confirm("⚠️ Vider l'intégralité de la base de données d'ateliers ?")) { baseDonnees = []; postEditGlobal(); showToast("Base de données vidée.", "success"); } }
+
+function enregistrerActiviteBase() {
+    let matiere = document.getElementById('inputMatiere').value.trim();
+    let sequence = document.getElementById('inputSequence').value.trim();
+    let lecon = document.getElementById('inputLecon').value.trim();
+    let competence = document.getElementById('inputCompetence').value.trim();
+    let ressource = document.getElementById('inputRessource').value.trim();
+    let typeRes = document.getElementById('selectTypeRessource').value;
+    let symbole = document.getElementById('inputSymbole') ? document.getElementById('inputSymbole').value.trim() : "";
+    let personnes = document.getElementById('inputPersonnes') ? document.getElementById('inputPersonnes').value.trim() : "";
+    let pageManuel = document.getElementById('inputPageManuel').value.trim();
+    let nivArr = getNiveauxCochesFormulaire('.cb-niveau-form');
+    let niveauStr = nivArr.length > 0 ? nivArr.join(', ') : 'CP';
+    let isCM = nivArr.includes('CM1') || nivArr.includes('CM2');
+    let pageOrange = isCM && document.getElementById('inputPageOrange') ? document.getElementById('inputPageOrange').value.trim() : "";
+    let varianteJaune = document.getElementById('inputVarianteJaune').value.trim();
+    let periode = document.getElementById('selectPeriodeForm').value;
+    let difficulte = parseInt(document.getElementById('selectDifficulte').value) || 0;
+    let couleur = document.getElementById('selectCouleurRapide').value || calculerCouleurAutomatique(matiere, niveauStr, typeRes);
+    let imgAct = document.getElementById('inputImageAct').value.trim();
+    let estEval = document.getElementById('cbEstEvaluation').checked;
+
+    if (!matiere || !ressource) { showToast("Veuillez remplir au minimum la Matière et le Nom de la ressource.", "error"); return; }
+
+    if (idEnCoursEdition) {
+        let act = baseDonnees.find(b => b.id === idEnCoursEdition);
+        if (act) {
+            Object.assign(act, { matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval });
+            if (periode) programmations[act.id] = periode;
+        }
+        idEnCoursEdition = null;
+        document.getElementById('btnAnnulerEditBase').style.display = 'none';
+        document.getElementById('titreFormulaireBase').innerText = "➕ Ajouter ou modifier une activité";
+        showToast("Activité modifiée !", "success");
+    } else {
+        let newId = 'act_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+        baseDonnees.push({ id: newId, matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval });
+        if (periode) programmations[newId] = periode;
+        showToast("Nouvelle activité ajoutée !", "success");
+    }
+    sauvegarderProgrammations(); postEditGlobal();
+    document.getElementById('inputRessource').value = '';
+    if (document.getElementById('inputSymbole')) document.getElementById('inputSymbole').value = '';
+    document.getElementById('inputPageManuel').value = '';
+    if (document.getElementById('inputPageOrange')) document.getElementById('inputPageOrange').value = '';
+    document.getElementById('inputVarianteJaune').value = '';
+}
+
+function editerActiviteBase(idAct) {
+    if (modeSaisieMultipleActif) toggleModeSaisieMultiple();
+    let a = baseDonnees.find(b => b.id === idAct); if (!a) return;
+    idEnCoursEdition = idAct;
+    document.getElementById('inputMatiere').value = a.matiere || '';
+    document.getElementById('inputSequence').value = a.sequence || '';
+    document.getElementById('inputLecon').value = a.lecon || '';
+    document.getElementById('inputCompetence').value = a.competence || '';
+    document.getElementById('inputRessource').value = a.ressource || '';
+    document.getElementById('selectTypeRessource').value = a.typeRes || '';
+    if (document.getElementById('inputSymbole')) document.getElementById('inputSymbole').value = a.symbole || '';
+    if (document.getElementById('inputPersonnes')) document.getElementById('inputPersonnes').value = a.personnes || '';
+    document.getElementById('inputPageManuel').value = a.pageManuel || '';
+    if (document.getElementById('inputPageOrange')) document.getElementById('inputPageOrange').value = a.pageOrange || '';
+    document.getElementById('inputVarianteJaune').value = a.varianteJaune || '';
+    document.getElementById('selectPeriodeForm').value = programmations[a.id] || a.periode || '';
+    document.getElementById('selectDifficulte').value = a.difficulte || 0;
+    document.getElementById('selectCouleurRapide').value = (a.visuel && a.visuel.startsWith('#')) ? a.visuel : calculerCouleurAutomatique(a.matiere, a.niveau, a.typeRes);
+    document.getElementById('inputImageAct').value = a.imageSpecifique || '';
+    document.getElementById('cbEstEvaluation').checked = Boolean(a.estEvaluation);
+    document.querySelectorAll('.cb-niveau-form').forEach(cb => { cb.checked = (a.niveau || "").toUpperCase().includes(cb.value); });
+    verifierNiveauxCMFormSimple();
+    document.getElementById('titreFormulaireBase').innerText = "✏️ Modification de : " + a.ressource;
+    document.getElementById('btnAnnulerEditBase').style.display = 'inline-block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function annulerEditionBase() {
+    idEnCoursEdition = null;
+    document.getElementById('titreFormulaireBase').innerText = "➕ Ajouter ou modifier une activité";
+    document.getElementById('btnAnnulerEditBase').style.display = 'none';
+}
+
+function supprimerActiviteBase(idAct) {
+    if (confirm("Supprimer cette activité de la base de données ?")) { baseDonnees = baseDonnees.filter(b => b.id !== idAct); postEditGlobal(); showToast("Activité supprimée.", "success"); }
+}
+
+function initNiveaux() {
+    const barre = document.getElementById('barreFiltresNiveauxBase');
+    if (barre) barre.innerHTML = ['Tous', 'CP', 'CE1', 'CE2', 'CM1', 'CM2'].map(n => `<button type="button" class="filter-btn ${filtreCourantDB === n ? 'active' : ''}" onclick="filtrerBaseNiveau('${n}')">${n}</button>`).join('');
+    const selMat = document.getElementById('selectFiltreMatiereBase');
+    if (selMat) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}" ${filtreCourantMatiere === m ? 'selected' : ''}>Matière : ${escHTML(m)}</option>`).join('');
+    const selType = document.getElementById('selectFiltreTypeBase');
+    if (selType) selType.innerHTML = ['Tous', ...Object.keys(imagesParType || {})].map(t => `<option value="${escHTML(t)}" ${filtreCourantTypeDB === t ? 'selected' : ''}>Support : ${escHTML(t)}</option>`).join('');
+}
+
+function filtrerBaseNiveau(n) { filtreCourantDB = n; initNiveaux(); afficherBase(); }
+function filtrerBaseMatiere(m) { filtreCourantMatiere = m; afficherBase(); }
+function filtrerBaseType(t) { filtreCourantTypeDB = t; afficherBase(); }
+
+function afficherBase() {
+    const tbody = document.getElementById('tableBaseDonnees'); if (!tbody) return;
+    let q = (document.getElementById('inputRechercheBase') ? document.getElementById('inputRechercheBase').value : "").toLowerCase().trim();
+    let liste = baseDonnees.filter(a => {
+        if (!a) return false;
+        if (filtreCourantDB !== 'Tous' && !(a.niveau || "").toUpperCase().includes(filtreCourantDB)) return false;
+        if (filtreCourantMatiere !== 'Toutes' && (a.matiere || "").trim() !== filtreCourantMatiere) return false;
+        if (filtreCourantTypeDB !== 'Tous' && (a.typeRes || "").trim() !== filtreCourantTypeDB) return false;
+        if (q && !`${a.matiere} ${a.sequence} ${a.lecon} ${a.competence} ${a.ressource} ${a.symbole || ''} ${a.pageManuel} ${a.pageOrange || ''}`.toLowerCase().includes(q)) return false;
+        return true;
+    });
+
+    let cpt = document.getElementById('compteurBaseAffichee'); if (cpt) cpt.innerText = liste.length;
+    if (liste.length === 0) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#7f8c8d; padding:20px;">Aucune activité trouvée.</td></tr>'; return; }
+
+    let html = '';
+    liste.forEach(a => {
+        let coul = getCouleurMatiereBandeau(a.matiere), per = programmations[a.id] || a.periode || "-";
+        let badgePages = '';
+        if (a.pageManuel && a.pageOrange) {
+            badgePages = `<span style="background:#fef9e7; color:#7d6608; padding:1px 5px; border-radius:4px; font-size:11px; border:1px solid #f1c40f;">🟡 ${escHTML(a.pageManuel)}</span> <span style="background:#fdebd0; color:#9c640c; padding:1px 5px; border-radius:4px; font-size:11px; border:1px solid #f39c12;">🟠 ${escHTML(a.pageOrange)}</span> `;
+        } else if (a.pageManuel) {
+            badgePages = `<span style="background:#eaf2f8; color:#1b4f72; padding:1px 5px; border-radius:4px; font-size:11px;">📘 ${escHTML(a.pageManuel)}</span> `;
+        }
+        let detailsLivres = `${badgePages}${a.varianteJaune ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 5px; border-radius:4px; font-size:11px;">📒 ${escHTML(a.varianteJaune)}</span>` : ''}`;
+        let rep = getRepereAtelierHtml(a, null, 26);
+        let coulVisuel = rep.bg;
+
+        html += `<tr>
+            <td><strong>${escHTML(a.niveau)}</strong></td>
+            <td><span class="filter-btn" style="padding:2px 6px; font-size:11px;">${escHTML(per)}</span></td>
+            <td><span style="display:inline-block; padding:2px 7px; border-radius:4px; background:${coul.bg}; color:${coul.text}; font-size:11.5px; font-weight:bold;">${escHTML(a.matiere)}</span><br>${escHTML(a.sequence)} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
+            <td>${escHTML(a.competence)}</td>
+            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${detailsLivres} ${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}</td>
+            <td>${escHTML(a.typeRes || '')}</td>
+            <td style="text-align:center;">${escHTML(a.personnes || '')}</td>
+            <td style="text-align:center; background:${coulVisuel};">
+                ${rep.html}
+                <div style="margin-top:3px;">
+                    <input type="color" value="${coulVisuel.startsWith('#') ? coulVisuel : '#ffffff'}" onchange="changerCouleurDB('${a.id}', this.value)" style="width:22px; height:18px; border:none; cursor:pointer; vertical-align:middle;">
+                    <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" onclick="changerImageDB('${a.id}')">${a.imageSpecifique ? '🖼️' : '➕🖼️'}</button>
+                </div>
+            </td>
+            <td>
+                <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                    <button type="button" class="btn-action" style="padding:4px 8px;" onclick="assignerActivite('${a.id}')">📌</button>
+                    <button type="button" class="filter-btn" onclick="editerActiviteBase('${a.id}')">✏️</button>
+                    <button type="button" class="btn-remove" style="padding:4px 8px;" onclick="supprimerActiviteBase('${a.id}')">🗑️</button>
+                </div>
+            </td>
+        </tr>`;
+    });
+    tbody.innerHTML = html;
+}
+
+// ==========================================
+// 8. ONGLETS 5, 6, 7 & 8 : PROG, ÉTIQUETTES ([TYPE][MATIÈRE][N°]), MATRICE & BILANS
+// ==========================================
+function initProgFilters() {
+    const selMat = document.getElementById('selectMatiereProg'); if (!selMat) return;
+    let val = selMat.value || 'Toutes';
+    selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
+    selMat.value = val;
+}
+function toggleProg(idAct, per) {
+    let actuel = programmations[idAct] || "";
+    if (actuel === per) delete programmations[idAct]; else programmations[idAct] = per;
+    let act = baseDonnees.find(b => b.id === idAct); if (act) act.periode = programmations[idAct] || "";
+    sauvegarderProgrammations(); sauvegarderBase(); afficherProgrammation();
+}
+function afficherProgrammation() {
+    const cont = document.getElementById('contenuProgrammation'); if (!cont) return;
+    let niv = document.getElementById('selectNiveauProg') ? document.getElementById('selectNiveauProg').value : 'Tous';
+    let mat = document.getElementById('selectMatiereProg') ? document.getElementById('selectMatiereProg').value : 'Toutes';
+    let perFiltre = document.getElementById('selectPeriodeProg') ? document.getElementById('selectPeriodeProg').value : 'Toutes';
+    let liste = baseDonnees.filter(a => {
+        if (!a) return false;
+        if (niv !== 'Tous' && !(a.niveau || "").toUpperCase().includes(niv)) return false;
+        if (mat !== 'Toutes' && (a.matiere || "").trim() !== mat) return false;
+        let p = programmations[a.id] || a.periode || "";
+        if (perFiltre === 'Non_affecte' && p !== "") return false;
+        if (perFiltre !== 'Toutes' && perFiltre !== 'Non_affecte' && p !== perFiltre) return false;
+        return true;
+    });
+    if (liste.length === 0) { cont.innerHTML = `<div class="empty-state"><p>Aucune activité pour ce filtre.</p></div>`; return; }
+    cont.innerHTML = `<table class="table-classique"><thead><tr><th style="width:70px;">Niveau</th><th style="width:180px;">Matière / Séquence</th><th>Compétence</th><th>Ressource</th><th style="width:230px; text-align:center;">Périodes (P1 à P5)</th></tr></thead><tbody>` + liste.map(a => {
+        let p = programmations[a.id] || a.periode || "", coul = getCouleurMatiereBandeau(a.matiere);
+        let btns = ['P1', 'P2', 'P3', 'P4', 'P5'].map(per => `<button type="button" class="prog-pill ${p === per ? 'active' : ''}" onclick="toggleProg('${a.id}', '${per}')">${per}</button>`).join('');
+        return `<tr><td><strong>${escHTML(a.niveau)}</strong></td><td><span style="background:${coul.bg}; color:#fff; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold;">${escHTML(a.matiere)}</span><br>${escHTML(a.sequence)}</td><td>${escHTML(a.competence)}</td><td><strong>${escHTML(a.ressource)}</strong></td><td style="text-align:center;">${btns}</td></tr>`;
+    }).join('') + `</tbody></table>`;
+}
+
+function afficherChoixEtiquettes() {
+    const selMat = document.getElementById('selectMatiereEtiquettes');
+    if (selMat && selMat.options.length <= 1) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
+    const niv = document.getElementById('selectNiveauEtiquettes') ? document.getElementById('selectNiveauEtiquettes').value : 'Tous';
+    const mat = selMat ? selMat.value : 'Toutes', typeF = document.getElementById('selectTypeEtiquettes') ? document.getElementById('selectTypeEtiquettes').value : 'Tous';
+    const cont = document.getElementById('listeChoixEtiquettes'); if (!cont) return;
+    let liste = baseDonnees.filter(a => a && (niv === 'Tous' || (a.niveau || "").toUpperCase().includes(niv)) && (mat === 'Toutes' || (a.matiere || "").trim() === mat) && (typeF === 'Tous' || (a.typeRes || "").trim() === typeF));
+    cont.innerHTML = liste.map(a => {
+        let rep = getRepereAtelierHtml(a, null, 18);
+        return `<label style="display:inline-block; width:280px; margin:3px 6px; font-size:13px; cursor:pointer;"><input type="checkbox" class="cb-etiq-item" value="${a.id}" checked onchange="genererApercuEtiquettes()"> [${escHTML(a.niveau)}] ${rep.codeTexte ? '<strong>'+escHTML(rep.codeTexte)+'</strong> — ' : ''}${escHTML(a.ressource)}</label>`;
+    }).join('');
+    genererApercuEtiquettes();
+}
+
+function cocherToutesEtiquettes(etat) { document.querySelectorAll('.cb-etiq-item').forEach(cb => cb.checked = etat); genererApercuEtiquettes(); }
+
+// Générateur d'étiquettes : couleur automatique selon matière/niveau et code [Image/Émoji Type][Émoji Matière][N° Atelier] (ex: 🎲🔤1)
+function genererApercuEtiquettes() {
+    const zone = document.getElementById('printEtiquettesContainer'); if (!zone) return;
+    let w = parseInt(document.getElementById('etiqLargeurInput')?.value) || 220, h = parseInt(document.getElementById('etiqHauteurInput')?.value) || 95, fs = parseInt(document.getElementById('etiqFontInput')?.value) || 14;
+    let showComp = document.getElementById('cbEtiqShowComp') ? document.getElementById('cbEtiqShowComp').checked : true;
+    let showImg = document.getElementById('cbEtiqShowImg') ? document.getElementById('cbEtiqShowImg').checked : true;
+    let ids = []; document.querySelectorAll('.cb-etiq-item:checked').forEach(cb => ids.push(cb.value));
+
+    zone.innerHTML = ids.map(id => {
+        let a = baseDonnees.find(b => b.id === id); if (!a) return '';
+        let coul = getCouleurMatiereBandeau(a.matiere);
+        let rep = getRepereAtelierHtml(a, null, Math.round(fs * 2.2));
+        let bgEtiq = rep.bg;
+
+        return `<div class="etiquette-item" style="width:${w}px; min-height:${h}px; background:${bgEtiq} !important; border:2px solid ${coul.bg}; font-size:${fs}px;">
+            <div style="background:${coul.bg} !important; color:${coul.text} !important; font-size:${Math.max(10, fs - 3)}px; font-weight:bold; padding:3px 6px; border-radius:4px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center;">
+                <span>${escHTML(a.matiere)}</span>
+                <span>${escHTML(a.niveau)}</span>
+            </div>
+            ${showImg && rep.html ? `<div style="font-size:${Math.round(fs * 1.5)}px; font-weight:bold; margin:4px 0; padding:3px 8px; background:rgba(255,255,255,0.65); border-radius:6px; display:inline-block; align-self:center;">${rep.html}</div>` : ''}
+            <div style="font-weight:bold; font-size:${fs + 1}px; margin-bottom:2px; color:#1e293b;">${escHTML(a.ressource)}</div>
+            <div style="font-size:${Math.max(10, fs - 2)}px; color:#333;">${escHTML(a.sequence)} ${a.lecon ? '— ' + escHTML(a.lecon) : ''}</div>
+            ${showComp && a.competence ? `<div style="font-size:${Math.max(9, fs - 3)}px; color:#444; margin-top:3px; font-style:italic;">${escHTML(a.competence)}</div>` : ''}
+            <div style="margin-top:4px; display:flex; justify-content:space-between; align-items:center; font-size:${Math.max(10, fs - 3)}px;">
+                <span>${formaterEtoiles(a.difficulte)}</span>
+                <span>${escHTML(a.personnes || '')}</span>
+            </div>
+        </div>`;
+    }).join('');
+}
+function lancerImpressionEtiquettes() { genererApercuEtiquettes(); window.print(); }
+
+function genererMatriceCompetences() {
+    const selMat = document.getElementById('selectMatiereMatrice');
+    if (selMat && selMat.options.length <= 1) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
+    const niv = document.getElementById('selectNiveauMatrice')?.value || 'CP', per = document.getElementById('selectPeriodeMatrice')?.value || 'Toutes', mat = selMat ? selMat.value : 'Toutes';
+    const evalOnly = document.getElementById('cbEvalOnlyMatrice') ? document.getElementById('cbEvalOnlyMatrice').checked : false;
+    const cont = document.getElementById('conteneurMatrice'); if (!cont) return;
+
+    let elevesNiv = getElevesTries().filter(e => (e.niveau || 'CP').toUpperCase() === niv);
+    let acts = baseDonnees.filter(a => {
+        if (!a || !(a.niveau || "").toUpperCase().includes(niv)) return false;
+        if (mat !== 'Toutes' && (a.matiere || "").trim() !== mat) return false;
+        let p = programmations[a.id] || a.periode || "";
+        if (per === 'Non_affecte' && p !== "") return false;
+        if (per !== 'Toutes' && per !== 'Non_affecte' && !p.includes(per)) return false;
+        if (evalOnly && !a.estEvaluation) return false;
+        return true;
+    });
+    if (elevesNiv.length === 0 || acts.length === 0) { cont.innerHTML = `<div class="empty-state"><p>Aucun élève ou activité pour ces critères.</p></div>`; return; }
+
+    let html = `<table class="table-classique"><thead><tr><th>Matière / Période / Compétence / Ressource</th>` + elevesNiv.map(e => `<th style="text-align:center;">${escHTML(e.nom)}</th>`).join('') + `</tr></thead><tbody>`;
+    acts.forEach(a => {
+        let coul = getCouleurMatiereBandeau(a.matiere), p = programmations[a.id] || a.periode || "";
+        let badgePer = p ? `<span class="filter-btn" style="padding:1px 5px; font-size:10.5px; margin-left:4px;">${escHTML(p)}</span>` : '';
+        html += `<tr><td><span style="background:${coul.bg}; color:#fff; padding:1px 6px; border-radius:4px; font-size:11px;">${escHTML(a.matiere)}</span>${badgePer} <strong>${escHTML(a.ressource)}</strong> ${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}<br><small>${escHTML(a.sequence)} — ${escHTML(a.competence)}</small></td>` + elevesNiv.map(e => {
+            let valide = e.historique && e.historique.some(h => h.idActivite === a.id), enCours = e.planHebdo && e.planHebdo.includes(a.id);
+            return `<td style="text-align:center; font-size:16px;">${valide ? '✅' : (enCours ? '⏳' : '—')}</td>`;
+        }).join('') + `</tr>`;
+    });
+    cont.innerHTML = html + `</tbody></table>`;
+}
+
+function changerBilanEval(idEl, cleComp, valeur) {
+    let e = eleves[idEl]; if (!e) return;
+    if (!e.bilanEvaluations) e.bilanEvaluations = {};
+    e.bilanEvaluations[cleComp] = valeur; sauvegarderEleves(); showToast("Niveau d'acquisition enregistré !", "success");
+}
+function genererBilanEleve() {
+    const sel = document.getElementById('selectEleveBilan'), cont = document.getElementById('conteneurBilanEleve'); if (!sel || !cont) return;
+    let idEl = sel.value || idEleveCourant;
+    if (!idEl || !eleves[idEl]) { cont.innerHTML = `<div class="empty-state"><p>Sélectionnez un élève pour afficher son bilan.</p></div>`; return; }
+    sel.value = idEl; let e = eleves[idEl]; if (!e.bilanEvaluations) e.bilanEvaluations = {};
+    let hist = e.historique || [];
+    if (hist.length === 0) { cont.innerHTML = `<div class="empty-state"><p>Aucune activité validée pour ${escHTML(e.nom)}.</p></div>`; return; }
+
+    let parMat = {};
+    hist.forEach(h => { let a = baseDonnees.find(b => b.id === h.idActivite); if (!a) return; let m = a.matiere || "Autres"; if (!parMat[m]) parMat[m] = []; parMat[m].push({ act: a, date: h.date }); });
+    let html = `<div class="card-panel"><h3>📋 Bilan des acquisitions de ${escHTML(e.nom)} (${escHTML(e.niveau)}) — ${hist.length} activités validées</h3>`;
+    Object.keys(parMat).forEach(m => {
+        let coul = getCouleurMatiereBandeau(m);
+        html += `<div class="bandeau-matiere-print" style="background:${coul.bg}; color:${coul.text}; margin-top:15px;">${escHTML(m.toUpperCase())}</div><table class="table-classique"><thead><tr><th style="width:90px;">Date</th><th style="width:160px;">Séquence</th><th>Compétence</th><th>Atelier validé</th><th style="width:170px;">Maîtrise (LSU)</th></tr></thead><tbody>` + parMat[m].map(it => {
+            let cleComp = `${it.act.matiere}||${it.act.competence || it.act.ressource}`, nivMaitrise = e.bilanEvaluations[cleComp] || "Atteint";
+            return `<tr><td>${escHTML(it.date)}</td><td>${escHTML(it.act.sequence)}</td><td><strong>${escHTML(it.act.competence)}</strong></td><td>${escHTML(it.act.ressource)}</td><td><select onchange="changerBilanEval('${e.id}', '${escJS(cleComp)}', this.value)" style="width:100%; font-weight:bold;"><option value="Dépassé" ${nivMaitrise === 'Dépassé' ? 'selected' : ''}>✨ Dépassé</option><option value="Atteint" ${nivMaitrise === 'Atteint' ? 'selected' : ''}>✅ Atteint</option><option value="Partiellement atteint" ${nivMaitrise === 'Partiellement atteint' ? 'selected' : ''}>🟠 Partiellement atteint</option><option value="Non atteint" ${nivMaitrise === 'Non atteint' ? 'selected' : ''}>🔴 Non atteint</option></select></td></tr>`;
+        }).join('') + `</tbody></table>`;
+    });
+    cont.innerHTML = html + `</div>`;
+}
+function exporterBilanEdulivret() {
+    const sel = document.getElementById('selectEleveBilan'); let idEl = sel ? sel.value : idEleveCourant;
+    if (!idEl || !eleves[idEl]) { showToast("Sélectionnez d'abord un élève.", "error"); return; }
+    let e = eleves[idEl], parMat = {};
+    (e.historique || []).forEach(h => {
+        let a = baseDonnees.find(b => b.id === h.idActivite); if (!a) return;
+        let m = a.matiere || "Autres"; if (!parMat[m]) parMat[m] = new Set();
+        let cleComp = `${a.matiere}||${a.competence || a.ressource}`, niv = (e.bilanEvaluations && e.bilanEvaluations[cleComp]) ? e.bilanEvaluations[cleComp] : "Atteint";
+        parMat[m].add(`- ${a.competence || a.ressource} (${a.sequence}) : ${niv}`);
+    });
+    let lignes = [`BILAN DES COMPÉTENCES — ${e.nom.toUpperCase()} (${e.niveau})\n`];
+    Object.keys(parMat).forEach(m => { lignes.push(`=== ${m.toUpperCase()} ===`); parMat[m].forEach(it => lignes.push(it)); lignes.push(''); });
+    let zone = document.getElementById('zoneExportEdulivret'), ta = document.getElementById('textareaExportLSU');
+    if (zone && ta) { zone.style.display = 'block'; ta.value = lignes.join('\n'); ta.select(); navigator.clipboard?.writeText(ta.value).catch(() => {}); showToast("📋 Bilan copié dans le presse-papiers !", "success"); }
+}
+
+// ==========================================
+// 9. NAVIGATION & INITIALISATION GLOBALE
+// ==========================================
+function changerOnglet(idPage, element) {
+    document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+    let targetPage = document.getElementById(idPage); if (targetPage) targetPage.classList.add('active'); if (element) element.classList.add('active');
+    if (idPage === 'pageSuivi') { majListeEleves(); if (idEleveCourant) chargerEleve(); }
+    if (idPage === 'pageImpression') { if (idEleveCourant) idEleveImpressionCourant = idEleveCourant; majListeEleves(); chargerConfigImpressionUI(); changementEleveImpression(); }
+    if (idPage === 'pageDashboard') { rafraichirDashboard(); }
+    if (idPage === 'pageBase') { initNiveaux(); majSelectCouleursRapides(); verifierNiveauxCMFormSimple(); afficherBase(); }
+    if (idPage === 'pageProg') { initProgFilters(); afficherProgrammation(); }
+    if (idPage === 'pageEtiquettes') { afficherChoixEtiquettes(); }
+    if (idPage === 'pageMatrice') { genererMatriceCompetences(); }
+    if (idPage === 'pageBilan') { majListeEleves(); genererBilanEleve(); }
+    if (idPage === 'pageSave') { calculTailleStockage(); tenterConnexionAutoFirebase(); }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    appliquerThemeVisuel(localStorage.getItem(KEY_THEME) || 'pastel');
+    majVisibiliteParcoursCreation(document.getElementById('nouvelEleveNiveau')?.value || 'CP');
+    let inpMat = document.getElementById('inputMatiere');
+    if (inpMat) inpMat.addEventListener('input', majCouleurAutoFormSimple);
+    let selType = document.getElementById('selectTypeRessource');
+    if (selType) selType.addEventListener('change', majCouleurAutoFormSimple);
+    verifierNiveauxCMFormSimple();
+    rafraichirToutApresImport();
+    tenterConnexionAutoFirebase();
+});
