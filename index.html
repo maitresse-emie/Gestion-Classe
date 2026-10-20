@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GestionClasse - Plans de Travail & Suivi</title>
-    <link rel="stylesheet" href="style.css?v=20261026">
+    <link rel="stylesheet" href="style.css?v=20261027">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
 </head>
@@ -352,7 +352,7 @@
                     <div class="form-grid-base">
                         <div>
                             <label>Matière :</label>
-                            <input type="text" id="inputMatiere" list="listeMatieresConnues" placeholder="Ex: Français, Mathématiques...">
+                            <input type="text" id="inputMatiere" list="listeMatieresConnues" placeholder="Ex: 🔤Français - Grammaire">
                             <datalist id="listeMatieresConnues"></datalist>
                         </div>
                         <div>
@@ -378,12 +378,12 @@
                             <select id="selectTypeRessource"></select>
                         </div>
                         <div>
-                            <label>N° Atelier / Boîte (Symbole) :</label>
-                            <input type="text" id="inputSymbole" placeholder="Ex: A1, Boîte 3...">
+                            <label>N° Atelier / Boîte (ex: 1, 2, A1) :</label>
+                            <input type="text" id="inputSymbole" placeholder="Ex: 1 (donnera 🎲🔤1)">
                         </div>
                         <div>
                             <label>Nb Pers. :</label>
-                            <input type="text" id="inputPersonnes" placeholder="Ex: 1, 2, 1 à 4...">
+                            <input type="text" id="inputPersonnes" placeholder="Ex: 👤, 👥, 👨‍👩‍👧...">
                         </div>
                         <div>
                             <label>📘 Page Manuel (ou 🟡 Parcours Jaune CM) :</label>
@@ -464,7 +464,7 @@
                         </div>
                         <div>
                             <label><strong>2. Matière commune :</strong></label>
-                            <input type="text" id="multiMatiere" list="listeMatieresConnues" placeholder="Ex: Français, Mathématiques...">
+                            <input type="text" id="multiMatiere" list="listeMatieresConnues" placeholder="Ex: 🔤Français - Grammaire">
                         </div>
                         <div>
                             <label><strong>3. Séquence commune :</strong></label>
@@ -617,7 +617,7 @@
                         <label>Hauteur min (px) : <input type="number" id="etiqHauteurInput" value="95" min="50" max="300" style="width:65px;" onchange="genererApercuEtiquettes()"></label>
                         <label>Police (px) : <input type="number" id="etiqFontInput" value="14" min="10" max="26" style="width:55px;" onchange="genererApercuEtiquettes()"></label>
                         <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowComp" checked onchange="genererApercuEtiquettes()"> Afficher la compétence</label>
-                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowImg" checked onchange="genererApercuEtiquettes()"> Afficher les logos/images</label>
+                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowImg" checked onchange="genererApercuEtiquettes()"> Afficher le code / logo (ex: 🎲🔤1)</label>
                     </div>
                 </div>
                 <div id="listeChoixEtiquettes" style="max-height:210px; overflow-y:auto; margin-bottom:20px; border:1px solid #ddd; border-radius:6px; padding:10px; background:#fff;"></div>
@@ -795,12 +795,13 @@
     </div>
 
     <div id="modalTypes" class="modal" style="display:none;">
-        <div class="modal-content" style="max-width:760px;">
-            <h3>⚙️ Gérer les Types de supports, Logos & Quotas Tablettes</h3>
+        <div class="modal-content" style="max-width:780px;">
+            <h3>⚙️ Gérer les Types de supports, Émojis, Logos & Quotas Tablettes</h3>
             <div style="background:#f8f9fa; padding:10px; border-radius:6px; margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                <input type="text" id="inputNouveauTypeNom" placeholder="Nouveau type (ex: Anton)">
-                <input type="text" id="inputNouveauTypeImg" placeholder="URL image/logo (optionnel)" style="flex:1;">
-                <label style="font-size:12px;"><input type="checkbox" id="cbNouveauTypeRempNum"> Logo remplace N° Atelier</label>
+                <input type="text" id="inputNouveauTypeNom" placeholder="Nouveau type (ex: Jeu)">
+                <input type="text" id="inputNouveauTypeEmoji" placeholder="Émoji (ex: 🎲)" style="width:110px;">
+                <input type="text" id="inputNouveauTypeImg" placeholder="ou URL image/logo (optionnel)" style="flex:1;">
+                <label style="font-size:12px;"><input type="checkbox" id="cbNouveauTypeRempNum"> Logo seul</label>
                 <label style="font-size:12px;"><input type="checkbox" id="cbNouveauTypeCouleur" checked> Colorer</label>
                 <label style="font-size:12px;"><input type="checkbox" id="cbNouveauTypeTablette"> 📱 Tablette</label>
                 <button type="button" class="btn-action" onclick="ajouterOuModifierType()">➕ Ajouter</button>
@@ -883,6 +884,6 @@
 
     <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" style="display:none; position:fixed; bottom:20px; right:20px; z-index:99; background:#1b4f72; color:#fff; border:none; padding:12px 16px; border-radius:50%; cursor:pointer; font-size:16px; box-shadow:0 3px 8px rgba(0,0,0,0.2);">⬆️</button>
 
-    <script src="script.js?v=20261026"></script>
+    <script src="script.js?v=20261027"></script>
 </body>
 </html>
