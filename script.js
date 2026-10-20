@@ -27,8 +27,7 @@ let printConfig = JSON.parse(localStorage.getItem(KEY_PRINT_CFG)) || {
     meteo: "meteo",
     afficherCompteur: true,
     afficherSignature: true,
-    afficherCommentaire: false,
-    afficherColBilan: true
+    afficherCommentaire: false
 };
 
 let dateGlobaleDebutISO = "", dateGlobaleDebutFR = "", dateGlobaleFinFR = "";
@@ -87,23 +86,13 @@ function estEleveCM(eleveOuNiveau) {
 function calculerPagePlusUn(val) {
     if (!val || !val.trim()) return "";
     let str = val.trim();
-    // Format "p9", "p.9", "p 9 ex 2" -> "p10", "p.10", "p 10 ex 2"
     let m = str.match(/^(.*?p\.?\s*)(\d+)(.*)$/i);
-    if (m) {
-        return m[1] + (parseInt(m[2], 10) + 1) + m[3];
-    }
-    // Format numérique simple "9" -> "10"
+    if (m) return m[1] + (parseInt(m[2], 10) + 1) + m[3];
     let mNum = str.match(/^(\d+)(.*)$/);
-    if (mNum) {
-        return (parseInt(mNum[1], 10) + 1) + mNum[2];
-    }
+    if (mNum) return (parseInt(mNum[1], 10) + 1) + mNum[2];
     return str;
 }
 
-// Retourne uniquement la page correspondant à l'élève :
-// - Fichier Jaune prioritaire si activé sur l'élève
-// - CP / CE1 / CE2 : jamais touchés par les parcours (toujours pageManuel standard)
-// - CM1 / CM2 : affiche uniquement la page du parcours suivi par l'élève (Jaune ou Orange)
 function getInfosActivitePourEleve(act, eleve) {
     let useJaune = Boolean(eleve && eleve.fichierJaune && act && act.varianteJaune && act.varianteJaune.trim() !== "");
     if (useJaune) {
@@ -130,7 +119,6 @@ function getInfosActivitePourEleve(act, eleve) {
             }
         }
     } else {
-        // Élèves de CP, CE1, CE2 : affichage classique sans parcours
         if (detailPage) {
             badgeLivre = `<span style="background:#eaf2f8; color:#1b4f72; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold;">📘 ${escHTML(detailPage)}</span>`;
         }
@@ -143,6 +131,43 @@ function getInfosActivitePourEleve(act, eleve) {
         typeEffectif: (act && act.typeRes) ? act.typeRes : "",
         couleurForcee: (act && act.visuel) ? act.visuel : ""
     };
+}
+
+// Génère le visuel de la case "N° Atelier" (Symbole + Logo du type ou image spécifique)
+function getRepereAtelierHtml(act, eleve, tailleMaxImg = 32) {
+    let infos = getInfosActivitePourEleve(act, eleve);
+    let typeKey = "";
+    if (imagesParType) {
+        for (let k in imagesParType) {
+            if (k.trim().toLowerCase() === (infos.typeEffectif || "").trim().toLowerCase()) {
+                typeKey = k;
+                break;
+            }
+        }
+    }
+    let typeCfg = typeKey ? imagesParType[typeKey] : null;
+    let imgUrl = "";
+    if (act && act.imageSpecifique && act.imageSpecifique.trim() !== "") {
+        imgUrl = formaterLienImage(act.imageSpecifique);
+    } else if (typeCfg && typeCfg.img && typeCfg.img.trim() !== "") {
+        imgUrl = formaterLienImage(typeCfg.img);
+    }
+    let remplacerSymbole = Boolean(typeCfg && typeCfg.remplacerNum);
+    let sym = (act && act.symbole) ? act.symbole.trim() : "";
+
+    let html = "";
+    if (imgUrl && !imgUrl.startsWith('#')) {
+        if (remplacerSymbole || !sym) {
+            html = `<img src="${escHTML(imgUrl)}" style="max-height:${tailleMaxImg}px; max-width:60px; object-fit:contain; display:block; margin:auto;">`;
+        } else {
+            html = `<strong>${escHTML(sym)}</strong><br><img src="${escHTML(imgUrl)}" style="max-height:${Math.max(22, tailleMaxImg - 6)}px; max-width:55px; object-fit:contain; margin-top:2px; display:block; margin-left:auto; margin-right:auto;">`;
+        }
+    } else {
+        html = `<strong>${escHTML(sym)}</strong>`;
+    }
+
+    let bg = infos.couleurForcee || calculerCouleurAutomatique(act ? act.matiere : "", act ? act.niveau : "", infos.typeEffectif);
+    return { html, bg, typeEffectif: infos.typeEffectif };
 }
 
 function calculerVendrediDepuisISO(dateISO) {
@@ -165,7 +190,6 @@ function assurerStructureSemaines(e) {
     if (!e.maxAteliers) e.maxAteliers = 15;
     if (e.maxTablettes === undefined) e.maxTablettes = 2;
     if (!e.niveau) e.niveau = "CP";
-    // Parcours uniquement pour CM1 et CM2
     if (estEleveCM(e)) {
         if (e.parcours !== "jaune" && e.parcours !== "orange") {
             e.parcours = (e.niveau.toUpperCase() === "CM2") ? "orange" : "jaune";
@@ -432,7 +456,7 @@ function declencherAutoSaveFirebase() {
 function tenterConnexionAutoFirebase() { chargerDepuisFirebase(false); }
 
 // ==========================================
-// 3. UTILITAIRES, TRI & THÈMES VISUELS
+// 3. UTILITAIRES, TRI FIXE & THÈMES VISUELS
 // ==========================================
 function nettoyerNomPourTri(str) { return (!str) ? "" : str.replace(/^[^a-zA-ZÀ-ÿ0-9]+/, "").trim().toLowerCase(); }
 function formaterEtoiles(nb) { let n = parseInt(nb) || 0; return n <= 0 ? "" : `<span style="color:#f39c12; font-size:12px; margin-right:4px;" title="Difficulté : ${n} étoile(s)">${"⭐".repeat(n)}</span>`; }
@@ -489,23 +513,24 @@ let idEleveCourant = null, idEleveImpressionCourant = null;
 let filtreCourantDB = 'Tous', filtreCourantMatiere = 'Toutes', filtreCourantTypeDB = 'Tous';
 let idEnCoursEdition = null;
 
-function getListeTrie(idsArray, priosArray = [], suiviObj = {}) {
+// Tri stable : ne dépend PAS de suiviObj en cours de semaine afin que les N° (1, 2, 3...)
+// restent strictement identiques toute la semaine entre la fiche de l'élève et l'écran de l'enseignante.
+function getListeTrie(idsArray, priosArray = []) {
     if (!idsArray) return [];
     let planObjects = idsArray.map(id => baseDonnees.find(b => b.id === id)).filter(Boolean);
     planObjects.sort((a, b) => {
-        let remA = (suiviObj && suiviObj[a.id] && (suiviObj[a.id].statut === 'a_revoir' || suiviObj[a.id].statut === 'a_refaire')) ? 1 : 0;
-        let remB = (suiviObj && suiviObj[b.id] && (suiviObj[b.id].statut === 'a_revoir' || suiviObj[b.id].statut === 'a_refaire')) ? 1 : 0;
-        let prioA = (priosArray.includes(a.id) || remA) ? 1 : 0;
-        let prioB = (priosArray.includes(b.id) || remB) ? 1 : 0;
+        let prioA = (priosArray && priosArray.includes(a.id)) ? 1 : 0;
+        let prioB = (priosArray && priosArray.includes(b.id)) ? 1 : 0;
         if (prioA !== prioB) return prioB - prioA;
-        if (remA !== remB) return remB - remA;
         let matA = nettoyerNomPourTri(a.matiere), matB = nettoyerNomPourTri(b.matiere);
         if (matA !== matB) return matA.localeCompare(matB, 'fr');
         let sA = (a.sequence || "").trim(), sB = (b.sequence || "").trim();
         if (sA !== sB) return sA.localeCompare(sB, 'fr');
         let cA = (a.competence || "").trim(), cB = (b.competence || "").trim();
         if (cA !== cB) return cA.localeCompare(cB, 'fr');
-        return (a.estEvaluation ? 1 : 0) - (b.estEvaluation ? 1 : 0);
+        let evalDiff = (a.estEvaluation ? 1 : 0) - (b.estEvaluation ? 1 : 0);
+        if (evalDiff !== 0) return evalDiff;
+        return (a.ressource || "").localeCompare(b.ressource || "", 'fr');
     });
     return planObjects;
 }
@@ -822,7 +847,6 @@ function chargerEleve() {
     if (maxAff) maxAff.innerText = e.maxAteliers || 15;
     if (cbJaune) cbJaune.checked = Boolean(e.fichierJaune);
 
-    // Afficher le sélecteur de parcours UNIQUEMENT si l'élève est en CM1 ou CM2
     let blocParc = document.getElementById('blocParcoursEleveSuivi');
     let selParc = document.getElementById('selectParcoursEleve');
     if (blocParc && selParc) {
@@ -888,7 +912,7 @@ function afficherRessourcesDisponibles() {
     const per = document.getElementById('selectPeriodeDispo') ? document.getElementById('selectPeriodeDispo').value : "Toutes";
 
     if (!mat) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#7f8c8d;">Choisissez une matière ci-dessus pour voir les activités correspondantes.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#7f8c8d;">Choisissez une matière ci-dessus pour voir les activités correspondantes.</td></tr>';
         return;
     }
 
@@ -910,13 +934,14 @@ function afficherRessourcesDisponibles() {
     });
 
     if (liste.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#7f8c8d;">Aucune activité disponible avec ces critères pour le niveau ' + escHTML(nivEleve) + '.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#7f8c8d;">Aucune activité disponible avec ces critères pour le niveau ' + escHTML(nivEleve) + '.</td></tr>';
         return;
     }
 
     let html = '';
     liste.forEach(a => {
         let infos = getInfosActivitePourEleve(a, eleve);
+        let rep = getRepereAtelierHtml(a, eleve, 26);
         let coul = getCouleurMatiereBandeau(a.matiere);
         let perAct = programmations[a.id] || a.periode || "-";
         html += `<tr>
@@ -924,6 +949,7 @@ function afficherRessourcesDisponibles() {
             <td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${coul.bg}; margin-right:4px;"></span><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
             <td>${escHTML(a.competence)}</td>
             <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infos.badgeLivre} ${a.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : ''}</td>
+            <td style="text-align:center; background:${rep.bg};">${rep.html}</td>
             <td>
                 <select id="jour_dispo_${a.id}" style="width:100%; padding:4px; font-size:12px;">
                     <option value="">-- Libre --</option>
@@ -1192,14 +1218,17 @@ function afficherPlanHebdo() {
     let nbTabCount = eleve.planHebdo.map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length;
     let compteurTabElem = document.getElementById('compteurTablettesEleve'); if (compteurTabElem) compteurTabElem.innerText = `${nbTabCount}/${eleve.maxTablettes ?? 2}`;
 
-    let planObjects = getListeTrie(eleve.planHebdo, eleve.priorites || [], eleve.suivi || {});
+    let planObjects = getListeTrie(eleve.planHebdo, eleve.priorites || []);
     planObjects.forEach((a, index) => {
-        const num = index + 1; let badge = a.estEvaluation ? `<span class="badge-eval">🎯 Éval</span>` : ''; let estValide = eleve.valides && eleve.valides[a.id];
+        const num = index + 1;
+        let badge = a.estEvaluation ? `<span class="badge-eval">🎯 Éval</span>` : '';
+        let estValide = eleve.valides && eleve.valides[a.id];
         let rowClass = a.estEvaluation ? 'row-eval' : (estValide ? 'row-valide' : '');
         let statutSuivi = (eleve.suivi && eleve.suivi[a.id]) ? eleve.suivi[a.id].statut : "";
-        let isPrio = (eleve.priorites && eleve.priorites.includes(a.id)) || statutSuivi === 'a_revoir' || statutSuivi === 'a_refaire';
+        let isPrio = (eleve.priorites && eleve.priorites.includes(a.id));
         let logoDebutLigne = statutSuivi === 'a_revoir' ? `👩‍🏫 ` : (statutSuivi === 'a_refaire' ? `🔄 ` : "");
         let infosL = getInfosActivitePourEleve(a, eleve);
+        let rep = getRepereAtelierHtml(a, eleve, 28);
 
         let suiviHtml = `<div style="margin-top:4px; display:flex; gap:4px; flex-wrap:wrap;">
             <button type="button" class="filter-btn" style="font-size:11px; padding:2px 6px; ${statutSuivi === 'a_revoir' ? 'background:#c0392b; color:#fff;' : ''}" onclick="definirStatutSuivi('${a.id}', '${statutSuivi === 'a_revoir' ? '' : 'a_revoir'}')">👩‍🏫 À revoir</button>
@@ -1223,11 +1252,12 @@ function afficherPlanHebdo() {
             <td><span style="display:inline-block; padding:2px 8px; border-radius:4px; background:${coulMat.bg}; color:${coulMat.text}; font-weight:bold; font-size:12px; margin-bottom:3px;">${escHTML(a.matiere)}</span><br>${escHTML(a.sequence)}</td>
             <td>${a.lecon ? '<strong>'+escHTML(a.lecon)+'</strong> - ' : ''}${escHTML(a.competence)}</td>
             <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infosL.badgeLivre} ${badge} ${suiviHtml}</td>
+            <td style="text-align:center; background:${rep.bg};">${rep.html}</td>
             <td style="text-align:center;">${selectJourHtml}</td>
             <td>${actionHtml}</td>
         </tr>`;
     });
-    if (eleve.planHebdo.length === 0) tbodyApercu.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#7f8c8d; padding:20px;">Plan vide.</td></tr>';
+    if (eleve.planHebdo.length === 0) tbodyApercu.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#7f8c8d; padding:20px;">Plan vide.</td></tr>';
 
     const blocAtt = document.getElementById('blocEnAttenteEleve'), tbodyAtt = document.getElementById('tableEnAttente'), cptAtt = document.getElementById('compteurAttenteEleve');
     if (blocAtt && tbodyAtt) {
@@ -1259,7 +1289,7 @@ function afficherHistorique() {
 }
 
 // ==========================================
-// 5. ONGLET 2 : IMPRESSION FICHES ÉLÈVES
+// 5. ONGLET 2 : IMPRESSION FICHES ÉLÈVES (N° FIXES + TABLEAU SEMAINIER + LOGOS)
 // ==========================================
 function chargerConfigImpressionUI() {
     let t = document.getElementById('printInputTitre'); if (t) t.value = printConfig.titre || "Plan de travail";
@@ -1268,16 +1298,18 @@ function chargerConfigImpressionUI() {
     let cbCpt = document.getElementById('printCbCompteur'); if (cbCpt) cbCpt.checked = printConfig.afficherCompteur !== false;
     let cbSig = document.getElementById('printCbSignature'); if (cbSig) cbSig.checked = printConfig.afficherSignature !== false;
     let cbCom = document.getElementById('printCbCommentaire'); if (cbCom) cbCom.checked = Boolean(printConfig.afficherCommentaire);
-    let cbBil = document.getElementById('printCbColBilan'); if (cbBil) cbBil.checked = printConfig.afficherColBilan !== false;
 }
 
 function sauvegarderConfigImpression() {
     let t = document.getElementById('printInputTitre'), c = document.getElementById('printInputConsigne'), m = document.getElementById('printSelectMeteo');
-    let cbCpt = document.getElementById('printCbCompteur'), cbSig = document.getElementById('printCbSignature'), cbCom = document.getElementById('printCbCommentaire'), cbBil = document.getElementById('printCbColBilan');
+    let cbCpt = document.getElementById('printCbCompteur'), cbSig = document.getElementById('printCbSignature'), cbCom = document.getElementById('printCbCommentaire');
     printConfig = {
-        titre: t ? t.value : "Plan de travail", consigne: c ? c.value : "", meteo: m ? m.value : "meteo",
-        afficherCompteur: cbCpt ? cbCpt.checked : true, afficherSignature: cbSig ? cbSig.checked : true,
-        afficherCommentaire: cbCom ? cbCom.checked : false, afficherColBilan: cbBil ? cbBil.checked : true
+        titre: t ? t.value : "Plan de travail",
+        consigne: c ? c.value : "",
+        meteo: m ? m.value : "meteo",
+        afficherCompteur: cbCpt ? cbCpt.checked : true,
+        afficherSignature: cbSig ? cbSig.checked : true,
+        afficherCommentaire: cbCom ? cbCom.checked : false
     };
     localStorage.setItem(KEY_PRINT_CFG, JSON.stringify(printConfig));
     declencherAutoSaveFirebase();
@@ -1313,94 +1345,158 @@ function appliquerDateImpression(dateISO) {
 
 function genererHtmlFicheEleve(e, format = 'A4') {
     assurerStructureSemaines(e);
-    let planObjs = getListeTrie(e.planHebdo, e.priorites || [], e.suivi || {});
-    let parMatiere = {};
-    planObjs.forEach((act, idx) => {
-        let m = act.matiere || "Autres";
-        if (!parMatiere[m]) parMatiere[m] = [];
-        parMatiere[m].push({ act, num: idx + 1 });
-    });
+    let planObjects = getListeTrie(e.planHebdo, e.priorites || []);
 
     let titreFiche = (printConfig && printConfig.titre) ? printConfig.titre.trim() : "Plan de travail";
-    let consigneSem = (printConfig && printConfig.consigne) ? printConfig.consigne.trim() : "";
-    let showColBilan = !printConfig || printConfig.afficherColBilan !== false;
+    let consignePerso = (printConfig && printConfig.consigne && printConfig.consigne.trim() !== "")
+        ? escHTML(printConfig.consigne.trim())
+        : `Choisis tes ateliers et écris leur <strong>N°</strong> dans le semainier (les numéros <u>soulignés</u> sont déjà placés au jour imposé, 👩‍🏫 = avec la maîtresse). <strong>Entoure</strong> le numéro quand tu commences, <strong>barre-le</strong> quand c'est terminé !`;
 
-    let blocsDroite = [];
-    if (!printConfig || printConfig.afficherCompteur !== false) blocsDroite.push(`<span>Ateliers réussis : <strong>___ / ${planObjs.length}</strong></span>`);
-    if (!printConfig || printConfig.meteo !== 'aucun') {
-        let iconeBilan = "☀️ ⛅ 🌧️";
-        if (printConfig && printConfig.meteo === 'smileys') iconeBilan = "😊 😐 😟";
-        if (printConfig && printConfig.meteo === 'etoiles') iconeBilan = "⭐ ⭐ ⭐";
-        blocsDroite.push(`<span>Mon bilan : ${iconeBilan}</span>`);
+    // 1. Construction du Tableau d'organisation de la semaine (Lundi / Mardi / Jeudi / Vendredi)
+    let joursJours = { "Lundi": [], "Mardi": [], "Jeudi": [], "Vendredi": [] };
+    planObjects.forEach((a, idx) => {
+        let num = idx + 1;
+        let jImp = (e.joursAssignes && e.joursAssignes[a.id]) ? e.joursAssignes[a.id] : "";
+        if (jImp && joursJours[jImp]) {
+            let st = (e.suivi && e.suivi[a.id]) ? e.suivi[a.id].statut : "";
+            let icone = st === 'a_revoir' ? '👩‍🏫' : (st === 'a_refaire' ? '🔄' : '');
+            joursJours[jImp].push(`${icone}<u>${num}</u>`);
+        }
+    });
+
+    let nbLignesPlanning = Math.max(4, Math.ceil(planObjects.length / 3), joursJours["Lundi"].length, joursJours["Mardi"].length, joursJours["Jeudi"].length, joursJours["Vendredi"].length);
+    let planningRowsHtml = "";
+    for (let i = 0; i < nbLignesPlanning; i++) {
+        let valLun = joursJours["Lundi"][i] !== undefined ? joursJours["Lundi"][i] : "";
+        let valMar = joursJours["Mardi"][i] !== undefined ? joursJours["Mardi"][i] : "";
+        let valJeu = joursJours["Jeudi"][i] !== undefined ? joursJours["Jeudi"][i] : "";
+        let valVen = joursJours["Vendredi"][i] !== undefined ? joursJours["Vendredi"][i] : "";
+        planningRowsHtml += `<tr>
+            <td><span class="planning-cell-box">${valLun}</span></td>
+            <td><span class="planning-cell-box">${valMar}</span></td>
+            <td><span class="planning-cell-box">${valJeu}</span></td>
+            <td><span class="planning-cell-box">${valVen}</span></td>
+        </tr>`;
     }
-    if (!printConfig || printConfig.afficherSignature !== false) blocsDroite.push(`<span>Signature : ____________</span>`);
 
-    let html = `<div class="fiche-plan-print ${format === 'A4' ? 'a4-page' : ''}">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; border-bottom:2px solid #1b4f72; padding-bottom:6px; margin-bottom:8px;">
-            <div>
-                <h2 style="margin:0; border:none; padding:0; font-size:18px; color:#1b4f72;">${escHTML(titreFiche)} — ${escHTML(e.nom)} (${escHTML(e.niveau)})</h2>
-                <span style="font-size:12.5px; color:#444; font-weight:bold;">Semaine ${(e.semaineIndex || 0) + 1} ${(e.dateDebut && e.dateFin) ? `du ${e.dateDebut} au ${e.dateFin}` : ''}</span>
-            </div>
-            <div style="font-size:12px; text-align:right; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-                ${blocsDroite.join(' &nbsp;|&nbsp; ')}
-            </div>
+    let planningTableHtml = `<div style="margin-bottom:8px;">
+        <table class="planning-table">
+            <thead>
+                <tr>
+                    <th>LUNDI</th>
+                    <th>MARDI</th>
+                    <th>JEUDI</th>
+                    <th>VENDREDI</th>
+                </tr>
+            </thead>
+            <tbody>${planningRowsHtml}</tbody>
+        </table>
+    </div>`;
+
+    // 2. Construction du tableau unique des ateliers avec N° (1, 2, 3...) fixe et colonne N° Atelier (symbole + image type)
+    let rowsHtml = "";
+    let derniereCleSeq = "";
+
+    planObjects.forEach((a, index) => {
+        const num = index + 1;
+        let cleSeq = `${a.matiere || ''}||${a.sequence || ''}`;
+        if (cleSeq !== derniereCleSeq) {
+            derniereCleSeq = cleSeq;
+            let coul = getCouleurMatiereBandeau(a.matiere);
+            rowsHtml += `<tr class="sequence-separator-row">
+                <td colspan="7" style="background-color: ${coul.bg} !important; color: ${coul.text} !important; border-color: ${coul.border} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+                    📑 ${escHTML((a.matiere || '').toUpperCase())} — Séquence : ${escHTML(a.sequence || '')}
+                </td>
+            </tr>`;
+        }
+
+        let infos = getInfosActivitePourEleve(a, e);
+        let rep = getRepereAtelierHtml(a, e, 34);
+        let jourImp = (e.joursAssignes && e.joursAssignes[a.id]) ? e.joursAssignes[a.id] : "";
+        let estValide = e.valides && e.valides[a.id];
+        let rowClass = a.estEvaluation ? 'row-eval' : (estValide ? 'row-valide' : '');
+        let statutSuivi = (e.suivi && e.suivi[a.id]) ? e.suivi[a.id].statut : "";
+        let logoMaitresseDebut = statutSuivi === 'a_revoir' ? '👩‍🏫 ' : (statutSuivi === 'a_refaire' ? '🔄 ' : '');
+        let numCellClass = jourImp ? 'col-num num-jour-impose' : 'col-num';
+        let resStyle = jourImp ? 'text-decoration:underline;' : '';
+        let badgeEval = a.estEvaluation ? ` <span class="badge-eval">🎯 Éval</span>` : '';
+
+        rowsHtml += `<tr class="${rowClass}">
+            <td class="${numCellClass}" style="white-space:nowrap;">${logoMaitresseDebut}${num}</td>
+            <td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td>
+            <td>${a.lecon ? '<em>' + escHTML(a.lecon) + '</em><br>' : ''}${escHTML(a.competence)}</td>
+            <td>${logoMaitresseDebut}${formaterEtoiles(a.difficulte)}<strong style="${resStyle}">${escHTML(a.ressource)}</strong> ${infos.badgeLivre}${badgeEval}</td>
+            <td class="col-center">${escHTML(rep.typeEffectif)}</td>
+            <td class="col-center print-visual-cell" style="background-color:${rep.bg} !important; width:80px; text-align:center;">${rep.html}</td>
+            <td class="col-center">${escHTML(a.personnes || '')}</td>
+        </tr>`;
+    });
+
+    if (planObjects.length === 0) {
+        rowsHtml = `<tr><td colspan="7" style="text-align:center; color:#7f8c8d;">Aucune activité dans le plan de cette semaine.</td></tr>`;
+    }
+
+    // 3. Pied de page (Bilan, Météo, Signature)
+    let blocsPied = [];
+    if (!printConfig || printConfig.afficherCompteur !== false) {
+        blocsPied.push(`<div style="flex:1; border:1px solid #7f8c8d; border-radius:4px; padding:4px 8px; display:flex; align-items:center; justify-content:space-between;">
+            <strong>🏁 Bilan de ma semaine :</strong>
+            <span style="font-size:10.5px; font-weight:bold;">Ateliers terminés : ...... / ${planObjects.length}</span>
+        </div>`);
+    }
+    if (!printConfig || printConfig.meteo !== 'aucun') {
+        let icones = `<span style="font-size:13px;">☀️</span> <span style="font-size:13px;">⛅</span> <span style="font-size:13px;">🌧️</span>`;
+        if (printConfig && printConfig.meteo === 'smileys') icones = `<span style="font-size:13px;">😊</span> <span style="font-size:13px;">😐</span> <span style="font-size:13px;">😟</span>`;
+        if (printConfig && printConfig.meteo === 'etoiles') icones = `<span style="font-size:13px;">⭐</span> <span style="font-size:13px;">⭐</span> <span style="font-size:13px;">⭐</span>`;
+        blocsPied.push(`<div style="flex:1; border:1px solid #7f8c8d; border-radius:4px; padding:4px 8px; display:flex; align-items:center; justify-content:space-around;">
+            <strong>🌤️ Mon bilan :</strong> ${icones}
+        </div>`);
+    }
+    if (!printConfig || printConfig.afficherSignature !== false) {
+        blocsPied.push(`<div style="flex:1; border:1px solid #7f8c8d; border-radius:4px; padding:4px 8px; display:flex; align-items:center; justify-content:space-between;">
+            <strong>✍️ Signature :</strong> <span>........................</span>
+        </div>`);
+    }
+
+    let bilanBasPageHtml = blocsPied.length > 0
+        ? `<div style="display:flex; justify-content:space-between; align-items:stretch; gap:8px; margin-top:6px; font-size:10px;">${blocsPied.join('')}</div>`
+        : '';
+
+    let commBasHtml = (printConfig && printConfig.afficherCommentaire)
+        ? `<div style="margin-top:6px; border:1px dashed #7f8c8d; border-radius:4px; padding:5px 8px; font-size:11px; min-height:32px;"><strong>💬 Mot de l'enseignante :</strong></div>`
+        : '';
+
+    let html = `<div class="fiche-plan-print plan-eleve-page ${format === 'A4' ? 'a4-page' : ''}">
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1b4f72; padding-bottom:5px; margin-bottom:6px;">
+            <h2 style="margin:0; border:none; padding:0; font-size:17px; color:#1b4f72;">
+                ${escHTML(titreFiche)} — ${escHTML(e.nom)} (${escHTML(e.niveau)})
+            </h2>
+            <span style="font-size:12px; color:#2c3e50; font-weight:bold;">
+                Semaine ${(e.semaineIndex || 0) + 1} ${(e.dateDebut && e.dateFin) ? `du ${e.dateDebut} au ${e.dateFin}` : ''}
+            </span>
         </div>
-        ${consigneSem ? `<div style="background:#f8f9fa; border-left:4px solid #1b4f72; padding:5px 10px; font-size:12.5px; font-style:italic; margin-bottom:8px; border-radius:4px;">📌 ${escHTML(consigneSem)}</div>` : ''}`;
-
-    Object.keys(parMatiere).forEach(mat => {
-        let coul = getCouleurMatiereBandeau(mat);
-        html += `<div class="bandeau-matiere-print" style="background:${coul.bg}; color:${coul.text}; border:1px solid ${coul.border};">${escHTML(mat.toUpperCase())}</div>
+        <div style="background:#f8f9fa; border-left:4px solid #1b4f72; padding:4px 8px; font-size:11px; margin-bottom:6px; border-radius:4px;">
+            📌 ${consignePerso}
+        </div>
+        ${planningTableHtml}
         <table class="table-classique" style="margin-top:0; margin-bottom:6px;">
             <thead>
                 <tr>
-                    <th style="width:45px; text-align:center;">N°</th>
-                    <th style="width:140px;">Séquence / Leçon</th>
-                    <th>Compétence</th>
-                    <th>Activité / Support</th>
-                    <th style="width:75px; text-align:center;">Jour</th>
-                    <th style="width:45px; text-align:center;">Fait</th>
-                    ${showColBilan ? `<th style="width:65px; text-align:center;">Bilan</th>` : ''}
+                    <th class="col-num">N°</th>
+                    <th style="width:135px;">Matière & Séquence</th>
+                    <th>Compétence visée</th>
+                    <th>Ressource à réaliser</th>
+                    <th class="col-center" style="width:75px;">Type</th>
+                    <th class="col-center" style="width:80px;">N° Atelier</th>
+                    <th class="col-center" style="width:55px;">Nb Pers.</th>
                 </tr>
             </thead>
-            <tbody>`;
-        parMatiere[mat].forEach(item => {
-            let a = item.act;
-            let infos = getInfosActivitePourEleve(a, e);
-            let jour = (e.joursAssignes && e.joursAssignes[a.id]) ? e.joursAssignes[a.id] : "";
-            let estFait = e.valides && e.valides[a.id];
-            let statutSuivi = (e.suivi && e.suivi[a.id]) ? e.suivi[a.id].statut : "";
-            let iconeSuivi = statutSuivi === 'a_revoir' ? '👩‍🏫 ' : (statutSuivi === 'a_refaire' ? '🔄 ' : '');
+            <tbody>${rowsHtml}</tbody>
+        </table>
+        ${bilanBasPageHtml}
+        ${commBasHtml}
+    </div>`;
 
-            let typeCfg = imagesParType[infos.typeEffectif] || null;
-            let cellNumContent = `${iconeSuivi}${item.num}`;
-            if (typeCfg && typeCfg.img && typeCfg.remplacerNum) {
-                cellNumContent = `<img src="${escHTML(formaterLienImage(typeCfg.img))}" style="width:24px; height:24px; object-fit:contain; vertical-align:middle;">`;
-            } else if (typeCfg && typeCfg.img) {
-                cellNumContent = `${iconeSuivi}${item.num} <img src="${escHTML(formaterLienImage(typeCfg.img))}" style="width:16px; height:16px; object-fit:contain; vertical-align:middle;">`;
-            }
-
-            let bgCell = infos.couleurForcee || calculerCouleurAutomatique(a.matiere, a.niveau, infos.typeEffectif);
-            let imgSpec = a.imageSpecifique ? `<img src="${escHTML(formaterLienImage(a.imageSpecifique))}" style="height:22px; object-fit:contain; vertical-align:middle; margin-left:4px;">` : '';
-
-            html += `<tr>
-                <td style="text-align:center; font-weight:bold; background:${bgCell};">${cellNumContent}</td>
-                <td>${escHTML(a.sequence)} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
-                <td>${escHTML(a.competence)}</td>
-                <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infos.badgeLivre} ${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''} ${imgSpec}</td>
-                <td style="text-align:center; font-weight:bold;">${escHTML(jour)}</td>
-                <td style="text-align:center; font-size:15px;">${estFait ? '☑️' : '⬜'}</td>
-                ${showColBilan ? `<td style="text-align:center; font-size:11px;">🟢 🟠 🔴</td>` : ''}
-            </tr>`;
-        });
-        html += `</tbody></table>`;
-    });
-
-    if (printConfig && printConfig.afficherCommentaire) {
-        html += `<div style="margin-top:8px; border:1px dashed #7f8c8d; border-radius:6px; padding:6px 10px; font-size:12px; min-height:38px;">
-            <strong>💬 Mot de l'enseignante :</strong>
-        </div>`;
-    }
-    html += `</div>`;
     return html;
 }
 
@@ -1513,7 +1609,7 @@ function rafraichirDashboard() {
         let nbTab = (e.planHebdo || []).map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length;
         let isExp = dashboardExpanded.has(e.id);
         let badgeParc = estEleveCM(e) ? ((e.parcours === 'orange') ? ' 🟠' : ' 🟡') : '';
-        let detailsPlanHtml = isExp ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed #ccc; font-size:12.5px;">` + getListeTrie(e.planHebdo, e.priorites || [], e.suivi || []).map((a, idx) => {
+        let detailsPlanHtml = isExp ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed #ccc; font-size:12.5px;">` + getListeTrie(e.planHebdo, e.priorites || []).map((a, idx) => {
             let fait = e.valides && e.valides[a.id], st = (e.suivi && e.suivi[a.id]) ? e.suivi[a.id].statut : "";
             return `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #f1f5f9;">
                 <span style="${fait ? 'text-decoration:line-through; color:#27ae60;' : ''}"><strong>${idx + 1}.</strong> ${escHTML(a.ressource)}</span>
@@ -1540,7 +1636,7 @@ function rafraichirDashboard() {
 }
 
 // ==========================================
-// 7. ONGLET 4 : BASE DE DONNÉES (+ AUTO-REMPLISSAGE PAGE ORANGE +1 EN CM)
+// 7. ONGLET 4 : BASE DE DONNÉES (+ SYMBOLE, NB PERS & PARCOURS CM)
 // ==========================================
 function estCMSelectionneFormSimple() {
     let nivs = getNiveauxCochesFormulaire('.cb-niveau-form');
@@ -1633,6 +1729,8 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
             <td><input type="text" class="m-comp" list="listeCompetencesConnues" placeholder="Compétence..." style="width:100%;"></td>
             <td><input type="text" class="m-res" placeholder="Ex: Ex 1" style="width:100%;"></td>
             <td><select class="m-type" style="width:100%;">${optsTypes}</select></td>
+            <td><input type="text" class="m-symbole" placeholder="A1" style="width:100%;"></td>
+            <td><input type="text" class="m-pers" placeholder="1" style="width:100%;"></td>
             <td><input type="text" class="m-page" placeholder="p9" oninput="autoRemplirPageOrangeMultiLigne(this)" style="width:100%;"></td>
             <td><input type="text" class="m-orange" placeholder="p10" ${isCM ? '' : 'disabled'} style="width:100%;"></td>
             <td><input type="text" class="m-jaune" placeholder="Fichier p. 8" style="width:100%;"></td>
@@ -1669,6 +1767,8 @@ function enregistrerSaisieMultiple() {
         let lecon = tr.querySelector('.m-lecon').value.trim();
         let competence = tr.querySelector('.m-comp').value.trim();
         let typeRes = tr.querySelector('.m-type').value;
+        let symbole = tr.querySelector('.m-symbole') ? tr.querySelector('.m-symbole').value.trim() : "";
+        let personnes = tr.querySelector('.m-pers') ? tr.querySelector('.m-pers').value.trim() : "";
         let pageManuel = tr.querySelector('.m-page').value.trim();
         let pageOrange = isCM ? (tr.querySelector('.m-orange').value.trim()) : "";
         let varianteJaune = tr.querySelector('.m-jaune').value.trim();
@@ -1679,8 +1779,8 @@ function enregistrerSaisieMultiple() {
 
         baseDonnees.push({
             id: newId, matiere, sequence, lecon, competence, ressource, typeRes,
-            pageManuel, pageOrange, varianteJaune, periode, difficulte, niveau: niveauStr,
-            visuel: couleur, imageSpecifique: "", estEvaluation: estEval
+            symbole, personnes, pageManuel, pageOrange, varianteJaune, periode,
+            difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: "", estEvaluation: estEval
         });
         if (periode) programmations[newId] = periode;
         nbAjoutes++;
@@ -1757,7 +1857,7 @@ function afficherListeTypesModal() {
         return `<div class="ligne-type-modal" data-key="${escHTML(k)}" style="display:flex; gap:8px; align-items:center; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #eee; flex-wrap:wrap;">
             <strong style="width:120px;">${escHTML(k)}</strong>
             <input type="text" class="t-img" value="${escHTML(t.img || '')}" placeholder="URL logo..." style="flex:1;">
-            <label style="font-size:12px;"><input type="checkbox" class="t-remp" ${t.remplacerNum ? 'checked' : ''}> Logo remplace N°</label>
+            <label style="font-size:12px;"><input type="checkbox" class="t-remp" ${t.remplacerNum ? 'checked' : ''}> Logo remplace N° Atelier</label>
             <label style="font-size:12px;"><input type="checkbox" class="t-coul" ${t.appliquerCouleur !== false ? 'checked' : ''}> Colorer</label>
             <label style="font-size:12px;"><input type="checkbox" class="t-tab" ${t.isTablette ? 'checked' : ''}> 📱 Tablette</label>
             <button type="button" class="btn-remove" style="padding:3px 7px;" onclick="supprimerTypeRessource('${escJS(k)}')">🗑️</button>
@@ -1802,6 +1902,8 @@ function enregistrerActiviteBase() {
     let competence = document.getElementById('inputCompetence').value.trim();
     let ressource = document.getElementById('inputRessource').value.trim();
     let typeRes = document.getElementById('selectTypeRessource').value;
+    let symbole = document.getElementById('inputSymbole') ? document.getElementById('inputSymbole').value.trim() : "";
+    let personnes = document.getElementById('inputPersonnes') ? document.getElementById('inputPersonnes').value.trim() : "";
     let pageManuel = document.getElementById('inputPageManuel').value.trim();
     let nivArr = getNiveauxCochesFormulaire('.cb-niveau-form');
     let niveauStr = nivArr.length > 0 ? nivArr.join(', ') : 'CP';
@@ -1819,7 +1921,7 @@ function enregistrerActiviteBase() {
     if (idEnCoursEdition) {
         let act = baseDonnees.find(b => b.id === idEnCoursEdition);
         if (act) {
-            Object.assign(act, { matiere, sequence, lecon, competence, ressource, typeRes, pageManuel, pageOrange, varianteJaune, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval });
+            Object.assign(act, { matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval });
             if (periode) programmations[act.id] = periode;
         }
         idEnCoursEdition = null;
@@ -1828,12 +1930,13 @@ function enregistrerActiviteBase() {
         showToast("Activité modifiée !", "success");
     } else {
         let newId = 'act_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
-        baseDonnees.push({ id: newId, matiere, sequence, lecon, competence, ressource, typeRes, pageManuel, pageOrange, varianteJaune, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval });
+        baseDonnees.push({ id: newId, matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval });
         if (periode) programmations[newId] = periode;
         showToast("Nouvelle activité ajoutée !", "success");
     }
     sauvegarderProgrammations(); postEditGlobal();
     document.getElementById('inputRessource').value = '';
+    if (document.getElementById('inputSymbole')) document.getElementById('inputSymbole').value = '';
     document.getElementById('inputPageManuel').value = '';
     if (document.getElementById('inputPageOrange')) document.getElementById('inputPageOrange').value = '';
     document.getElementById('inputVarianteJaune').value = '';
@@ -1849,6 +1952,8 @@ function editerActiviteBase(idAct) {
     document.getElementById('inputCompetence').value = a.competence || '';
     document.getElementById('inputRessource').value = a.ressource || '';
     document.getElementById('selectTypeRessource').value = a.typeRes || '';
+    if (document.getElementById('inputSymbole')) document.getElementById('inputSymbole').value = a.symbole || '';
+    if (document.getElementById('inputPersonnes')) document.getElementById('inputPersonnes').value = a.personnes || '';
     document.getElementById('inputPageManuel').value = a.pageManuel || '';
     if (document.getElementById('inputPageOrange')) document.getElementById('inputPageOrange').value = a.pageOrange || '';
     document.getElementById('inputVarianteJaune').value = a.varianteJaune || '';
@@ -1895,12 +2000,12 @@ function afficherBase() {
         if (filtreCourantDB !== 'Tous' && !(a.niveau || "").toUpperCase().includes(filtreCourantDB)) return false;
         if (filtreCourantMatiere !== 'Toutes' && (a.matiere || "").trim() !== filtreCourantMatiere) return false;
         if (filtreCourantTypeDB !== 'Tous' && (a.typeRes || "").trim() !== filtreCourantTypeDB) return false;
-        if (q && !`${a.matiere} ${a.sequence} ${a.lecon} ${a.competence} ${a.ressource} ${a.pageManuel} ${a.pageOrange || ''}`.toLowerCase().includes(q)) return false;
+        if (q && !`${a.matiere} ${a.sequence} ${a.lecon} ${a.competence} ${a.ressource} ${a.symbole || ''} ${a.pageManuel} ${a.pageOrange || ''}`.toLowerCase().includes(q)) return false;
         return true;
     });
 
     let cpt = document.getElementById('compteurBaseAffichee'); if (cpt) cpt.innerText = liste.length;
-    if (liste.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#7f8c8d; padding:20px;">Aucune activité trouvée.</td></tr>'; return; }
+    if (liste.length === 0) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#7f8c8d; padding:20px;">Aucune activité trouvée.</td></tr>'; return; }
 
     let html = '';
     liste.forEach(a => {
@@ -1912,16 +2017,23 @@ function afficherBase() {
             badgePages = `<span style="background:#eaf2f8; color:#1b4f72; padding:1px 5px; border-radius:4px; font-size:11px;">📘 ${escHTML(a.pageManuel)}</span> `;
         }
         let detailsLivres = `${badgePages}${a.varianteJaune ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 5px; border-radius:4px; font-size:11px;">📒 ${escHTML(a.varianteJaune)}</span>` : ''}`;
+        let rep = getRepereAtelierHtml(a, null, 26);
         let coulVisuel = a.visuel || calculerCouleurAutomatique(a.matiere, a.niveau, a.typeRes);
+
         html += `<tr>
             <td><strong>${escHTML(a.niveau)}</strong></td>
             <td><span class="filter-btn" style="padding:2px 6px; font-size:11px;">${escHTML(per)}</span></td>
             <td><span style="display:inline-block; padding:2px 7px; border-radius:4px; background:${coul.bg}; color:${coul.text}; font-size:11.5px; font-weight:bold;">${escHTML(a.matiere)}</span><br>${escHTML(a.sequence)} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
             <td>${escHTML(a.competence)}</td>
-            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${a.typeRes ? `<small>[${escHTML(a.typeRes)}]</small>` : ''} ${detailsLivres} ${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}</td>
-            <td style="text-align:center;">
-                <input type="color" value="${coulVisuel.startsWith('#') ? coulVisuel : '#ffffff'}" onchange="changerCouleurDB('${a.id}', this.value)" style="width:28px; height:24px; border:none; cursor:pointer; vertical-align:middle;">
-                <button type="button" class="filter-btn" style="padding:2px 6px;" onclick="changerImageDB('${a.id}')">${a.imageSpecifique ? '🖼️' : '➕🖼️'}</button>
+            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${detailsLivres} ${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}</td>
+            <td>${escHTML(a.typeRes || '')}</td>
+            <td style="text-align:center;">${escHTML(a.personnes || '')}</td>
+            <td style="text-align:center; background:${rep.bg};">
+                ${rep.html}
+                <div style="margin-top:3px;">
+                    <input type="color" value="${coulVisuel.startsWith('#') ? coulVisuel : '#ffffff'}" onchange="changerCouleurDB('${a.id}', this.value)" style="width:22px; height:18px; border:none; cursor:pointer; vertical-align:middle;">
+                    <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" onclick="changerImageDB('${a.id}')">${a.imageSpecifique ? '🖼️' : '➕🖼️'}</button>
+                </div>
             </td>
             <td>
                 <div style="display:flex; gap:4px; flex-wrap:wrap;">
@@ -1994,7 +2106,7 @@ function genererApercuEtiquettes() {
         let coul = getCouleurMatiereBandeau(a.matiere), bgEtiq = a.visuel || calculerCouleurAutomatique(a.matiere, a.niveau, a.typeRes);
         let typeCfg = imagesParType[a.typeRes] || null, imgUrl = a.imageSpecifique || (typeCfg && typeCfg.img ? typeCfg.img : "");
         return `<div class="etiquette-item" style="width:${w}px; min-height:${h}px; background:${bgEtiq}; border-color:${coul.bg}; font-size:${fs}px;">
-            <div style="background:${coul.bg}; color:${coul.text}; font-size:${Math.max(10, fs - 3)}px; font-weight:bold; padding:2px 6px; border-radius:4px; margin-bottom:5px;">${escHTML(a.matiere)} • ${escHTML(a.niveau)}</div>
+            <div style="background:${coul.bg}; color:${coul.text}; font-size:${Math.max(10, fs - 3)}px; font-weight:bold; padding:2px 6px; border-radius:4px; margin-bottom:5px;">${escHTML(a.matiere)} • ${escHTML(a.niveau)} ${a.symbole ? '• ' + escHTML(a.symbole) : ''}</div>
             ${showImg && imgUrl ? `<div style="margin:4px 0;"><img src="${escHTML(formaterLienImage(imgUrl))}" style="max-height:38px; object-fit:contain;"></div>` : ''}
             <div style="font-weight:bold; font-size:${fs + 1}px; margin-bottom:3px;">${escHTML(a.ressource)}</div>
             <div style="font-size:${Math.max(10, fs - 2)}px; color:#333;">${escHTML(a.sequence)} ${a.lecon ? '— '+escHTML(a.lecon) : ''}</div>
