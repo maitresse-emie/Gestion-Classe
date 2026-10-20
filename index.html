@@ -4,16 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GestionClasse - Plans de Travail & Suivi</title>
-    <link rel="stylesheet" href="style.css?v=20261023">
+    <link rel="stylesheet" href="style.css?v=20261025">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
 </head>
 <body class="theme-pastel">
 
-    <!-- Conteneur pour les notifications Toast -->
     <div id="toast-container"></div>
 
-    <!-- Barre de navigation principale dans l'ordre logique d'origine -->
+    <!-- Barre de navigation principale -->
     <div class="navbar no-print">
         <button class="nav-btn active" onclick="changerOnglet('pageSuivi', this)">🧑‍🎓 1. Plan & Suivi</button>
         <button class="nav-btn" onclick="changerOnglet('pageImpression', this)">🖨️ 2. Fiche Élève</button>
@@ -24,14 +23,12 @@
         <button class="nav-btn" onclick="changerOnglet('pageMatrice', this)" style="background:#16a085;">🧮 7. Matrice</button>
         <button class="nav-btn" onclick="changerOnglet('pageBilan', this)" style="background:#9b59b6;">📝 8. Bilans</button>
         <button class="nav-btn" onclick="changerOnglet('pageSave', this)" style="background:#c0392b;">💾 9. Sauvegarde</button>
-        <button class="btn-theme-config no-print" onclick="ouvrirModal('modalDesign')" title="Personnaliser le graphisme de l'application">🎨 Design</button>
+        <button class="btn-theme-config no-print" onclick="ouvrirModal('modalDesign')" title="Personnaliser le graphisme">🎨 Design</button>
     </div>
 
     <main class="container">
 
-        <!-- ========================================== -->
-        <!-- 1. PLAN & SUIVI ÉLÈVES                     -->
-        <!-- ========================================== -->
+        <!-- 1. PLAN & SUIVI ÉLÈVES -->
         <div id="pageSuivi" class="page active">
             <div class="panel">
                 <h2>🧑‍🎓 1. Plan de travail & Suivi individualisé</h2>
@@ -48,12 +45,16 @@
                     <div class="ajout-eleve-bar">
                         <strong>➕ Nouvel élève :</strong>
                         <input type="text" id="nouvelEleveNom" placeholder="Prénom de l'élève">
-                        <select id="nouvelEleveNiveau">
+                        <select id="nouvelEleveNiveau" onchange="majVisibiliteParcoursCreation(this.value)">
                             <option value="CP">CP</option>
                             <option value="CE1">CE1</option>
                             <option value="CE2">CE2</option>
                             <option value="CM1">CM1</option>
                             <option value="CM2">CM2</option>
+                        </select>
+                        <select id="nouvelEleveParcours" style="display:none;" title="Parcours manuel CM (Jaune par défaut en CM1, Orange en CM2)">
+                            <option value="jaune">🟡 Parcours Jaune</option>
+                            <option value="orange">🟠 Parcours Orange</option>
                         </select>
                         <label style="cursor:pointer; font-size:13px;">
                             <input type="checkbox" id="nouvelEleveFichierJaune"> 📒 Fichier Jaune
@@ -67,7 +68,6 @@
                 </div>
 
                 <div id="zoneTravail" style="display: none;">
-                    <!-- Barre de gestion des semaines -->
                     <div class="panel-semaines">
                         <div class="semaines-flex">
                             <div>
@@ -86,7 +86,7 @@
                         </div>
                     </div>
 
-                    <!-- Quotas et options de l'élève -->
+                    <!-- Quotas, Parcours (uniquement CM1/CM2) et Fichier Jaune -->
                     <div class="quotas-bar">
                         <div style="display:flex; gap:18px; align-items:center; flex-wrap:wrap;">
                             <span class="badge-quota">📌 Ateliers : <strong id="compteurAteliersEleve">0</strong> / <span id="maxAteliersAffiche">15</span></span>
@@ -94,7 +94,14 @@
                             <span class="badge-quota tablette">📱 Tablettes : <strong id="compteurTablettesEleve">0/2</strong></span>
                             <label style="font-size:13px;">Max Tablettes : <input type="number" id="inputMaxTablettesEleve" min="0" max="10" value="2" onchange="modifierMaxTablettesEleve()" style="width:55px;"></label>
                         </div>
-                        <div>
+                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                            <label id="blocParcoursEleveSuivi" style="display:none; background:#fdf2e9; color:#784212; padding:5px 10px; border-radius:6px; border:1px solid #f5b041; font-weight:bold; font-size:13.5px;">
+                                Parcours CM :
+                                <select id="selectParcoursEleve" onchange="changerParcoursEleve(this.value)" style="padding:3px 6px; font-weight:bold; border-radius:4px; border:1px solid #d35400;">
+                                    <option value="jaune">🟡 Parcours Jaune</option>
+                                    <option value="orange">🟠 Parcours Orange</option>
+                                </select>
+                            </label>
                             <label class="badge-jaune-toggle">
                                 <input type="checkbox" id="cbFichierJauneEleve" onchange="toggleFichierJauneEleve(this.checked)"> 📒 Mode Fichier Jaune
                             </label>
@@ -171,7 +178,7 @@
                         <tbody id="tableApercuPlan"></tbody>
                     </table>
 
-                    <!-- File d'attente (enAttente) pour la semaine suivante -->
+                    <!-- File d'attente -->
                     <div id="blocEnAttenteEleve" style="margin-top:20px; display:none;">
                         <h3 style="color:#d35400; margin-bottom:8px;">⏳ Activités en réserve pour la semaine suivante (<span id="compteurAttenteEleve">0</span>)</h3>
                         <table class="table-classique">
@@ -187,7 +194,7 @@
                         </table>
                     </div>
 
-                    <!-- Historique et activités masquées -->
+                    <!-- Historique et masquées -->
                     <div class="grid-2-cols" style="margin-top:30px;">
                         <div>
                             <h3>✅ Historique des activités validées</h3>
@@ -229,9 +236,7 @@
             </div>
         </div>
 
-        <!-- ========================================== -->
-        <!-- 2. FICHE ÉLÈVE (IMPRESSION PLANS)          -->
-        <!-- ========================================== -->
+        <!-- 2. FICHE ÉLÈVE (IMPRESSION PLANS) -->
         <div id="pageImpression" class="page">
             <div class="panel no-print">
                 <h2>🖨️ 2. Fiche Élève — Impression des Plans de Travail</h2>
@@ -262,7 +267,6 @@
                     </div>
                 </div>
 
-                <!-- Panneau de personnalisation de l'en-tête des fiches imprimées -->
                 <details class="card-panel" style="margin-bottom:20px; background:#f8fbff; border:1px solid #d6eaf8;">
                     <summary style="cursor:pointer; font-weight:bold; color:#1b4f72;">🎨 Personnaliser l'en-tête et les options de la fiche imprimée</summary>
                     <div style="margin-top:14px;">
@@ -297,9 +301,7 @@
             <div id="zoneFichesImpression"></div>
         </div>
 
-        <!-- ========================================== -->
-        <!-- 3. TABLEAU DE BORD                         -->
-        <!-- ========================================== -->
+        <!-- 3. TABLEAU DE BORD -->
         <div id="pageDashboard" class="page">
             <div class="panel">
                 <div class="page-header-flex">
@@ -315,9 +317,7 @@
             </div>
         </div>
 
-        <!-- ========================================== -->
-        <!-- 4. BASE DE DONNÉES DES ATELIERS            -->
-        <!-- ========================================== -->
+        <!-- 4. BASE DE DONNÉES DES ATELIERS -->
         <div id="pageBase" class="page">
             <div class="panel">
                 <div class="page-header-flex">
@@ -330,7 +330,6 @@
                     </div>
                 </div>
 
-                <!-- Barre de bascule Saisie Simple / Saisie Multiple en rafale -->
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
                     <div style="display:flex; gap:8px;">
                         <button type="button" class="btn-action" id="btnToggleSaisieMulti" onclick="toggleModeSaisieMultiple()">⚡ Passer en mode Saisie Multiple (plusieurs exercices d'un coup)</button>
@@ -338,7 +337,7 @@
                     <button type="button" class="btn-danger" onclick="viderBase()" style="font-size:12px;">🗑️ Vider toute la base</button>
                 </div>
 
-                <!-- MODE 1 : FORMULAIRE DE SAISIE SIMPLE -->
+                <!-- MODE 1 : SAISIE SIMPLE -->
                 <div id="blocSaisieSimpleBase" class="card-panel" style="margin-bottom:20px;">
                     <h3 id="titreFormulaireBase" style="margin-bottom:12px; color:#1b4f72;">➕ Ajouter ou modifier une activité</h3>
                     <div class="form-grid-base">
@@ -363,18 +362,22 @@
                         </div>
                         <div>
                             <label>Nom de la ressource / Exercice :</label>
-                            <input type="text" id="inputRessource" placeholder="Ex: Ex 1 p.24 ou Cartes N1">
+                            <input type="text" id="inputRessource" placeholder="Ex: Ex 1 ou Cartes N1">
                         </div>
                         <div>
                             <label>Type de support :</label>
                             <select id="selectTypeRessource"></select>
                         </div>
                         <div>
-                            <label>Page / Détail Manuel (📘) :</label>
-                            <input type="text" id="inputPageManuel" placeholder="Ex: p. 24 ex 2">
+                            <label>📘 Page Manuel (ou 🟡 Parcours Jaune CM) :</label>
+                            <input type="text" id="inputPageManuel" placeholder="Ex: p9" oninput="autoRemplirPageOrangeSimple(this.value)">
+                        </div>
+                        <div id="blocPageOrangeSimple">
+                            <label>🟠 Page Parcours Orange CM (auto +1) :</label>
+                            <input type="text" id="inputPageOrange" placeholder="Ex: p10 (uniquement CM)">
                         </div>
                         <div>
-                            <label>Variante Fichier Jaune (📒) :</label>
+                            <label>📒 Variante Fichier Jaune :</label>
                             <input type="text" id="inputVarianteJaune" placeholder="Ex: Fichier p. 18">
                         </div>
                         <div>
@@ -410,11 +413,11 @@
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px; margin-top:15px; padding-top:12px; border-top:1px dashed #ccc;">
                         <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
                             <strong>Niveaux :</strong>
-                            <label><input type="checkbox" class="cb-niveau-form" value="CP" checked> CP</label>
-                            <label><input type="checkbox" class="cb-niveau-form" value="CE1"> CE1</label>
-                            <label><input type="checkbox" class="cb-niveau-form" value="CE2"> CE2</label>
-                            <label><input type="checkbox" class="cb-niveau-form" value="CM1"> CM1</label>
-                            <label><input type="checkbox" class="cb-niveau-form" value="CM2"> CM2</label>
+                            <label><input type="checkbox" class="cb-niveau-form" value="CP" checked onchange="verifierNiveauxCMFormSimple()"> CP</label>
+                            <label><input type="checkbox" class="cb-niveau-form" value="CE1" onchange="verifierNiveauxCMFormSimple()"> CE1</label>
+                            <label><input type="checkbox" class="cb-niveau-form" value="CE2" onchange="verifierNiveauxCMFormSimple()"> CE2</label>
+                            <label><input type="checkbox" class="cb-niveau-form" value="CM1" onchange="verifierNiveauxCMFormSimple()"> CM1</label>
+                            <label><input type="checkbox" class="cb-niveau-form" value="CM2" onchange="verifierNiveauxCMFormSimple()"> CM2</label>
                             <label style="margin-left:15px; background:#fcf3cf; padding:4px 8px; border-radius:4px; border:1px solid #f1c40f; cursor:pointer;">
                                 <input type="checkbox" id="cbEstEvaluation"> 🎯 Est une Évaluation
                             </label>
@@ -429,26 +432,26 @@
                 <!-- MODE 2 : SAISIE MULTIPLE D'EXERCICES POUR UNE MÊME SÉQUENCE -->
                 <div id="blocSaisieMultipleBase" class="card-panel" style="margin-bottom:20px; display:none; border:2px solid #2980b9; background:#f8fbff;">
                     <h3 style="color:#1b4f72; margin-bottom:10px;">⚡ Saisie multiple d'exercices pour une même séquence</h3>
-                    <p style="font-size:13px; color:#555; margin-bottom:12px;">Définissez les paramètres communs (Niveau, Matière, Séquence) ci-dessous, puis saisissez tous vos exercices à la suite dans le tableau.</p>
+                    <p style="font-size:13px; color:#555; margin-bottom:12px;">Si CM1 ou CM2 est coché, saisir <code>p9</code> dans la colonne Page Manuel/Jaune remplira automatiquement <code>p10</code> dans la colonne Parcours Orange.</p>
 
                     <div class="form-grid-base" style="margin-bottom:14px; padding-bottom:12px; border-bottom:1px dashed #bdc3c7;">
                         <div>
                             <label><strong>1. Niveaux communs :</strong></label>
                             <div style="display:flex; gap:8px; padding-top:5px; flex-wrap:wrap;">
-                                <label><input type="checkbox" class="cb-niveau-multi" value="CP" checked> CP</label>
-                                <label><input type="checkbox" class="cb-niveau-multi" value="CE1"> CE1</label>
-                                <label><input type="checkbox" class="cb-niveau-multi" value="CE2"> CE2</label>
-                                <label><input type="checkbox" class="cb-niveau-multi" value="CM1"> CM1</label>
-                                <label><input type="checkbox" class="cb-niveau-multi" value="CM2"> CM2</label>
+                                <label><input type="checkbox" class="cb-niveau-multi" value="CP" checked onchange="verifierNiveauxCMMulti()"> CP</label>
+                                <label><input type="checkbox" class="cb-niveau-multi" value="CE1" onchange="verifierNiveauxCMMulti()"> CE1</label>
+                                <label><input type="checkbox" class="cb-niveau-multi" value="CE2" onchange="verifierNiveauxCMMulti()"> CE2</label>
+                                <label><input type="checkbox" class="cb-niveau-multi" value="CM1" onchange="verifierNiveauxCMMulti()"> CM1</label>
+                                <label><input type="checkbox" class="cb-niveau-multi" value="CM2" onchange="verifierNiveauxCMMulti()"> CM2</label>
                             </div>
                         </div>
                         <div>
                             <label><strong>2. Matière commune :</strong></label>
-                            <input type="text" id="multiMatiere" list="listeMatieresConnues" placeholder="Ex: Mathématiques, Français...">
+                            <input type="text" id="multiMatiere" list="listeMatieresConnues" placeholder="Ex: Français, Mathématiques...">
                         </div>
                         <div>
                             <label><strong>3. Séquence commune :</strong></label>
-                            <input type="text" id="multiSequence" list="listeSequencesConnues" placeholder="Ex: Séquence 1, Numération...">
+                            <input type="text" id="multiSequence" list="listeSequencesConnues" placeholder="Ex: Séquence 1, Grammaire...">
                         </div>
                         <div>
                             <label><strong>4. Période commune (optionnel) :</strong></label>
@@ -467,15 +470,16 @@
                         <table class="table-classique">
                             <thead>
                                 <tr>
-                                    <th style="width:90px;">Leçon</th>
+                                    <th style="width:80px;">Leçon</th>
                                     <th>Compétence</th>
                                     <th>Nom de l'exercice / Ressource *</th>
-                                    <th style="width:125px;">Support</th>
-                                    <th style="width:115px;">📘 Page Manuel</th>
-                                    <th style="width:115px;">📒 Var. Jaune</th>
-                                    <th style="width:85px;">Étoiles</th>
-                                    <th style="width:55px; text-align:center;">🎯 Éval</th>
-                                    <th style="width:45px;"></th>
+                                    <th style="width:115px;">Support</th>
+                                    <th style="width:110px;">📘/🟡 Page</th>
+                                    <th style="width:110px;">🟠 Page Orange (CM)</th>
+                                    <th style="width:110px;">📒 Var. Jaune</th>
+                                    <th style="width:80px;">Étoiles</th>
+                                    <th style="width:50px; text-align:center;">🎯 Éval</th>
+                                    <th style="width:40px;"></th>
                                 </tr>
                             </thead>
                             <tbody id="tbodySaisieMultiple"></tbody>
@@ -521,9 +525,7 @@
             </div>
         </div>
 
-        <!-- ========================================== -->
-        <!-- 5. PROGRAMMATION (P1 à P5)                 -->
-        <!-- ========================================== -->
+        <!-- 5. PROGRAMMATION -->
         <div id="pageProg" class="page">
             <div class="panel">
                 <h2>📅 5. Programmation annuelle par périodes (P1 à P5)</h2>
@@ -559,9 +561,7 @@
             </div>
         </div>
 
-        <!-- ========================================== -->
-        <!-- 6. ÉTIQUETTES (STUDIO D'IMPRESSION)        -->
-        <!-- ========================================== -->
+        <!-- 6. ÉTIQUETTES -->
         <div id="pageEtiquettes" class="page">
             <div class="panel no-print">
                 <h2 style="color: #8e44ad;">🏷️ 6. Studio d'impression d'Étiquettes</h2>
@@ -604,9 +604,7 @@
             <div id="printEtiquettesContainer" class="etiquettes-grid-print"></div>
         </div>
 
-        <!-- ========================================== -->
-        <!-- 7. MATRICE DES COMPÉTENCES                 -->
-        <!-- ========================================== -->
+        <!-- 7. MATRICE DES COMPÉTENCES -->
         <div id="pageMatrice" class="page">
             <div class="panel">
                 <div class="page-header-flex no-print">
@@ -647,9 +645,7 @@
             </div>
         </div>
 
-        <!-- ========================================== -->
-        <!-- 8. BILANS & EXPORT EDULIVRET / LSU         -->
-        <!-- ========================================== -->
+        <!-- 8. BILANS & EXPORT EDULIVRET / LSU -->
         <div id="pageBilan" class="page">
             <div class="panel">
                 <div class="page-header-flex no-print">
@@ -671,169 +667,112 @@
             </div>
         </div>
 
-        <!-- ========================================== -->
-        <!-- 9. SAUVEGARDE, RESTAURATION & CLOUD        -->
-        <!-- ========================================== -->
+        <!-- 9. SAUVEGARDE, RESTAURATION & CLOUD -->
         <div id="pageSave" class="page">
             <div class="panel">
                 <h2>💾 9. Sauvegarde, Restauration & Synchronisation Cloud</h2>
 
-                <!-- 1. Restauration Fichier JSON -->
                 <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #27ae60;">
                     <h3 style="color:#1e8449; margin-bottom:8px;">📤 1. Restaurer vos données depuis un fichier JSON</h3>
-                    <p style="font-size:14px; margin-bottom:12px;">Sélectionnez votre fichier `.json` de sauvegarde. La restauration se lance dès la sélection ou en cliquant sur le bouton.</p>
                     <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
                         <input type="file" id="inputFichierJson" onchange="restaurerFichierJSON(event)" accept=".json,application/json" style="padding:10px; border:2px dashed #27ae60; border-radius:6px; flex:1; background:#f9fffb;">
                         <button type="button" class="btn-valid" onclick="restaurerSauvegarde()" style="padding:12px 20px; font-size:15px;">🔄 Restaurer les données</button>
                     </div>
                 </div>
 
-                <!-- 2. Restauration de secours par Copier-Coller direct -->
                 <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #e67e22;">
                     <h3 style="color:#d35400; margin-bottom:8px;">📋 2. Restauration directe par Copier-Coller</h3>
-                    <p style="font-size:13px; margin-bottom:8px;">Collez ici le texte JSON de votre sauvegarde et cliquez sur <strong>Importer le texte collé</strong> :</p>
                     <textarea id="textareaJsonSecours" rows="4" placeholder='Collez ici le contenu de votre sauvegarde (ex: {"base":[...], "eleves":{...}})' style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-family:monospace; font-size:12px; margin-bottom:8px;"></textarea>
                     <button type="button" class="btn-action" onclick="restaurerDepuisTexteColle()" style="background:#e67e22;">⚡ Importer le texte collé maintenant</button>
                 </div>
 
-                <!-- 3. Export Sauvegarde Locale -->
                 <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #2980b9;">
                     <h3 style="color:#1b4f72; margin-bottom:8px;">📥 3. Télécharger une sauvegarde complète (.json)</h3>
-                    <p style="font-size:14px; margin-bottom:12px;">Enregistrez une copie complète de vos élèves, plans de travail, ateliers et programmations sur votre ordinateur.</p>
                     <button type="button" class="btn-action" onclick="exporterSauvegardeJSON()">💾 Télécharger ma sauvegarde (.json)</button>
                 </div>
 
-                <!-- 4. Synchronisation Firebase Cloud -->
                 <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #8e44ad;">
                     <h3 style="color:#6c3483; margin-bottom:8px;">🔥 4. Synchronisation Cloud Firebase</h3>
                     <p id="statutFirebase" style="font-weight:bold; color:#f39c12; margin-bottom:12px;">⏳ Vérification du Cloud...</p>
                     <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                        <button type="button" class="btn-valid" onclick="chargerDepuisFirebase(true)">⬇️ Récupérer les données depuis Firebase</button>
+                        <button type="button" class="btn-valid" onclick="chargerDepuisFirebase(true)">⬇️ Récupérer depuis Firebase</button>
                         <button type="button" class="btn-action" onclick="sauvegarderVersFirebase(true)">⬆️ Forcer l'envoi vers Firebase</button>
-                        <button type="button" class="filter-btn" onclick="inspecterToutesBranchesFirebase()">🔍 Chercher des sauvegardes sur tout le Cloud Firebase</button>
+                        <button type="button" class="filter-btn" onclick="inspecterToutesBranchesFirebase()">🔍 Chercher sur tout le Cloud Firebase</button>
                     </div>
                 </div>
 
-                <!-- 5. Stockage & Nettoyage du Cache -->
                 <div class="card-panel">
                     <h3 style="margin-bottom:8px;">⚙️ 5. Stockage local & Réparation du cache</h3>
                     <p id="texteStockage">Calcul en cours...</p>
                     <div style="background:#e0e0e0; border-radius:6px; height:18px; width:100%; overflow:hidden; margin:10px 0 15px 0;">
                         <div id="jaugeStockageFill" style="background:#27ae60; height:100%; width:0%;"></div>
                     </div>
-                    <button type="button" class="filter-btn" onclick="viderCacheApplication()">🧹 Purger le cache hors-ligne (Service Worker) et recharger</button>
+                    <button type="button" class="filter-btn" onclick="viderCacheApplication()">🧹 Purger le cache hors-ligne et recharger</button>
                 </div>
             </div>
         </div>
 
     </main>
 
-    <!-- ========================================== -->
-    <!-- TOUTES LES FENÊTRES MODALES                -->
-    <!-- ========================================== -->
-
-    <!-- Modale Design -->
+    <!-- MODALES -->
     <div id="modalDesign" class="modal-overlay no-print" style="display:none;">
         <div class="modal-content">
             <h3 style="margin-top:0; color: #2c3e50;">🎨 Personnaliser le graphisme</h3>
-            <p style="font-size: 13px; color: #7f8c8d; margin-bottom: 15px;">Choisissez l'ambiance visuelle de votre application (l'impression des fiches restera toujours sur fond blanc).</p>
-            
             <div class="theme-card" id="card_theme_classique" onclick="appliquerThemeVisuel('classique')">
-                <div>
-                    <strong>💼 Classique (Origine)</strong><br>
-                    <span style="font-size: 12px; color: #7f8c8d;">Couleurs franches et onglets colorés contrastés</span>
-                </div>
-                <div class="theme-preview-dots">
-                    <span class="theme-dot" style="background:#2c3e50;"></span>
-                    <span class="theme-dot" style="background:#2980b9;"></span>
-                    <span class="theme-dot" style="background:#27ae60;"></span>
-                </div>
+                <div><strong>💼 Classique (Origine)</strong><br><span style="font-size: 12px; color: #7f8c8d;">Couleurs franches et onglets colorés contrastés</span></div>
+                <div class="theme-preview-dots"><span class="theme-dot" style="background:#2c3e50;"></span><span class="theme-dot" style="background:#2980b9;"></span><span class="theme-dot" style="background:#27ae60;"></span></div>
             </div>
-
             <div class="theme-card active-theme" id="card_theme_pastel" onclick="appliquerThemeVisuel('pastel')">
-                <div>
-                    <strong>🌸 Pastel Poudré</strong><br>
-                    <span style="font-size: 12px; color: #7f8c8d;">Teintes douces macaron, lavande et menthe</span>
-                </div>
-                <div class="theme-preview-dots">
-                    <span class="theme-dot" style="background:#e8dff5;"></span>
-                    <span class="theme-dot" style="background:#a2d2ff;"></span>
-                    <span class="theme-dot" style="background:#ffcad4;"></span>
-                </div>
+                <div><strong>🌸 Pastel Poudré</strong><br><span style="font-size: 12px; color: #7f8c8d;">Teintes douces macaron, lavande et menthe</span></div>
+                <div class="theme-preview-dots"><span class="theme-dot" style="background:#e8dff5;"></span><span class="theme-dot" style="background:#a2d2ff;"></span><span class="theme-dot" style="background:#ffcad4;"></span></div>
             </div>
-
             <div class="theme-card" id="card_theme_doodles" onclick="appliquerThemeVisuel('doodles')">
-                <div>
-                    <strong>✏️ Pastel + Doodles École</strong><br>
-                    <span style="font-size: 12px; color: #7f8c8d;">Ambiance pastel avec petits motifs d'école en fond</span>
-                </div>
-                <div class="theme-preview-dots">
-                    <span class="theme-dot" style="background:#faf6f2; border:1px solid #d8c8e8;"></span>
-                    <span class="theme-dot" style="background:#b8c0ff;"></span>
-                    <span class="theme-dot" style="background:#b7e4c7;"></span>
-                </div>
+                <div><strong>✏️ Pastel + Doodles École</strong><br><span style="font-size: 12px; color: #7f8c8d;">Ambiance pastel avec petits motifs d'école en fond</span></div>
+                <div class="theme-preview-dots"><span class="theme-dot" style="background:#faf6f2; border:1px solid #d8c8e8;"></span><span class="theme-dot" style="background:#b8c0ff;"></span><span class="theme-dot" style="background:#b7e4c7;"></span></div>
             </div>
-
             <div class="theme-card" id="card_theme_nature" onclick="appliquerThemeVisuel('nature')">
-                <div>
-                    <strong>🌿 Nature & Sauge</strong><br>
-                    <span style="font-size: 12px; color: #7f8c8d;">Tons apaisants vert sauge, lin et forêt</span>
-                </div>
-                <div class="theme-preview-dots">
-                    <span class="theme-dot" style="background:#cad2c5;"></span>
-                    <span class="theme-dot" style="background:#84a98c;"></span>
-                    <span class="theme-dot" style="background:#52796f;"></span>
-                </div>
+                <div><strong>🌿 Nature & Sauge</strong><br><span style="font-size: 12px; color: #7f8c8d;">Tons apaisants vert sauge, lin et forêt</span></div>
+                <div class="theme-preview-dots"><span class="theme-dot" style="background:#cad2c5;"></span><span class="theme-dot" style="background:#84a98c;"></span><span class="theme-dot" style="background:#52796f;"></span></div>
             </div>
-
             <button onclick="fermerModal('modalDesign')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:8px; cursor:pointer; margin-top: 10px;">Fermer</button>
         </div>
     </div>
 
-    <!-- Modale Gestion des Matières -->
     <div id="modalMatieres" class="modal" style="display:none;">
         <div class="modal-content" style="max-width:650px;">
             <h3>⚙️ Gérer et renommer les Matières</h3>
-            <p style="font-size:12.5px; color:#666; margin-bottom:10px;">Renommer une matière ici mettra automatiquement à jour toutes les activités associées.</p>
             <div id="listeMatieresModalContainer" style="max-height:320px; overflow-y:auto; margin:12px 0; border:1px solid #ddd; padding:10px; border-radius:6px;"></div>
             <div style="display:flex; justify-content:flex-end; gap:10px;">
                 <button type="button" class="btn-remove" onclick="fermerModal('modalMatieres')">Fermer</button>
-                <button type="button" class="btn-valid" onclick="sauvegarderToutesMatieres()">💾 Enregistrer les modifications</button>
+                <button type="button" class="btn-valid" onclick="sauvegarderToutesMatieres()">💾 Enregistrer</button>
             </div>
         </div>
     </div>
 
-    <!-- Modale Gestion des Séquences -->
     <div id="modalSequences" class="modal" style="display:none;">
         <div class="modal-content" style="max-width:680px;">
-            <h3>⚙️ Gérer et renommer les Séquences / Sous-matières</h3>
-            <div style="margin:10px 0;">
-                <label>Filtrer par matière : <select id="filtreMatiereModalSeq" onchange="afficherListeSequencesModal()"></select></label>
-            </div>
+            <h3>⚙️ Gérer et renommer les Séquences</h3>
+            <div style="margin:10px 0;"><label>Filtrer par matière : <select id="filtreMatiereModalSeq" onchange="afficherListeSequencesModal()"></select></label></div>
             <div id="listeSequencesModalContainer" style="max-height:320px; overflow-y:auto; margin:12px 0; border:1px solid #ddd; padding:10px; border-radius:6px;"></div>
             <div style="display:flex; justify-content:flex-end; gap:10px;">
                 <button type="button" class="btn-remove" onclick="fermerModal('modalSequences')">Fermer</button>
-                <button type="button" class="btn-valid" onclick="sauvegarderToutesSequences()">💾 Enregistrer les modifications</button>
+                <button type="button" class="btn-valid" onclick="sauvegarderToutesSequences()">💾 Enregistrer</button>
             </div>
         </div>
     </div>
 
-    <!-- Modale Gestion des Compétences -->
     <div id="modalCompetences" class="modal" style="display:none;">
         <div class="modal-content" style="max-width:720px;">
             <h3>⚙️ Gérer et renommer les Compétences</h3>
-            <div style="margin:10px 0;">
-                <label>Filtrer par matière : <select id="filtreMatiereModalComp" onchange="afficherListeCompetencesModal()"></select></label>
-            </div>
+            <div style="margin:10px 0;"><label>Filtrer par matière : <select id="filtreMatiereModalComp" onchange="afficherListeCompetencesModal()"></select></label></div>
             <div id="listeCompetencesModalContainer" style="max-height:320px; overflow-y:auto; margin:12px 0; border:1px solid #ddd; padding:10px; border-radius:6px;"></div>
             <div style="display:flex; justify-content:flex-end; gap:10px;">
                 <button type="button" class="btn-remove" onclick="fermerModal('modalCompetences')">Fermer</button>
-                <button type="button" class="btn-valid" onclick="sauvegarderToutesCompetences()">💾 Enregistrer les modifications</button>
+                <button type="button" class="btn-valid" onclick="sauvegarderToutesCompetences()">💾 Enregistrer</button>
             </div>
         </div>
     </div>
 
-    <!-- Modale Gestion des Types de supports & Logos -->
     <div id="modalTypes" class="modal" style="display:none;">
         <div class="modal-content" style="max-width:760px;">
             <h3>⚙️ Gérer les Types de supports, Logos & Quotas Tablettes</h3>
@@ -853,7 +792,6 @@
         </div>
     </div>
 
-    <!-- Modale Dupliquer -->
     <div id="modalDupliquer" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>📋 Dupliquer le plan de <span id="nomEleveSourceDupli"></span></h3>
@@ -865,7 +803,6 @@
         </div>
     </div>
 
-    <!-- Modale Assigner -->
     <div id="modalAssigner" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>📌 Assigner l'activité : <span id="nomActiviteAssign"></span></h3>
@@ -888,7 +825,6 @@
         </div>
     </div>
 
-    <!-- Modale Éditer Élève -->
     <div id="modalEditEleve" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>✏️ Modifier l'élève</h3>
@@ -897,12 +833,20 @@
             </div>
             <div style="margin:10px 0;">
                 <label>Niveau :
-                    <select id="editEleveNiveauSelect" style="padding:8px; border-radius:4px; width:100%; margin-top:5px; border:1px solid #ccc;">
+                    <select id="editEleveNiveauSelect" onchange="majVisibiliteParcoursEdition(this.value)" style="padding:8px; border-radius:4px; width:100%; margin-top:5px; border:1px solid #ccc;">
                         <option value="CP">CP</option>
                         <option value="CE1">CE1</option>
                         <option value="CE2">CE2</option>
                         <option value="CM1">CM1</option>
                         <option value="CM2">CM2</option>
+                    </select>
+                </label>
+            </div>
+            <div id="blocEditEleveParcours" style="margin:10px 0; display:none;">
+                <label>Parcours manuel CM :
+                    <select id="editEleveParcoursSelect" style="padding:8px; border-radius:4px; width:100%; margin-top:5px; border:1px solid #ccc; font-weight:bold;">
+                        <option value="jaune">🟡 Parcours Jaune (CM1 / adapté)</option>
+                        <option value="orange">🟠 Parcours Orange (CM2)</option>
                     </select>
                 </label>
             </div>
@@ -918,6 +862,6 @@
 
     <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" style="display:none; position:fixed; bottom:20px; right:20px; z-index:99; background:#1b4f72; color:#fff; border:none; padding:12px 16px; border-radius:50%; cursor:pointer; font-size:16px; box-shadow:0 3px 8px rgba(0,0,0,0.2);">⬆️</button>
 
-    <script src="script.js?v=20261023"></script>
+    <script src="script.js?v=20261025"></script>
 </body>
 </html>
