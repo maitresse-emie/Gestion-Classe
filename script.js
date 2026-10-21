@@ -1061,11 +1061,12 @@ function afficherRessourcesDisponibles() {
         let infos = getInfosActivitePourEleve(a, eleve), rep = getRepereAtelierHtml(a, eleve, 24);
         let coul = getCouleurMatiereBandeau(a.matiere), perAct = programmations[a.id] || a.periode || "-";
         let seqAffiche = a.sequence ? escHTML(a.sequence) : '<span style="color:#e67e22; font-weight:bold;">⚠️ Sans séquence</span>';
+        let badgeLien = (a.lienExterne && a.lienExterne.trim()) ? ` <a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 5px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir le lien direct">🔗 Anton ↗</a>` : '';
         html += `<tr>
             <td><strong>${escHTML(a.niveau)}</strong><br><small style="color:#7f8c8d;">${escHTML(perAct)}</small></td>
             <td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${coul.bg}; margin-right:4px;"></span><strong>${escHTML(a.matiere)}</strong><br>${seqAffiche} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
             <td>${escHTML(a.competence)}</td>
-            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infos.badgeLivre} ${a.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : ''}</td>
+            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infos.badgeLivre}${badgeLien} ${a.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : ''}</td>
             <td style="text-align:center; background:${rep.bg};">${rep.html}</td>
             <td>
                 <select id="jour_dispo_${a.id}" style="width:100%; padding:4px; font-size:12px;">
@@ -1360,6 +1361,7 @@ function afficherPlanHebdo() {
     planObjects.forEach((a, index) => {
         const num = index + 1;
         let badge = a.estEvaluation ? `<span class="badge-eval">🎯 Éval</span>` : '';
+        let badgeLien = (a.lienExterne && a.lienExterne.trim()) ? ` <a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 5px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir sur Anton">🔗 Anton ↗</a>` : '';
         let estValide = eleve.valides && eleve.valides[a.id];
         let rowClass = a.estEvaluation ? 'row-eval' : (estValide ? 'row-valide' : '');
         let statutSuivi = (eleve.suivi && eleve.suivi[a.id]) ? eleve.suivi[a.id].statut : "";
@@ -1389,7 +1391,7 @@ function afficherPlanHebdo() {
             <td class="${jourActuel ? 'col-num num-jour-impose' : 'col-num'}">${logoDebutLigne}${num}</td>
             <td><span style="display:inline-block; padding:2px 8px; border-radius:4px; background:${coulMat.bg}; color:${coulMat.text}; font-weight:bold; font-size:12px; margin-bottom:3px;">${escHTML(a.matiere)}</span><br>${escHTML(a.sequence)}</td>
             <td>${a.lecon ? '<strong>'+escHTML(a.lecon)+'</strong> - ' : ''}${escHTML(a.competence)}</td>
-            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infosL.badgeLivre} ${badge} ${suiviHtml}</td>
+            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infosL.badgeLivre}${badgeLien} ${badge} ${suiviHtml}</td>
             <td style="text-align:center; background:${rep.bg};">${rep.html}</td>
             <td style="text-align:center;">${selectJourHtml}</td>
             <td>${actionHtml}</td>
@@ -1633,7 +1635,7 @@ function rafraichirFicheImpression() {
 }
 
 // ==========================================
-// 6. ONGLET 3 : TABLEAU DE BORD
+// 6. ONGLET 3 : TABLEAU DE BORD (AVEC LIEN DIRECT ANTON)
 // ==========================================
 function toggleAfficherArchives() {
     afficherArchivesMode = !afficherArchivesMode;
@@ -1654,6 +1656,19 @@ function setSuivi(idEl, idAct, statut) {
 function validerDepuisDashboard(idEl, idAct) { let e = eleves[idEl]; if (!e) return; marquerCommeValideSansRafraichir(idAct, e); sauvegarderEleves(); rafraichirDashboard(); showToast("Validé !", "success"); }
 function toggleExpandEleveDash(idEl) { if (dashboardExpanded.has(idEl)) dashboardExpanded.delete(idEl); else dashboardExpanded.add(idEl); rafraichirDashboard(); }
 function ouvrirEleveDepuisDashboard(idEl) { idEleveCourant = idEl; let sel = document.getElementById('selectEleveProfile'); if (sel) sel.value = idEl; changerOnglet('pageSuivi', document.querySelectorAll('.nav-btn')[0]); }
+
+function definirLienRapideDepuisDash(idAct) {
+    let a = baseDonnees.find(b => b.id === idAct);
+    if (!a) return;
+    let url = prompt(`Collez ici le lien direct Anton pour "${a.ressource}" :`, a.lienExterne || "");
+    if (url !== null) {
+        a.lienExterne = url.trim();
+        sauvegarderBase();
+        rafraichirDashboard();
+        afficherBase();
+        showToast("🔗 Lien Anton enregistré !", "success");
+    }
+}
 
 function rafraichirDashboard() {
     const cont = document.getElementById('dashboardContent'); if (!cont) return;
@@ -1686,10 +1701,18 @@ function rafraichirDashboard() {
     let tabKeys = Object.keys(tachesTablettesMap);
     let html = `<div class="grid-2-cols" style="margin-bottom:20px;">
         <div class="card-panel" style="border-left:5px solid #c0392b;"><h3 style="color:#c0392b; margin-bottom:10px;">👩‍🏫 Besoins d'ateliers dirigés & Remédiations</h3>${lignesRemediation ? `<table class="table-classique"><thead><tr><th>Élève</th><th>Matière</th><th>Atelier</th><th>Statut</th><th>Action</th></tr></thead><tbody>${lignesRemediation}</tbody></table>` : `<p style="color:#7f8c8d; font-size:13px;">Aucune remédiation en cours.</p>`}</div>
-        <div class="card-panel" style="border-left:5px solid #8e44ad;"><h3 style="color:#6c3483; margin-bottom:10px;">📱 Préparation Tablettes (Anton / Scratch)</h3>${tabKeys.length > 0 ? `<table class="table-classique"><thead><tr><th>Support</th><th>Activité</th><th>Élèves</th><th>Action</th></tr></thead><tbody>` + tabKeys.map(k => {
+        <div class="card-panel" style="border-left:5px solid #8e44ad;"><h3 style="color:#6c3483; margin-bottom:10px;">📱 Préparation Tablettes (Anton / Scratch)</h3>${tabKeys.length > 0 ? `<table class="table-classique"><thead><tr><th>Support</th><th>Activité & Lien direct</th><th>Élèves à épingler</th><th>Action</th></tr></thead><tbody>` + tabKeys.map(k => {
             let item = tachesTablettesMap[k];
-            return `<tr style="${item.estArchTab ? 'opacity:0.5;' : ''}"><td><strong>${escHTML(item.act.typeRes)}</strong></td><td><strong>${escHTML(item.act.ressource)}</strong></td><td>${escHTML(item.elevesNoms.join(', '))}</td><td><button type="button" class="filter-btn" onclick="${item.estArchTab ? `restaurerArchive('${item.cleTab}')` : `archiverItem('${item.cleTab}')`}">${item.estArchTab ? '↩️' : '☑️'}</button></td></tr>`;
-        }).join('') + `</tbody></table>` : `<p style="color:#7f8c8d; font-size:13px;">Aucune activité tablette.</p>`}</div>
+            let btnLien = (item.act.lienExterne && item.act.lienExterne.trim() !== "")
+                ? `<a href="${escHTML(item.act.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" class="btn-action" style="display:inline-block; text-decoration:none; padding:3px 8px; font-size:11.5px; margin-top:4px; background:#8e44ad !important; color:#fff !important;">🔗 Ouvrir ${escHTML(item.act.typeRes || 'Anton')} ↗</a> <button type="button" class="filter-btn" style="padding:2px 5px; font-size:10px; margin-top:4px;" onclick="definirLienRapideDepuisDash('${item.act.id}')" title="Modifier le lien">✏️</button>`
+                : `<button type="button" class="filter-btn" style="padding:2px 6px; font-size:10.5px; margin-top:3px;" onclick="definirLienRapideDepuisDash('${item.act.id}')" title="Ajouter le lien direct Anton">➕🔗 Ajouter lien</button>`;
+            return `<tr style="${item.estArchTab ? 'opacity:0.5;' : ''}">
+                <td><strong>${escHTML(item.act.typeRes)}</strong><br><small style="color:#666;">${escHTML(item.act.matiere)}</small></td>
+                <td><strong>${escHTML(item.act.ressource)}</strong><br><small style="color:#555;">${escHTML(item.act.sequence)} ${item.act.lecon ? '('+escHTML(item.act.lecon)+')' : ''}</small><br>${btnLien}</td>
+                <td><strong>${escHTML(item.elevesNoms.join(', '))}</strong></td>
+                <td style="text-align:center;"><button type="button" class="filter-btn" title="Marquer comme épinglé sur Anton" onclick="${item.estArchTab ? `restaurerArchive('${item.cleTab}')` : `archiverItem('${item.cleTab}')`}">${item.estArchTab ? '↩️' : '☑️ Épinglé'}</button></td>
+            </tr>`;
+        }).join('') + `</tbody></table>` : `<p style="color:#7f8c8d; font-size:13px;">Aucune activité tablette à préparer.</p>`}</div>
     </div><div class="dashboard-grid">`;
 
     listeEl.forEach(e => {
@@ -1699,7 +1722,8 @@ function rafraichirDashboard() {
         let isExp = dashboardExpanded.has(e.id), badgeParc = estEleveCM(e) ? ((e.parcours === 'orange') ? ' 🟠' : ' 🟡') : '';
         let detailsPlanHtml = isExp ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed #ccc; font-size:12.5px;">` + getListeTrie(e.planHebdo, e.priorites || []).map((a, idx) => {
             let fait = e.valides && e.valides[a.id], st = (e.suivi && e.suivi[a.id]) ? e.suivi[a.id].statut : "";
-            return `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #f1f5f9;"><span style="${fait ? 'text-decoration:line-through; color:#27ae60;' : ''}"><strong>${idx + 1}.</strong> ${escHTML(a.ressource)}</span><div style="display:flex; gap:3px;">${!fait ? `<button type="button" class="filter-btn" style="padding:1px 5px;" onclick="validerDepuisDashboard('${e.id}', '${a.id}')">✅</button><button type="button" class="filter-btn" style="padding:1px 5px; ${st === 'a_revoir' ? 'background:#c0392b; color:#fff;' : ''}" onclick="setSuivi('${e.id}', '${a.id}', '${st === 'a_revoir' ? '' : 'a_revoir'}')">👩‍🏫</button><button type="button" class="filter-btn" style="padding:1px 5px; ${st === 'a_refaire' ? 'background:#e67e22; color:#fff;' : ''}" onclick="setSuivi('${e.id}', '${a.id}', '${st === 'a_refaire' ? '' : 'a_refaire'}')">🔄</button>` : '✅'}</div></div>`;
+            let iconeLien = (a.lienExterne && a.lienExterne.trim()) ? ` <a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" title="Ouvrir sur Anton" style="text-decoration:none;">🔗</a>` : '';
+            return `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #f1f5f9;"><span style="${fait ? 'text-decoration:line-through; color:#27ae60;' : ''}"><strong>${idx + 1}.</strong> ${escHTML(a.ressource)}${iconeLien}</span><div style="display:flex; gap:3px;">${!fait ? `<button type="button" class="filter-btn" style="padding:1px 5px;" onclick="validerDepuisDashboard('${e.id}', '${a.id}')">✅</button><button type="button" class="filter-btn" style="padding:1px 5px; ${st === 'a_revoir' ? 'background:#c0392b; color:#fff;' : ''}" onclick="setSuivi('${e.id}', '${a.id}', '${st === 'a_revoir' ? '' : 'a_revoir'}')">👩‍🏫</button><button type="button" class="filter-btn" style="padding:1px 5px; ${st === 'a_refaire' ? 'background:#e67e22; color:#fff;' : ''}" onclick="setSuivi('${e.id}', '${a.id}', '${st === 'a_refaire' ? '' : 'a_refaire'}')">🔄</button>` : '✅'}</div></div>`;
         }).join('') + `</div>` : '';
 
         html += `<div class="dash-card">
@@ -1778,7 +1802,6 @@ function gererSaisieChampMulti(elem, typeChamp) {
         }
     }
 
-    // Si on modifie la 1re ligne, on propage aux lignes suivantes non modifiées manuellement
     if (idxLigne === 0) {
         let classe = typeChamp === 'lecon' ? '.m-lecon' : (typeChamp === 'type' ? '.m-type' : '.m-page');
         for (let i = 1; i < lignes.length; i++) {
@@ -1833,7 +1856,6 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
     let isCM = estCMSelectionneFormMulti();
     let optsTypes = `<option value="">-- Support * --</option>` + Object.keys(imagesParType || {}).map(t => `<option value="${escHTML(t)}">${escHTML((imagesParType[t].emoji ? imagesParType[t].emoji + ' ' : '') + t)}</option>`).join('');
 
-    // Récupérer les valeurs de la 1re ligne si elle existe déjà pour pré-remplir les nouvelles lignes
     let premiereLigne = tbody.querySelector('.ligne-saisie-multi');
     let defLecon = premiereLigne ? (premiereLigne.querySelector('.m-lecon')?.value || "") : "";
     let defType = premiereLigne ? (premiereLigne.querySelector('.m-type')?.value || "") : "";
@@ -1853,6 +1875,7 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
             <td><input type="text" class="m-page" value="${escHTML(defPage)}" placeholder="p9" oninput="gererSaisieChampMulti(this, 'page')" style="width:100%;"></td>
             <td><input type="text" class="m-orange" value="${escHTML(defOrange)}" placeholder="p10" ${isCM ? '' : 'disabled'} style="width:100%;"></td>
             <td><input type="text" class="m-jaune" placeholder="1 p4" style="width:100%;"></td>
+            <td><input type="text" class="m-lien" placeholder="https://anton.app/..." style="width:100%;"></td>
             <td>
                 <select class="m-diff" style="width:100%;">
                     <option value="">-- Étoiles --</option>
@@ -1925,6 +1948,7 @@ function enregistrerSaisieMultiple() {
         let pageManuel = tr.querySelector('.m-page').value.trim();
         let pageOrange = isCM ? (tr.querySelector('.m-orange').value.trim()) : "";
         let varianteJaune = tr.querySelector('.m-jaune').value.trim();
+        let lienExterne = tr.querySelector('.m-lien') ? tr.querySelector('.m-lien').value.trim() : "";
         let difficulte = parseInt(tr.querySelector('.m-diff').value) || 0;
         let estEval = tr.querySelector('.m-eval').checked;
         let couleur = calculerCouleurAutomatique(matiere, niveauStr, typeRes);
@@ -1932,7 +1956,7 @@ function enregistrerSaisieMultiple() {
 
         baseDonnees.push({
             id: newId, matiere, sequence, lecon, competence, ressource, typeRes,
-            symbole, personnes, pageManuel, pageOrange, varianteJaune, periode,
+            symbole, personnes, pageManuel, pageOrange, varianteJaune, lienExterne, periode,
             difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: "", estEvaluation: estEval
         });
         if (periode) programmations[newId] = periode;
@@ -1980,6 +2004,31 @@ function creerNouvelleSequenceModal() {
     initialiserSelectsFormulaire();
     afficherListeSequencesModal();
     showToast(`Séquence "${nomSeq}" créée et disponible !`, "success");
+}
+
+function afficherBlocOrphelinsDansModal(orphelines) {
+    let blocOrph = document.getElementById('blocOrphelinsSeqModal');
+    if (!blocOrph) return;
+    if (orphelines.length === 0) {
+        blocOrph.style.display = 'none';
+        return;
+    }
+    blocOrph.style.display = 'block';
+    blocOrph.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px; padding-bottom:8px; border-bottom:2px solid #e67e22;">
+        <strong style="color:#d35400;">⚠️ ${orphelines.length} activité(s) en attente de séquence :</strong>
+        <div style="display:flex; gap:6px; align-items:center;">
+            <input type="text" id="inputReassignLotSeq" list="listeSequencesConnues" placeholder="Séquence pour TOUTES..." style="width:190px; padding:5px 8px;">
+            <button type="button" class="btn-valid" style="padding:5px 10px; font-size:12px;" onclick="reassignerToutesOrphelinesModal()">Réassigner tout</button>
+        </div>
+    </div>` + orphelines.map(o => `
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12.5px; padding:5px 0; border-bottom:1px dashed #f39c12;">
+            <span style="flex:1;"><strong>[${escHTML(o.niveau)}]</strong> ${escHTML(o.matiere)} — <strong>${escHTML(o.ressource)}</strong> <small style="color:#666;">(${escHTML(o.competence)})</small></span>
+            <div style="display:flex; gap:4px; align-items:center;">
+                <input type="text" id="inp_orph_${o.id}" list="listeSequencesConnues" placeholder="Choisir ou écrire..." style="width:165px; padding:4px 6px; font-size:12px;">
+                <button type="button" class="btn-action" style="padding:4px 8px; font-size:12px;" onclick="reassignerActiviteSequence('${o.id}', document.getElementById('inp_orph_${o.id}').value)">OK</button>
+            </div>
+        </div>
+    `).join('');
 }
 
 function afficherListeSequencesModal() {
@@ -2030,7 +2079,6 @@ function afficherListeSequencesModal() {
         }
     }
 
-    // Affichage des activités sans séquence (orphelines) pour réassignation rapide
     let orphelines = baseDonnees.filter(b => {
         if (!b || (b.sequence && b.sequence.trim() !== "")) return false;
         if (nivFiltre !== 'Tous' && !(b.niveau || "").toUpperCase().includes(nivFiltre)) return false;
@@ -2038,41 +2086,22 @@ function afficherListeSequencesModal() {
         return true;
     });
 
-    let blocOrph = document.getElementById('blocOrphelinsSeqModal');
-    if (blocOrph) {
-        if (orphelines.length === 0) {
-            blocOrph.style.display = 'none';
-        } else {
-            blocOrph.style.display = 'block';
-            let toutesSeqs = [...new Set([...sequencesCustom, ...baseDonnees.map(b => (b.sequence || "").trim()).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'fr'));
-            let optsSeq = `<option value="">-- Choisir ou taper une séquence --</option>` + toutesSeqs.map(sq => `<option value="${escHTML(sq)}">${escHTML(sq)}</option>`).join('');
-
-            blocOrph.innerHTML = `<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
-                <strong style="color:#d35400;">⚠️ ${orphelines.length} activité(s) sans séquence à réassigner :</strong>
-                <div style="display:flex; gap:6px; align-items:center;">
-                    <input type="text" id="inputReassignLotSeq" list="listeSequencesConnues" placeholder="Séquence pour toutes..." style="width:180px; padding:4px 8px;">
-                    <button type="button" class="btn-valid" style="padding:4px 10px; font-size:12px;" onclick="reassignerToutesOrphelinesModal()">Réassigner tout</button>
-                </div>
-            </div>` + orphelines.map(o => `
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12.5px; padding:4px 0; border-top:1px dashed #e67e22;">
-                    <span><strong>[${escHTML(o.niveau)}]</strong> ${escHTML(o.matiere)} — <strong>${escHTML(o.ressource)}</strong> (${escHTML(o.competence)})</span>
-                    <div style="display:flex; gap:4px;">
-                        <select onchange="reassignerActiviteSequence('${o.id}', this.value)" style="padding:3px; font-size:12px;">${optsSeq}</select>
-                    </div>
-                </div>
-            `).join('');
-        }
-    }
+    afficherBlocOrphelinsDansModal(orphelines);
 }
 
 function reassignerActiviteSequence(idAct, nouvSeq) {
-    if (!nouvSeq) return;
+    if (!nouvSeq || !nouvSeq.trim()) {
+        showToast("Choisissez ou écrivez un nom de séquence.", "error");
+        return;
+    }
+    let cleanSeq = nouvSeq.trim();
     let a = baseDonnees.find(b => b.id === idAct);
     if (a) {
-        a.sequence = nouvSeq.trim();
+        a.sequence = cleanSeq;
+        if (!sequencesCustom.includes(cleanSeq)) sequencesCustom.push(cleanSeq);
         postEditGlobal();
         afficherListeSequencesModal();
-        showToast(`Activité réassignée à "${nouvSeq}" !`, "success");
+        showToast(`Activité réassignée à "${cleanSeq}" !`, "success");
     }
 }
 
@@ -2099,17 +2128,26 @@ function reassignerToutesOrphelinesModal() {
 
 function sauvegarderToutesSequences() {
     document.querySelectorAll('.input-rename-seq').forEach(inp => {
-        let oldV = inp.getAttribute('data-old'), newV = inp.value.trim();
-        if (oldV && newV && oldV !== newV) {
-            baseDonnees.forEach(b => { if ((b.sequence || "").trim() === oldV) b.sequence = newV; });
-            sequencesCustom = sequencesCustom.map(s => s === oldV ? newV : s);
+        let oldV = inp.getAttribute('data-old');
+        let newV = inp.value.trim();
+        if (oldV && oldV !== newV) {
+            baseDonnees.forEach(b => {
+                if ((b.sequence || "").trim() === oldV) b.sequence = newV;
+            });
+            if (newV) {
+                sequencesCustom = sequencesCustom.map(s => s === oldV ? newV : s);
+            } else {
+                sequencesCustom = sequencesCustom.filter(s => s !== oldV);
+            }
         }
     });
-    postEditGlobal(); fermerModal('modalSequences'); showToast("Séquences mises à jour !", "success");
+    postEditGlobal();
+    fermerModal('modalSequences');
+    showToast("Séquences mises à jour !", "success");
 }
 
 function supprimerSequenceModal(s) {
-    if (confirm(`Retirer la séquence "${s}" ?\n\nAucune activité ne sera supprimée : les activités liées seront simplement placées en "⚠️ Sans séquence" pour que vous puissiez les réassigner.`)) {
+    if (confirm(`Retirer la séquence "${s}" ?\n\n✅ AUCUNE activité ne sera supprimée : elles seront toutes placées en attente ("⚠️ Sans séquence") juste en dessous pour être réassignées.`)) {
         let nbTouch = 0;
         baseDonnees.forEach(b => {
             if ((b.sequence || "").trim() === s) {
@@ -2118,9 +2156,10 @@ function supprimerSequenceModal(s) {
             }
         });
         sequencesCustom = sequencesCustom.filter(seq => seq !== s);
+        filtreCourantSequenceDB = 'SANS_SEQUENCE';
         postEditGlobal();
         afficherListeSequencesModal();
-        showToast(`Séquence retirée (${nbTouch} activité(s) à réassigner).`, "success");
+        showToast(`Séquence retirée : ${nbTouch} activité(s) en attente de réassignation.`, "success");
     }
 }
 
@@ -2201,7 +2240,7 @@ function changerCouleurDB(idAct, nouvCouleur) { let a = baseDonnees.find(b => b.
 function changerImageDB(idAct) { let a = baseDonnees.find(b => b.id === idAct); if (!a) return; let url = prompt("URL de l'image spécifique :", a.imageSpecifique || ""); if (url !== null) { a.imageSpecifique = url.trim(); sauvegarderBase(); afficherBase(); } }
 function viderBase() { if (confirm("⚠️ Vider l'intégralité de la base de données d'ateliers ?")) { baseDonnees = []; postEditGlobal(); showToast("Base de données vidée.", "success"); } }
 
-// Enregistrement simple avec vérification des 6 champs clés et message de confirmation détaillé
+// Enregistrement simple avec vérification des 6 champs clés et prise en charge du lien Anton
 function enregistrerActiviteBase() {
     let matiere = document.getElementById('inputMatiere').value.trim();
     let sequence = document.getElementById('inputSequence').value.trim();
@@ -2222,6 +2261,7 @@ function enregistrerActiviteBase() {
     let difficulte = parseInt(diffRaw) || 0;
     let couleur = document.getElementById('selectCouleurRapide').value || calculerCouleurAutomatique(matiere, niveauStr, typeRes);
     let imgAct = document.getElementById('inputImageAct').value.trim();
+    let lienExterne = document.getElementById('inputLienExterne') ? document.getElementById('inputLienExterne').value.trim() : "";
     let estEval = document.getElementById('cbEstEvaluation').checked;
 
     let oublis = [];
@@ -2240,7 +2280,7 @@ function enregistrerActiviteBase() {
     if (idEnCoursEdition) {
         let act = baseDonnees.find(b => b.id === idEnCoursEdition);
         if (act) {
-            Object.assign(act, { matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval });
+            Object.assign(act, { matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, lienExterne, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval });
             if (periode) programmations[act.id] = periode;
         }
         idEnCoursEdition = null;
@@ -2249,7 +2289,7 @@ function enregistrerActiviteBase() {
         showToast("Activité modifiée !", "success");
     } else {
         let newId = 'act_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
-        baseDonnees.push({ id: newId, matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval });
+        baseDonnees.push({ id: newId, matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, lienExterne, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval });
         if (periode) programmations[newId] = periode;
         showToast("Nouvelle activité ajoutée !", "success");
     }
@@ -2260,6 +2300,7 @@ function enregistrerActiviteBase() {
     document.getElementById('inputPageManuel').value = '';
     if (document.getElementById('inputPageOrange')) document.getElementById('inputPageOrange').value = '';
     document.getElementById('inputVarianteJaune').value = '';
+    if (document.getElementById('inputLienExterne')) document.getElementById('inputLienExterne').value = '';
 }
 
 function editerActiviteBase(idAct) {
@@ -2277,6 +2318,7 @@ function editerActiviteBase(idAct) {
     document.getElementById('inputPageManuel').value = a.pageManuel || '';
     if (document.getElementById('inputPageOrange')) document.getElementById('inputPageOrange').value = a.pageOrange || '';
     document.getElementById('inputVarianteJaune').value = a.varianteJaune || '';
+    if (document.getElementById('inputLienExterne')) document.getElementById('inputLienExterne').value = a.lienExterne || '';
     document.getElementById('selectPeriodeForm').value = programmations[a.id] || a.periode || '';
     document.getElementById('selectDifficulte').value = (a.difficulte !== undefined && a.difficulte !== null) ? String(a.difficulte) : "0";
     document.getElementById('selectCouleurRapide').value = (a.visuel && a.visuel.startsWith('#')) ? a.visuel : calculerCouleurAutomatique(a.matiere, a.niveau, a.typeRes);
@@ -2438,7 +2480,10 @@ function afficherBase() {
         } else if (a.pageManuel) {
             badgePages = `<span style="background:#eaf2f8; color:#1b4f72; padding:1px 5px; border-radius:4px; font-size:11px;">📘 ${escHTML(a.pageManuel)}</span> `;
         }
-        let detailsLivres = `${badgePages}${a.varianteJaune ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 5px; border-radius:4px; font-size:11px;">📒 ${escHTML(a.varianteJaune)}</span>` : ''}`;
+        let detailsLivres = `${badgePages}${a.varianteJaune ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 5px; border-radius:4px; font-size:11px;">📒 ${escHTML(a.varianteJaune)}</span> ` : ''}`;
+        let badgeLien = (a.lienExterne && a.lienExterne.trim())
+            ? `<a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir sur Anton">🔗 Anton ↗</a> `
+            : '';
         let rep = getRepereAtelierHtml(a, null, 26);
         let coulVisuel = rep.bg;
         let isChecked = selectionGroupeeBase.has(a.id);
@@ -2452,7 +2497,7 @@ function afficherBase() {
             <td><span class="filter-btn" style="padding:2px 6px; font-size:11px;">${escHTML(per)}</span></td>
             <td><span style="display:inline-block; padding:2px 7px; border-radius:4px; background:${coul.bg}; color:${coul.text}; font-size:11.5px; font-weight:bold;">${escHTML(a.matiere)}</span><br>${seqHtml} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
             <td>${escHTML(a.competence)}</td>
-            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${detailsLivres} ${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}</td>
+            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${detailsLivres}${badgeLien}${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}</td>
             <td>${escHTML(a.typeRes || '')}</td>
             <td style="text-align:center;">${escHTML(a.personnes || '')}</td>
             <td style="text-align:center; background:${coulVisuel};">
@@ -2460,6 +2505,7 @@ function afficherBase() {
                 <div style="margin-top:3px;">
                     <input type="color" value="${coulVisuel.startsWith('#') ? coulVisuel : '#ffffff'}" onchange="changerCouleurDB('${a.id}', this.value)" style="width:22px; height:18px; border:none; cursor:pointer; vertical-align:middle;">
                     <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" onclick="changerImageDB('${a.id}')">${a.imageSpecifique ? '🖼️' : '➕🖼️'}</button>
+                    <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Ajouter ou modifier le lien direct Anton" onclick="definirLienRapideDepuisDash('${a.id}')">${a.lienExterne ? '🔗' : '➕🔗'}</button>
                 </div>
             </td>
             <td>
