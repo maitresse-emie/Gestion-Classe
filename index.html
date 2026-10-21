@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GestionClasse - Plans de Travail & Suivi</title>
-    <link rel="stylesheet" href="style.css?v=20261028">
+    <link rel="stylesheet" href="style.css?v=20261029">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
 </head>
@@ -429,6 +429,10 @@
                             <label>Lien image spécifique :</label>
                             <input type="text" id="inputImageAct" placeholder="URL image ou lien Google Drive">
                         </div>
+                        <div>
+                            <label>🔗 Lien direct Anton / URL activité :</label>
+                            <input type="text" id="inputLienExterne" placeholder="https://anton.app/fr/...">
+                        </div>
                     </div>
 
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px; margin-top:15px; padding-top:12px; border-top:1px dashed #ccc;">
@@ -493,18 +497,19 @@
                         <table class="table-classique">
                             <thead>
                                 <tr>
-                                    <th style="width:70px;">Leçon</th>
+                                    <th style="width:65px;">Leçon</th>
                                     <th>Compétence(s) * <small>(séparer par ; si plusieurs)</small></th>
                                     <th>Nom de l'exercice *</th>
-                                    <th style="width:115px;">Support *</th>
-                                    <th style="width:70px;">N° Atel.</th>
-                                    <th style="width:65px;">Nb Pers.</th>
-                                    <th style="width:90px;">📘/🟡 Page</th>
-                                    <th style="width:90px;">🟠 Page CM</th>
-                                    <th style="width:90px;">📒 Var. Jaune</th>
+                                    <th style="width:110px;">Support *</th>
+                                    <th style="width:65px;">N° Atel.</th>
+                                    <th style="width:60px;">Nb Pers.</th>
+                                    <th style="width:85px;">📘/🟡 Page</th>
+                                    <th style="width:85px;">🟠 Page CM</th>
+                                    <th style="width:85px;">📒 Var. Jaune</th>
+                                    <th style="width:110px;">🔗 Lien Anton</th>
                                     <th style="width:85px;">Étoiles *</th>
-                                    <th style="width:45px; text-align:center;">🎯</th>
-                                    <th style="width:38px;"></th>
+                                    <th style="width:42px; text-align:center;">🎯</th>
+                                    <th style="width:36px;"></th>
                                 </tr>
                             </thead>
                             <tbody id="tbodySaisieMultiple"></tbody>
@@ -573,7 +578,7 @@
                             <th style="width:60px;">Période</th>
                             <th style="width:160px;">Matière / Séquence</th>
                             <th>Compétence(s)</th>
-                            <th>Ressource & Pages</th>
+                            <th>Ressource, Pages & Lien Anton</th>
                             <th style="width:90px;">Type</th>
                             <th style="width:65px; text-align:center;">Nb Pers.</th>
                             <th style="width:105px; text-align:center;">N° Atelier / Visuel</th>
@@ -960,6 +965,6 @@
 
     <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" style="display:none; position:fixed; bottom:20px; right:20px; z-index:99; background:#1b4f72; color:#fff; border:none; padding:12px 16px; border-radius:50%; cursor:pointer; font-size:16px; box-shadow:0 3px 8px rgba(0,0,0,0.2);">⬆️</button>
 
-    <script src="script.js?v=20261028"></script>
+    <script src="script.js?v=20261029"></script>
 </body>
 </html>
