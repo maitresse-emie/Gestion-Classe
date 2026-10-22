@@ -334,6 +334,27 @@ input[type="text"], input[type="number"], input[type="date"], select {
 .form-grid-base label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; }
 .form-grid-base input, .form-grid-base select { width: 100%; }
 
+/* Case de duplication L1 en haut des colonnes de saisie multiple */
+.th-copy-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-top: 3px;
+    padding: 1px 5px;
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #1b4f72;
+    cursor: pointer;
+    user-select: none;
+}
+.th-copy-label:hover {
+    background: #eaf2f8;
+    border-color: #2980b9;
+}
+
 /* Tableaux */
 .table-classique {
     width: 100%;
