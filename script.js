@@ -16,12 +16,14 @@ const KEY_THEME = 'monThemeVisuel_Finale';
 const KEY_FIREBASE_CFG = 'maConfigFirebase_Finale';
 const KEY_PRINT_CFG = 'maConfigImpression_Finale';
 const KEY_SEQ_CUSTOM = 'mesSequencesCustom_Finale';
+const KEY_LECONS_PROF = 'mesLeconsProf_Finale';
 
 let dashboardExpanded = new Set();
 let dashboardArchives = JSON.parse(localStorage.getItem(KEY_ARCHIVES_TODO)) || [];
 let afficherArchivesMode = false;
 let programmations = JSON.parse(localStorage.getItem(KEY_PROG)) || {};
 let sequencesCustom = JSON.parse(localStorage.getItem(KEY_SEQ_CUSTOM)) || [];
+let planningLeconsProf = JSON.parse(localStorage.getItem(KEY_LECONS_PROF)) || { semaineIndex: 0, semaines: [] };
 let selectionGroupeeBase = new Set();
 
 let printConfig = JSON.parse(localStorage.getItem(KEY_PRINT_CFG)) || {
@@ -120,7 +122,6 @@ function getCouleurMatiereBandeau(matiere) {
     return { bg: "#34495e", text: "#ffffff", border: "#2c3e50" };
 }
 
-// Découpe une chaîne de compétences (séparées par ";" ou "|") pour gérer les évaluations multi-compétences
 function extraireListeCompetences(compStr) {
     if (!compStr) return [];
     return compStr.toString().split(/[;|]+/).map(s => s.trim()).filter(Boolean);
@@ -205,7 +206,6 @@ function extraireNumeroAtelierPropre(symboleBrut, emojiType, emojiMat) {
     return s;
 }
 
-// Construit le code visuel : [Image ou Émoji du type] + [Émoji Matière] + [N° Atelier] (ex: 🎲🔤1)
 function getRepereAtelierHtml(act, eleve, tailleMaxImg = 28) {
     let infos = getInfosActivitePourEleve(act, eleve);
     let typeKey = "";
@@ -399,6 +399,7 @@ function importerDonneesUniversel(rawData) {
     let nouvArchives = parseSiString(data.archives || data.dashboardArchives || data[KEY_ARCHIVES_TODO]);
     let nouvPrintCfg = parseSiString(data.printConfig || data[KEY_PRINT_CFG]);
     let nouvSeqCustom = parseSiString(data.sequencesCustom || data[KEY_SEQ_CUSTOM]);
+    let nouvLeconsProf = parseSiString(data.planningLeconsProf || data[KEY_LECONS_PROF]);
 
     if (!Array.isArray(nouvBase) && (!nouvEleves || typeof nouvEleves !== 'object')) {
         showToast("⚠️ Format non reconnu : ni ateliers ni élèves trouvés.", "error");
@@ -424,6 +425,7 @@ function importerDonneesUniversel(rawData) {
     if (Array.isArray(nouvArchives)) { dashboardArchives = nouvArchives; localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); }
     if (nouvPrintCfg && typeof nouvPrintCfg === 'object') { printConfig = { ...printConfig, ...nouvPrintCfg }; localStorage.setItem(KEY_PRINT_CFG, JSON.stringify(printConfig)); }
     if (Array.isArray(nouvSeqCustom)) { sequencesCustom = nouvSeqCustom; localStorage.setItem(KEY_SEQ_CUSTOM, JSON.stringify(sequencesCustom)); }
+    if (nouvLeconsProf && typeof nouvLeconsProf === 'object') { planningLeconsProf = nouvLeconsProf; localStorage.setItem(KEY_LECONS_PROF, JSON.stringify(planningLeconsProf)); }
     if (data.theme) appliquerThemeVisuel(data.theme);
 
     rafraichirToutApresImport();
@@ -494,7 +496,7 @@ function restaurerDepuisTexteColle() {
 
 function exporterSauvegardeJSON() {
     Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
-    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, sequencesCustom: sequencesCustom, printConfig: printConfig, theme: localStorage.getItem(KEY_THEME) || 'pastel', exportedAt: new Date().toISOString() };
+    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, sequencesCustom: sequencesCustom, planningLeconsProf: planningLeconsProf, printConfig: printConfig, theme: localStorage.getItem(KEY_THEME) || 'pastel', exportedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -518,7 +520,7 @@ const URL_FIREBASE_FIXE = "https://gestionclasse-cc401-default-rtdb.europe-west1
 async function sauvegarderVersFirebase(forcerManuellement = false) {
     if (!forcerManuellement && baseDonnees.length === 0 && Object.keys(eleves).length === 0) return;
     Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
-    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, sequencesCustom: sequencesCustom, printConfig: printConfig, theme: localStorage.getItem(KEY_THEME) || 'pastel', updatedAt: new Date().toISOString() };
+    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, sequencesCustom: sequencesCustom, planningLeconsProf: planningLeconsProf, printConfig: printConfig, theme: localStorage.getItem(KEY_THEME) || 'pastel', updatedAt: new Date().toISOString() };
     try {
         let res = await fetch(`${URL_FIREBASE_FIXE}/classe_data.json`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1257,8 +1259,7 @@ function estActiviteTablette(act) {
     for (let k in imagesParType) { if (k.trim().toLowerCase() === tName) return Boolean(imagesParType[k] && imagesParType[k].isTablette); } return false;
 }
 
-// Validation avec prise en charge des ÉVALUATIONS MULTI-COMPÉTENCES (séparées par ";") :
-// Si une évaluation est validée, toutes les activités correspondant à l'une de ses compétences s'archivent automatiquement pour l'élève.
+// Validation avec prise en charge des ÉVALUATIONS MULTI-COMPÉTENCES (séparées par ";")
 function marquerCommeValideSansRafraichir(idActivite, eleve) {
     const act = baseDonnees.find(b => b.id === idActivite); if (!act) return;
     const dateValid = new Date().toLocaleDateString('fr-FR');
@@ -1635,8 +1636,330 @@ function rafraichirFicheImpression() {
 }
 
 // ==========================================
-// 6. ONGLET 3 : TABLEAU DE BORD (AVEC LIEN DIRECT ANTON)
+// 6. ONGLET 3 : TABLEAU DE BORD & PLAN DE TRAVAIL ENSEIGNANTE (ORDRE DE HAUT EN BAS + IMPRESSION ÉLÈVES)
 // ==========================================
+const JOURS_SEMAINE_PROF = ["Lundi", "Mardi", "Jeudi", "Vendredi"];
+const GROUPES_NIVEAUX_PROF = ["CP", "CE1", "CE2", "CM1-CM2"];
+
+function getStyleNiveauProf(pole, niv) {
+    if (pole === 'francais') {
+        if (niv === 'CP') return { bg: '#d5a6bd', text: '#2c3e50' };
+        if (niv === 'CE1' || niv === 'CE2') return { bg: '#b6d7a8', text: '#1b4332' };
+        if (niv === 'CM1-CM2') return { bg: '#9fc5e8', text: '#154360' };
+    } else {
+        if (niv === 'CP') return { bg: '#ffe599', text: '#7c2d12' };
+        if (niv === 'CE1' || niv === 'CE2') return { bg: '#f6b26b', text: '#784212' };
+        if (niv === 'CM1-CM2') return { bg: '#ea9999', text: '#641e16' };
+    }
+    return { bg: '#ecf0f1', text: '#2c3e50' };
+}
+
+// Structure : chaque jour (Lundi, Mardi, Jeudi, Vendredi) contient un tableau de 4 créneaux ordonnés de haut en bas (index 0 = 1er passage, index 3 = 4e passage)
+function creerSemaineProfVide(dateDebutISO = "", dateDebut = "", dateFin = "") {
+    let grilles = { francais: {}, maths: {} };
+    ["francais", "maths"].forEach(mat => {
+        JOURS_SEMAINE_PROF.forEach(j => {
+            grilles[mat][j] = GROUPES_NIVEAUX_PROF.map(niv => ({
+                niveau: niv,
+                texte: "",
+                fait: false
+            }));
+        });
+    });
+    return {
+        id: 'semprof_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        dateDebutISO: dateDebutISO,
+        dateDebut: dateDebut,
+        dateFin: dateFin,
+        francais: grilles.francais,
+        maths: grilles.maths
+    };
+}
+
+function assurerStructurePlanningProf() {
+    if (!planningLeconsProf || typeof planningLeconsProf !== 'object') {
+        planningLeconsProf = { semaineIndex: 0, semaines: [] };
+    }
+    if (!Array.isArray(planningLeconsProf.semaines) || planningLeconsProf.semaines.length === 0) {
+        planningLeconsProf.semaines = [creerSemaineProfVide()];
+        planningLeconsProf.semaineIndex = 0;
+    }
+    if (planningLeconsProf.semaineIndex < 0 || planningLeconsProf.semaineIndex >= planningLeconsProf.semaines.length) {
+        planningLeconsProf.semaineIndex = 0;
+    }
+
+    // Migration automatique si une semaine utilisait l'ancien format par niveau vers le nouveau format ordonné de haut en bas par jour
+    planningLeconsProf.semaines.forEach(s => {
+        ["francais", "maths"].forEach(mat => {
+            if (!s[mat]) s[mat] = {};
+            if (!Array.isArray(s[mat]["Lundi"])) {
+                let ancien = s[mat];
+                let nouvMat = {};
+                JOURS_SEMAINE_PROF.forEach(j => {
+                    let temp = [];
+                    GROUPES_NIVEAUX_PROF.forEach((niv, idx) => {
+                        let oldCell = (ancien[niv] && ancien[niv][j]) ? ancien[niv][j] : { texte: "", ordre: "", fait: false };
+                        let rang = parseInt(oldCell.ordre) || (idx + 1);
+                        temp.push({ niveau: niv, texte: oldCell.texte || "", fait: Boolean(oldCell.fait), rang: rang });
+                    });
+                    temp.sort((a, b) => a.rang - b.rang);
+                    nouvMat[j] = temp.map(x => ({ niveau: x.niveau, texte: x.texte, fait: x.fait }));
+                });
+                s[mat] = nouvMat;
+            }
+            JOURS_SEMAINE_PROF.forEach(j => {
+                if (!Array.isArray(s[mat][j]) || s[mat][j].length < 4) {
+                    s[mat][j] = GROUPES_NIVEAUX_PROF.map((niv, idx) => {
+                        let exist = (Array.isArray(s[mat][j]) && s[mat][j][idx]) ? s[mat][j][idx] : null;
+                        return exist ? { niveau: exist.niveau ?? niv, texte: exist.texte || "", fait: Boolean(exist.fait) } : { niveau: niv, texte: "", fait: false };
+                    });
+                }
+            });
+        });
+    });
+}
+
+function sauvegarderPlanningProf() {
+    assurerStructurePlanningProf();
+    localStorage.setItem(KEY_LECONS_PROF, JSON.stringify(planningLeconsProf));
+    declencherAutoSaveFirebase();
+}
+
+function changerSemaineProf(nouvIdx) {
+    assurerStructurePlanningProf();
+    planningLeconsProf.semaineIndex = parseInt(nouvIdx) || 0;
+    sauvegarderPlanningProf();
+    rafraichirDashboard();
+}
+
+function appliquerDateSemaineProf(dateISO) {
+    assurerStructurePlanningProf();
+    let sem = planningLeconsProf.semaines[planningLeconsProf.semaineIndex];
+    let calc = calculerVendrediDepuisISO(dateISO);
+    sem.dateDebutISO = dateISO || "";
+    sem.dateDebut = calc.debutFR;
+    sem.dateFin = calc.finFR;
+    sauvegarderPlanningProf();
+    rafraichirDashboard();
+}
+
+function ajouterSemaineProfAvance() {
+    assurerStructurePlanningProf();
+    let derniere = planningLeconsProf.semaines[planningLeconsProf.semaines.length - 1];
+    let nouvISO = "", nouvDeb = "", nouvFin = "";
+    if (derniere && derniere.dateDebutISO) {
+        let calcPrec = calculerVendrediDepuisISO(derniere.dateDebutISO);
+        if (calcPrec.lundiSuivantISO) {
+            nouvISO = calcPrec.lundiSuivantISO;
+            let calcNouv = calculerVendrediDepuisISO(nouvISO);
+            nouvDeb = calcNouv.debutFR;
+            nouvFin = calcNouv.finFR;
+        }
+    }
+    let nouvSem = creerSemaineProfVide(nouvISO, nouvDeb, nouvFin);
+    planningLeconsProf.semaines.push(nouvSem);
+    planningLeconsProf.semaineIndex = planningLeconsProf.semaines.length - 1;
+    sauvegarderPlanningProf();
+    rafraichirDashboard();
+    showToast(`📅 Semaine ${planningLeconsProf.semaines.length} de leçons créée !`, "success");
+}
+
+function supprimerSemaineProfActive() {
+    assurerStructurePlanningProf();
+    if (planningLeconsProf.semaines.length <= 1) return;
+    if (confirm(`Supprimer la Semaine ${planningLeconsProf.semaineIndex + 1} de votre agenda de leçons ?`)) {
+        planningLeconsProf.semaines.splice(planningLeconsProf.semaineIndex, 1);
+        planningLeconsProf.semaineIndex = Math.max(0, planningLeconsProf.semaineIndex - 1);
+        sauvegarderPlanningProf();
+        rafraichirDashboard();
+        showToast("Semaine de leçons supprimée.", "success");
+    }
+}
+
+function cloreSemaineProfActive() {
+    assurerStructurePlanningProf();
+    let idx = planningLeconsProf.semaineIndex;
+    let semActuelle = planningLeconsProf.semaines[idx];
+    if (!confirm(`Clôturer la Semaine ${idx + 1} de vos leçons explicites ?\n\n💡 Les leçons non cochées (non faites) seront automatiquement reportées sur la semaine suivante en conservant leur ordre de passage.`)) return;
+
+    let cibleSem = null;
+    if (planningLeconsProf.semaines.length > 1 && idx < planningLeconsProf.semaines.length - 1) {
+        cibleSem = planningLeconsProf.semaines[idx + 1];
+    } else {
+        let nouvISO = "", nouvDeb = "", nouvFin = "";
+        if (semActuelle.dateDebutISO) {
+            let c = calculerVendrediDepuisISO(semActuelle.dateDebutISO);
+            if (c.lundiSuivantISO) {
+                nouvISO = c.lundiSuivantISO;
+                let c2 = calculerVendrediDepuisISO(nouvISO);
+                nouvDeb = c2.debutFR;
+                nouvFin = c2.finFR;
+            }
+        }
+        cibleSem = creerSemaineProfVide(nouvISO, nouvDeb, nouvFin);
+        planningLeconsProf.semaines.push(cibleSem);
+    }
+
+    ["francais", "maths"].forEach(mat => {
+        JOURS_SEMAINE_PROF.forEach(j => {
+            for (let slot = 0; slot < 4; slot++) {
+                let cellOld = semActuelle[mat][j][slot];
+                if (cellOld && cellOld.texte.trim() !== "" && !cellOld.fait) {
+                    if (!cibleSem[mat][j][slot].texte) {
+                        cibleSem[mat][j][slot].niveau = cellOld.niveau;
+                        cibleSem[mat][j][slot].texte = cellOld.texte;
+                    }
+                }
+            }
+        });
+    });
+
+    planningLeconsProf.semaines.splice(idx, 1);
+    planningLeconsProf.semaineIndex = Math.min(idx, planningLeconsProf.semaines.length - 1);
+    sauvegarderPlanningProf();
+    rafraichirDashboard();
+    showToast("✅ Semaine de leçons clôturée (non faites reportées) !", "success");
+}
+
+function majSlotLeconProf(pole, jour, slotIdx, champ, valeur) {
+    assurerStructurePlanningProf();
+    let sem = planningLeconsProf.semaines[planningLeconsProf.semaineIndex];
+    if (!sem || !sem[pole] || !sem[pole][jour] || !sem[pole][jour][slotIdx]) return;
+    sem[pole][jour][slotIdx][champ] = valeur;
+    sauvegarderPlanningProf();
+    if (champ !== 'texte') {
+        rafraichirDashboard();
+    } else {
+        // Met à jour le texte de l'affichage imprimable en direct sans perdre le focus du curseur
+        let spanPrint = document.getElementById(`print_txt_${pole}_${jour}_${slotIdx}`);
+        if (spanPrint) spanPrint.innerText = valeur || "—";
+    }
+}
+
+// Permet de monter ou descendre un créneau dans la journée (ordre de passage de haut en bas)
+function deplacerSlotLeconProf(pole, jour, slotIdx, direction) {
+    assurerStructurePlanningProf();
+    let sem = planningLeconsProf.semaines[planningLeconsProf.semaineIndex];
+    let nouvIdx = slotIdx + direction;
+    if (nouvIdx < 0 || nouvIdx >= 4) return;
+    let temp = sem[pole][jour][slotIdx];
+    sem[pole][jour][slotIdx] = sem[pole][jour][nouvIdx];
+    sem[pole][jour][nouvIdx] = temp;
+    sauvegarderPlanningProf();
+    rafraichirDashboard();
+}
+
+// Lance l'impression exclusive de l'affiche des leçons explicites pour les élèves
+function imprimerPlanningLeconsProf() {
+    document.body.classList.add('print-lecons-only');
+    window.print();
+    setTimeout(() => {
+        document.body.classList.remove('print-lecons-only');
+    }, 600);
+}
+
+function genererDatalistSuggestionsLecons(pole, niveauGroupe) {
+    let suggestions = new Set();
+    let nivCibles = niveauGroupe === "CM1-CM2" ? ["CM1", "CM2"] : (niveauGroupe ? [niveauGroupe] : ["CP", "CE1", "CE2", "CM1", "CM2"]);
+    baseDonnees.forEach(a => {
+        if (!a) return;
+        let matNorm = (a.matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        let estBonPole = (pole === 'francais')
+            ? (matNorm.includes('francais') || matNorm.includes('grammaire') || matNorm.includes('conjugaison') || matNorm.includes('orthographe') || matNorm.includes('lexique') || matNorm.includes('vocabulaire') || matNorm.includes('ecriture'))
+            : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('programmation'));
+        if (!estBonPole) return;
+        let nivAct = (a.niveau || "").toUpperCase();
+        if (!nivCibles.some(n => nivAct.includes(n))) return;
+
+        let prefixLecon = a.lecon ? `${a.lecon} - ` : "";
+        if (a.competence) suggestions.add(`${prefixLecon}${a.competence}`);
+        if (a.sequence) suggestions.add(`${prefixLecon}${a.sequence}`);
+    });
+    return Array.from(suggestions).sort((a, b) => a.localeCompare(b, 'fr'));
+}
+
+// Génère un tableau (Français ou Maths) où les lignes de haut en bas correspondent à l'ordre de passage (1er -> 2e -> 3e -> 4e)
+function genererTableauLeconsPoleHtml(pole, titre, couleurBandeau, sem) {
+    let datalistsHtml = "";
+    GROUPES_NIVEAUX_PROF.forEach(niv => {
+        let idDl = `dl_prof_${pole}_${niv.replace('-', '_')}`;
+        let suggs = genererDatalistSuggestionsLecons(pole, niv);
+        datalistsHtml += `<datalist id="${idDl}">${suggs.map(s => `<option value="${escHTML(s)}">`).join('')}</datalist>`;
+    });
+
+    const labelsOrdre = ["1er passage", "2e passage", "3e passage", "4e passage"];
+
+    let rowsHtml = [0, 1, 2, 3].map(slotIdx => {
+        let cellsHtml = JOURS_SEMAINE_PROF.map(jour => {
+            let cell = (sem[pole][jour] && sem[pole][jour][slotIdx]) ? sem[pole][jour][slotIdx] : { niveau: GROUPES_NIVEAUX_PROF[slotIdx], texte: "", fait: false };
+            let stNiv = getStyleNiveauProf(pole, cell.niveau);
+            let idDl = cell.niveau ? `dl_prof_${pole}_${cell.niveau.replace('-', '_')}` : '';
+            let bgCell = cell.fait ? "#d4efdf" : "#ffffff";
+
+            let optionsNiv = `<option value="" ${!cell.niveau ? 'selected' : ''}>-- Pause / Libre --</option>` +
+                GROUPES_NIVEAUX_PROF.map(n => `<option value="${n}" ${cell.niveau === n ? 'selected' : ''}>Groupe ${n}</option>`).join('');
+
+            return `<td style="background:${bgCell}; padding:6px; vertical-align:top; border:1px solid #cbd5e1;">
+                <!-- Version interactive pour l'enseignante (masquée à l'impression de l'affiche) -->
+                <div class="no-print">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; gap:3px;">
+                        <select onchange="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'niveau', this.value)" style="background:${stNiv.bg}; color:${stNiv.text}; font-weight:bold; font-size:12px; padding:2px 6px; border-radius:5px; border:1px solid rgba(0,0,0,0.18); cursor:pointer;">
+                            ${optionsNiv}
+                        </select>
+                        <div style="display:flex; align-items:center; gap:2px;">
+                            ${slotIdx > 0 ? `<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Monter ce groupe plus tôt" onclick="deplacerSlotLeconProf('${pole}', '${jour}', ${slotIdx}, -1)">▲</button>` : ''}
+                            ${slotIdx < 3 ? `<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Descendre ce groupe plus tard" onclick="deplacerSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 1)">▼</button>` : ''}
+                            <label style="font-size:11px; font-weight:bold; color:${cell.fait ? '#1e8449' : '#7f8c8d'}; cursor:pointer; margin-left:3px; display:flex; align-items:center; gap:2px;" title="Cocher quand la leçon a été donnée">
+                                <input type="checkbox" ${cell.fait ? 'checked' : ''} onchange="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'fait', this.checked)" style="cursor:pointer;">
+                                ${cell.fait ? '✅' : ''}
+                            </label>
+                        </div>
+                    </div>
+                    <input type="text" list="${idDl}" value="${escHTML(cell.texte || '')}" placeholder="Leçon / notion..." oninput="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'texte', this.value)" style="width:100%; padding:5px 7px; font-size:12.5px; font-weight:${cell.texte ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:5px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;'}">
+                </div>
+
+                <!-- Version Affiche Élèves pour l'impression (claire et lisible de loin) -->
+                <div class="only-print-lecons" style="text-align:center; padding:3px 2px;">
+                    ${cell.niveau ? `<div style="display:inline-block; background:${stNiv.bg} !important; color:${stNiv.text} !important; font-weight:bold; font-size:11.5pt; padding:2px 10px; border-radius:6px; border:1px solid #2c3e50; margin-bottom:4px;">${escHTML(cell.niveau)}</div>` : ''}
+                    <div id="print_txt_${pole}_${jour}_${slotIdx}" style="font-size:11pt; font-weight:bold; color:#1e293b; line-height:1.2; ${cell.fait ? 'text-decoration:line-through; opacity:0.6;' : ''}">
+                        ${escHTML(cell.texte || '—')}
+                    </div>
+                </div>
+            </td>`;
+        }).join('');
+
+        return `<tr>
+            <td style="font-weight:bold; font-size:12.5px; text-align:center; background:#f1f5f9; color:#1e293b; width:88px;">
+                <span style="display:inline-block; background:${couleurBandeau}; color:#fff; border-radius:50%; width:22px; height:22px; line-height:22px; font-size:12px; margin-bottom:2px;">${slotIdx + 1}</span><br>
+                <small>${labelsOrdre[slotIdx]}</small>
+            </td>
+            ${cellsHtml}
+        </tr>`;
+    }).join('');
+
+    return `<div class="card-panel card-pole-lecon" style="border-top:4px solid ${couleurBandeau}; padding:12px 14px;">
+        <div style="background:${couleurBandeau} !important; color:#ffffff !important; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:14px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+            <span>${titre}</span>
+            <small style="font-weight:normal; opacity:0.95;">⬇ Ordre de passage de haut en bas (1er ➔ 4e)</small>
+        </div>
+        ${datalistsHtml}
+        <div style="overflow-x:auto;">
+            <table class="table-classique" style="table-layout:fixed; min-width:620px;">
+                <thead>
+                    <tr>
+                        <th style="width:88px; text-align:center;">Passage</th>
+                        <th style="text-align:center;">LUNDI</th>
+                        <th style="text-align:center;">MARDI</th>
+                        <th style="text-align:center;">JEUDI</th>
+                        <th style="text-align:center;">VENDREDI</th>
+                    </tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+        </div>
+    </div>`;
+}
+
 function toggleAfficherArchives() {
     afficherArchivesMode = !afficherArchivesMode;
     let btn = document.getElementById('btnToggleArchivesDash');
@@ -1672,8 +1995,55 @@ function definirLienRapideDepuisDash(idAct) {
 
 function rafraichirDashboard() {
     const cont = document.getElementById('dashboardContent'); if (!cont) return;
+    assurerStructurePlanningProf();
+    let semProf = planningLeconsProf.semaines[planningLeconsProf.semaineIndex];
+
+    let optionsSemProf = planningLeconsProf.semaines.map((s, idx) => {
+        let dTxt = (s.dateDebut && s.dateFin) ? ` (du ${s.dateDebut} au ${s.dateFin})` : '';
+        return `<option value="${idx}" ${idx === planningLeconsProf.semaineIndex ? 'selected' : ''}>Semaine ${idx + 1}${dTxt}${idx === 0 ? ' [En cours]' : ' [D\'avance]'}</option>`;
+    }).join('');
+
+    let titreDatesAffiche = (semProf.dateDebut && semProf.dateFin) ? `Semaine du ${semProf.dateDebut} au ${semProf.dateFin}` : `Semaine ${planningLeconsProf.semaineIndex + 1}`;
+
+    let blocAgendaProfHtml = `
+    <div id="blocPlanningLeconsPrint" class="card-panel" style="margin-bottom:22px; background:#f8fbff; border:2px solid #1b4f72;">
+        <!-- En-tête spécial visible uniquement lors de l'impression de l'affiche pour les élèves -->
+        <div class="only-print-lecons" style="text-align:center; border-bottom:3px solid #1b4f72; padding-bottom:8px; margin-bottom:12px;">
+            <h1 style="margin:0; font-size:20pt; color:#1b4f72;">👩‍🏫 PLANNING DES LEÇONS AVEC LA MAÎTRESSE — ${escHTML(titreDatesAffiche)}</h1>
+            <p style="margin:4px 0 0 0; font-size:11pt; color:#333;">Ordre de passage des groupes de haut en bas (1<sup>er</sup> passage ➔ 4<sup>e</sup> passage)</p>
+        </div>
+
+        <!-- Barre d'outils enseignante (masquée à l'impression) -->
+        <div class="semaines-flex no-print" style="margin-bottom:14px; padding-bottom:10px; border-bottom:1px dashed #bdc3c7;">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <h3 style="margin:0; color:#1b4f72;">👩‍🏫 Planning des Leçons Explicites (Ordre de haut en bas)</h3>
+                <select onchange="changerSemaineProf(this.value)" style="font-weight:bold; padding:6px 10px; border-radius:6px; border:1px solid #1b4f72;">
+                    ${optionsSemProf}
+                </select>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <label style="font-size:13px; font-weight:bold;">Lundi : <input type="date" value="${escHTML(semProf.dateDebutISO || '')}" onchange="appliquerDateSemaineProf(this.value)"></label>
+                <span style="font-weight:bold; color:#1b4f72; font-size:13px;">${semProf.dateFin ? `➔ au Vendredi ${escHTML(semProf.dateFin)}` : '➔ Vendredi : --/--'}</span>
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button type="button" class="btn-action" onclick="imprimerPlanningLeconsProf()" style="background:#8e44ad !important; color:#fff !important;" title="Imprimer ce planning de leçons pour l'afficher aux élèves">🖨️ Imprimer l'affichage élèves</button>
+                <button type="button" class="btn-action" onclick="ajouterSemaineProfAvance()">➕ Semaine d'avance</button>
+                ${planningLeconsProf.semaines.length > 1 ? `<button type="button" class="btn-danger" onclick="supprimerSemaineProfActive()">🗑️ Suppr.</button>` : ''}
+                <button type="button" class="btn-valid" onclick="cloreSemaineProfActive()">🏁 Clôturer & Suivante</button>
+            </div>
+        </div>
+
+        <div class="grid-2-cols grid-lecons-poles">
+            ${genererTableauLeconsPoleHtml('francais', '📘 FRANÇAIS — Ordre des leçons explicites', '#1b4f72', semProf)}
+            ${genererTableauLeconsPoleHtml('maths', '📕 MATHÉMATIQUES — Ordre des leçons explicites', '#c0392b', semProf)}
+        </div>
+    </div>`;
+
     const listeEl = getElevesTries();
-    if (listeEl.length === 0) { cont.innerHTML = `<div class="empty-state"><h3>Aucun élève enregistré.</h3></div>`; return; }
+    if (listeEl.length === 0) {
+        cont.innerHTML = blocAgendaProfHtml + `<div class="empty-state no-print-lecons"><h3>Aucun élève enregistré pour le suivi individuel.</h3></div>`;
+        return;
+    }
 
     let lignesRemediation = '', tachesTablettesMap = {};
     listeEl.forEach(e => {
@@ -1699,7 +2069,7 @@ function rafraichirDashboard() {
     });
 
     let tabKeys = Object.keys(tachesTablettesMap);
-    let html = `<div class="grid-2-cols" style="margin-bottom:20px;">
+    let html = blocAgendaProfHtml + `<div class="grid-2-cols no-print-lecons" style="margin-bottom:20px;">
         <div class="card-panel" style="border-left:5px solid #c0392b;"><h3 style="color:#c0392b; margin-bottom:10px;">👩‍🏫 Besoins d'ateliers dirigés & Remédiations</h3>${lignesRemediation ? `<table class="table-classique"><thead><tr><th>Élève</th><th>Matière</th><th>Atelier</th><th>Statut</th><th>Action</th></tr></thead><tbody>${lignesRemediation}</tbody></table>` : `<p style="color:#7f8c8d; font-size:13px;">Aucune remédiation en cours.</p>`}</div>
         <div class="card-panel" style="border-left:5px solid #8e44ad;"><h3 style="color:#6c3483; margin-bottom:10px;">📱 Préparation Tablettes (Anton / Scratch)</h3>${tabKeys.length > 0 ? `<table class="table-classique"><thead><tr><th>Support</th><th>Activité & Lien direct</th><th>Élèves à épingler</th><th>Action</th></tr></thead><tbody>` + tabKeys.map(k => {
             let item = tachesTablettesMap[k];
@@ -1713,7 +2083,7 @@ function rafraichirDashboard() {
                 <td style="text-align:center;"><button type="button" class="filter-btn" title="Marquer comme épinglé sur Anton" onclick="${item.estArchTab ? `restaurerArchive('${item.cleTab}')` : `archiverItem('${item.cleTab}')`}">${item.estArchTab ? '↩️' : '☑️ Épinglé'}</button></td>
             </tr>`;
         }).join('') + `</tbody></table>` : `<p style="color:#7f8c8d; font-size:13px;">Aucune activité tablette à préparer.</p>`}</div>
-    </div><div class="dashboard-grid">`;
+    </div><div class="dashboard-grid no-print-lecons">`;
 
     listeEl.forEach(e => {
         let total = (e.planHebdo || []).length, nbValides = (e.planHebdo || []).filter(id => e.valides && e.valides[id]).length;
@@ -1893,7 +2263,6 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
     }
 }
 
-// Enregistrement multiple avec contrôle des champs importants et demande de confirmation détaillée
 function enregistrerSaisieMultiple() {
     let nivArr = getNiveauxCochesFormulaire('.cb-niveau-multi');
     let niveauStr = nivArr.length > 0 ? nivArr.join(', ') : 'CP';
@@ -1985,7 +2354,6 @@ function sauvegarderToutesMatieres() {
 }
 function supprimerMatiereModal(m) { if (confirm(`Supprimer toutes les activités de la matière "${m}" ?`)) { baseDonnees = baseDonnees.filter(b => (b.matiere || "").trim() !== m); postEditGlobal(); afficherListeMatieresModal(); } }
 
-// GESTION DES SÉQUENCES : Filtrage par Niveau & Matière + Suppression sans perte d'activités + Réassignation
 function ouvrirModalGestionSequences() {
     let sel = document.getElementById('filtreMatiereModalSeq');
     let mats = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))];
@@ -2240,7 +2608,6 @@ function changerCouleurDB(idAct, nouvCouleur) { let a = baseDonnees.find(b => b.
 function changerImageDB(idAct) { let a = baseDonnees.find(b => b.id === idAct); if (!a) return; let url = prompt("URL de l'image spécifique :", a.imageSpecifique || ""); if (url !== null) { a.imageSpecifique = url.trim(); sauvegarderBase(); afficherBase(); } }
 function viderBase() { if (confirm("⚠️ Vider l'intégralité de la base de données d'ateliers ?")) { baseDonnees = []; postEditGlobal(); showToast("Base de données vidée.", "success"); } }
 
-// Enregistrement simple avec vérification des 6 champs clés et prise en charge du lien Anton
 function enregistrerActiviteBase() {
     let matiere = document.getElementById('inputMatiere').value.trim();
     let sequence = document.getElementById('inputSequence').value.trim();
@@ -2346,7 +2713,6 @@ function supprimerActiviteBase(idAct) {
     }
 }
 
-// SÉLECTION ET MODIFICATION GROUPÉE D'ATELIERS DANS LA BASE DE DONNÉES
 function toggleCheckActiviteBase(idAct, checked) {
     if (checked) selectionGroupeeBase.add(idAct);
     else selectionGroupeeBase.delete(idAct);
@@ -2634,7 +3000,11 @@ function genererApercuEtiquettes() {
         </div>`;
     }).join('');
 }
-function lancerImpressionEtiquettes() { genererApercuEtiquettes(); window.print(); }
+function lancerImpressionEtiquettes() {
+    document.body.classList.remove('print-lecons-only');
+    genererApercuEtiquettes();
+    window.print();
+}
 
 function genererMatriceCompetences() {
     const selMat = document.getElementById('selectMatiereMatrice');
@@ -2712,6 +3082,7 @@ function exporterBilanEdulivret() {
 // 9. NAVIGATION & INITIALISATION GLOBALE
 // ==========================================
 function changerOnglet(idPage, element) {
+    document.body.classList.remove('print-lecons-only');
     document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
     document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
     let targetPage = document.getElementById(idPage); if (targetPage) targetPage.classList.add('active'); if (element) element.classList.add('active');
