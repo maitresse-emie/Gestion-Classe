@@ -32,6 +32,8 @@ const MATIERES_DEFAUT_LISTE = [
     "🤖Mathématiques - Programmation"
 ];
 
+const PERIODES_LISTE = ['P1', 'P2', 'P3', 'P4', 'P5'];
+
 let dashboardExpanded = new Set();
 let dashboardArchives = JSON.parse(localStorage.getItem(KEY_ARCHIVES_TODO)) || [];
 let afficherArchivesMode = false;
@@ -148,7 +150,7 @@ function formaterAffichageCompetences(compStr) {
 }
 
 // ==========================================
-// GESTION MULTI-SÉQUENCES PAR ATELIER
+// GESTION MULTI-SÉQUENCES & PROGRAMMATION MULTI-PÉRIODES PAR SÉQUENCE
 // ==========================================
 function extraireListeSequences(seqStr) {
     if (!seqStr) return [];
@@ -171,8 +173,59 @@ function formaterAffichageSequences(seqStr) {
     return list.map(s => `<span style="display:inline-block; background:#fef9e7; color:#7d6608; border:1px solid #f5b041; border-radius:6px; padding:1px 6px; margin:1px 2px; font-size:11.5px; font-weight:600;">📑 ${escHTML(s)}</span>`).join(' ');
 }
 
-// Vérifie si un atelier a déjà été validé/archivé pour une séquence spécifique
-// (S'il appartient à plusieurs séquences, le valider dans la Séquence A ne l'archive PAS dans la Séquence B)
+// Clé de programmation propre à une séquence (Matière + Séquence)
+function getCleProgSequence(matiere, sequence) {
+    return `SEQ||${(matiere || "").trim()}||${(sequence || "").trim()}`;
+}
+
+function extrairePeriodesArray(perRaw) {
+    if (!perRaw) return [];
+    if (Array.isArray(perRaw)) return PERIODES_LISTE.filter(p => perRaw.includes(p));
+    let str = String(perRaw).toUpperCase();
+    return PERIODES_LISTE.filter(p => str.includes(p));
+}
+
+// Récupère la liste des périodes (ex: ['P1', 'P3']) d'une séquence donnée
+function getPeriodesSequence(matiere, sequence) {
+    if (!sequence || !sequence.trim()) return [];
+    let cle = getCleProgSequence(matiere, sequence);
+    if (programmations[cle] !== undefined) {
+        return extrairePeriodesArray(programmations[cle]);
+    }
+    // Rétrocompatibilité : si des ateliers de cette séquence avaient déjà une période enregistrée, on les récupère automatiquement
+    let setP = new Set();
+    baseDonnees.forEach(a => {
+        if (!a) return;
+        if (matiere && (a.matiere || "").trim() !== (matiere || "").trim()) return;
+        if (activiteAppartientASequence(a, sequence)) {
+            let pAct = programmations[a.id] || a.periode || "";
+            extrairePeriodesArray(pAct).forEach(p => setP.add(p));
+        }
+    });
+    return PERIODES_LISTE.filter(p => setP.has(p));
+}
+
+// Récupère les périodes effectives d'une activité (à partir de ses séquences programmées ou de sa période propre)
+function getPeriodesActivite(act) {
+    if (!act) return [];
+    let setP = new Set();
+    let seqs = extraireListeSequences(act.sequence);
+    seqs.forEach(s => {
+        getPeriodesSequence(act.matiere, s).forEach(p => setP.add(p));
+    });
+    if (setP.size === 0) {
+        let pDirect = programmations[act.id] || act.periode || "";
+        extrairePeriodesArray(pDirect).forEach(p => setP.add(p));
+    }
+    return PERIODES_LISTE.filter(p => setP.has(p));
+}
+
+function getPeriodesActiviteTexte(act) {
+    let arr = getPeriodesActivite(act);
+    if (arr.length === 5) return "P1 à P5";
+    return arr.length > 0 ? arr.join(', ') : "-";
+}
+
 function estActiviteValideePourSequence(eleve, act, seqCible) {
     if (!eleve || !act) return false;
     let seqsAct = extraireListeSequences(act.sequence);
@@ -204,7 +257,7 @@ function getSequenceActivePourEleve(eleve, act) {
 }
 
 // ==========================================
-// GESTION DES PARCOURS & VISUELS ATELIERS
+// GESTION DES PARCOURS (JAUNE / ORANGE / FICHIER JAUNE) & VISUELS ATELIERS
 // ==========================================
 function estEleveCM(eleveOuNiveau) {
     let niv = typeof eleveOuNiveau === 'string' ? eleveOuNiveau : (eleveOuNiveau && eleveOuNiveau.niveau ? eleveOuNiveau.niveau : "");
@@ -213,28 +266,39 @@ function estEleveCM(eleveOuNiveau) {
 }
 
 function getInfosActivitePourEleve(act, eleve) {
-    let useJaune = Boolean(eleve && eleve.fichierJaune && act && act.varianteJaune && act.varianteJaune.trim() !== "");
+    let estTypeJaune = Boolean(act && (act.typeRes || "").toLowerCase().includes("fichier jaune"));
+    let aVarJaune = Boolean(act && act.varianteJaune && act.varianteJaune.trim() !== "");
+    let useJaune = Boolean(eleve && eleve.fichierJaune && (aVarJaune || estTypeJaune));
+
     if (useJaune) {
-        let detailPage = act.varianteJaune.trim();
-        let badgeLivre = `<span style="background:#ffe599; color:#7c2d12; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; border:1px solid #f1c40f;">📒 ${escHTML(detailPage)}</span>`;
-        let typeEffectif = (imagesParType["Fichier jaune"] && (imagesParType["Fichier jaune"].img || imagesParType["Fichier jaune"].emoji)) ? "Fichier jaune" : (act.typeRes || "");
+        let detailPage = aVarJaune ? act.varianteJaune.trim() : ((act && act.pageManuel) ? act.pageManuel.trim() : "");
+        let badgeLivre = detailPage
+            ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; border:1px solid #f1c40f;">📒 ${escHTML(detailPage)}</span>`
+            : `<span style="background:#ffe599; color:#7c2d12; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; border:1px solid #f1c40f;">📒 F. Jaune</span>`;
+        let typeEffectif = (imagesParType["Fichier jaune"] && (imagesParType["Fichier jaune"].img || imagesParType["Fichier jaune"].emoji)) ? "Fichier jaune" : (act.typeRes || "Fichier jaune");
         return { useJaune: true, detailPage, badgeLivre, typeEffectif, couleurForcee: "#ffe599" };
     }
 
-    let detailPage = (act && act.pageManuel) ? act.pageManuel.trim() : "";
+    let pageJaune = (act && act.pageManuel) ? act.pageManuel.trim() : "";
+    let pageOrange = (act && act.pageOrange) ? act.pageOrange.trim() : "";
+    let detailPage = pageJaune || pageOrange;
     let badgeLivre = "";
 
     if (eleve && estEleveCM(eleve)) {
         let parcoursEl = eleve.parcours || (eleve.niveau.toUpperCase() === "CM2" ? "orange" : "jaune");
-        let aDeuxParcours = Boolean(act && act.pageOrange && act.pageOrange.trim() !== "");
-        if (parcoursEl === "orange" && aDeuxParcours) {
-            detailPage = act.pageOrange.trim();
-            badgeLivre = `<span style="background:#fdebd0; color:#9c640c; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; border:1px solid #f39c12;" title="Parcours Orange">${escHTML(detailPage)}</span>`;
-        } else if (detailPage) {
-            if (aDeuxParcours) {
-                badgeLivre = `<span style="background:#fef9e7; color:#7d6608; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; border:1px solid #f1c40f;" title="Parcours Jaune">${escHTML(detailPage)}</span>`;
-            } else {
-                badgeLivre = `<span style="background:#eaf2f8; color:#1b4f72; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold;">📘 ${escHTML(detailPage)}</span>`;
+        if (parcoursEl === "orange") {
+            detailPage = pageOrange || pageJaune;
+            if (detailPage) {
+                badgeLivre = pageOrange
+                    ? `<span style="background:#fdebd0; color:#9c640c; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; border:1px solid #f39c12;" title="Parcours Orange">🟠 ${escHTML(detailPage)}</span>`
+                    : `<span style="background:#eaf2f8; color:#1b4f72; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold;">📘 ${escHTML(detailPage)}</span>`;
+            }
+        } else {
+            detailPage = pageJaune || pageOrange;
+            if (detailPage) {
+                badgeLivre = (pageJaune && pageOrange)
+                    ? `<span style="background:#fef9e7; color:#7d6608; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; border:1px solid #f1c40f;" title="Parcours Jaune">🟡 ${escHTML(detailPage)}</span>`
+                    : `<span style="background:#eaf2f8; color:#1b4f72; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold;">📘 ${escHTML(detailPage)}</span>`;
             }
         }
     } else {
@@ -826,7 +890,7 @@ function calculTailleStockage() {
     if (jauge) { jauge.style.width = pct + "%"; jauge.style.backgroundColor = pct > 80 ? "#e74c3c" : (pct > 50 ? "#f39c12" : "#27ae60"); }
 }
 // ==========================================
-// 4. ONGLET 1 : PLAN & SUIVI ÉLÈVES (MULTI-SÉQUENCES INDÉPENDANTES & RITUELS)
+// 4. ONGLET 1 : PLAN & SUIVI ÉLÈVES (ADAPTATION AUTO PARCOURS, MULTI-SÉQUENCES & RITUELS)
 // ==========================================
 function majVisibiliteParcoursCreation(niveau) {
     let selParc = document.getElementById('nouvelEleveParcours');
@@ -1171,9 +1235,14 @@ function afficherRessourcesDisponibles() {
         if (mat !== 'TOUTES_MATIERES' && (a.matiere || "").trim() !== mat) return false;
         if (seq && seq !== 'TOUTES_SEQUENCES' && !activiteAppartientASequence(a, seq)) return false;
 
-        let cleCompProg = `${a.matiere}||${a.sequence}||${a.competence}`;
-        let perAct = programmations[a.id] || programmations[cleCompProg] || a.periode || "";
-        if (per !== 'Toutes' && !perAct.includes(per)) return false;
+        // Filtrage par période (basé sur les périodes de la séquence ou de l'atelier)
+        if (per !== 'Toutes') {
+            let periodesAct = (seq && seq !== 'TOUTES_SEQUENCES')
+                ? getPeriodesSequence(a.matiere, seq)
+                : getPeriodesActivite(a);
+            if (!periodesAct.includes(per)) return false;
+        }
+
         if (filtreEtoilesDispo > 0 && (parseInt(a.difficulte) || 0) !== filtreEtoilesDispo) return false;
         if (eleve.planHebdo.includes(a.id) || (eleve.enAttente && eleve.enAttente.includes(a.id))) return false;
         if (eleve.masquees && eleve.masquees.includes(a.id)) return false;
@@ -1181,9 +1250,6 @@ function afficherRessourcesDisponibles() {
         let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
         if (isRec) return true;
 
-        // Gestion multi-séquences :
-        // - Si une séquence précise est filtrée, on vérifie si l'atelier a été validé dans CETTE séquence.
-        // - Si "Toutes les séquences" est affiché, l'atelier reste visible tant qu'il lui reste au moins une séquence non validée !
         let seqsAct = extraireListeSequences(a.sequence);
         if (seq && seq !== 'TOUTES_SEQUENCES') {
             if (estActiviteValideePourSequence(eleve, a, seq)) return false;
@@ -1203,7 +1269,7 @@ function afficherRessourcesDisponibles() {
     let html = '';
     liste.forEach(a => {
         let infos = getInfosActivitePourEleve(a, eleve), rep = getRepereAtelierHtml(a, eleve, 24);
-        let coul = getCouleurMatiereBandeau(a.matiere), perAct = programmations[a.id] || a.periode || "-";
+        let coul = getCouleurMatiereBandeau(a.matiere), perAct = getPeriodesActiviteTexte(a);
         let seqsAct = extraireListeSequences(a.sequence);
         let seqRestantes = seqsAct.filter(s => !estActiviteValideePourSequence(eleve, a, s));
         if (seqRestantes.length === 0) seqRestantes = seqsAct;
@@ -1311,37 +1377,148 @@ function ouvrirModalDuplication() {
     if (!idEleveCourant || eleves[idEleveCourant].planHebdo.length === 0) { showToast("Le plan est vide.", "error"); return; }
     document.getElementById('nomEleveSourceDupli').innerText = eleves[idEleveCourant].nom;
     let html = genererBarreSelectionNiveauxHtml('cb-dupli-eleve');
-    getElevesTries().forEach(e => { if (e.id !== idEleveCourant) html += `<label style="cursor:pointer; font-size:14px;"><input type="checkbox" class="cb-dupli-eleve" value="${e.id}"> [${e.niveau}] ${escHTML(e.nom)}</label>`; });
+    getElevesTries().forEach(e => {
+        if (e.id !== idEleveCourant) {
+            let tagParc = estEleveCM(e) ? ((e.parcours === 'orange') ? ' 🟠' : ' 🟡') : '';
+            let tagJaune = e.fichierJaune ? ' 📒' : '';
+            html += `<label style="cursor:pointer; font-size:14px;"><input type="checkbox" class="cb-dupli-eleve" value="${e.id}"> [${e.niveau}] ${escHTML(e.nom)}${tagParc}${tagJaune}</label>`;
+        }
+    });
     document.getElementById('listeElevesDupli').innerHTML = html; ouvrirModal('modalDupliquer');
+}
+
+function trouverActiviteAdapteePourEleve(actSource, eleveSource, eleveTarget, seqCible) {
+    if (!actSource || !eleveTarget) return actSource;
+
+    let nivTarget = (eleveTarget.niveau || "CP").toUpperCase();
+    let isTargetCM = estEleveCM(eleveTarget);
+    let parcTarget = isTargetCM ? (eleveTarget.parcours || (nivTarget === "CM2" ? "orange" : "jaune")) : "";
+    let targetUseJaune = Boolean(eleveTarget.fichierJaune);
+
+    let aVarJauneIntegre = Boolean(actSource.varianteJaune && actSource.varianteJaune.trim() !== "");
+    let aDeuxPagesCMIntegre = Boolean(actSource.pageManuel && actSource.pageManuel.trim() !== "" && actSource.pageOrange && actSource.pageOrange.trim() !== "");
+
+    let nivActSrc = (actSource.niveau || "").toUpperCase();
+    let compatibleNiveau = !nivActSrc || nivActSrc.includes(nivTarget) || nivActSrc === "TOUS" || (isTargetCM && (nivActSrc.includes("CM1") || nivActSrc.includes("CM2")));
+
+    if (compatibleNiveau) {
+        if (targetUseJaune && (aVarJauneIntegre || (actSource.typeRes || "").toLowerCase().includes("fichier jaune"))) {
+            return actSource;
+        }
+        if (!targetUseJaune && isTargetCM && aDeuxPagesCMIntegre) {
+            return actSource;
+        }
+    }
+
+    let matSrc = (actSource.matiere || "").trim().toLowerCase();
+    let resSrc = (actSource.ressource || "").trim().toLowerCase();
+    let resSrcClean = resSrc.replace(/\b(jaune|orange|parcours\s*jaune|parcours\s*orange|fichier\s*jaune|cm1|cm2)\b/gi, "").trim();
+    let leconSrc = (actSource.lecon || "").trim().toLowerCase();
+    let compSrc = (actSource.competence || "").trim().toLowerCase();
+
+    let candidats = baseDonnees.filter(b => {
+        if (!b || b.id === actSource.id) return false;
+        if ((b.matiere || "").trim().toLowerCase() !== matSrc) return false;
+        if (Boolean(b.estEvaluation) !== Boolean(actSource.estEvaluation)) return false;
+
+        if (seqCible) {
+            if (!activiteAppartientASequence(b, seqCible)) return false;
+        } else {
+            let seqsSrc = extraireListeSequences(actSource.sequence).map(s => s.toLowerCase());
+            let seqsB = extraireListeSequences(b.sequence).map(s => s.toLowerCase());
+            if (seqsSrc.length > 0 && !seqsB.some(s => seqsSrc.includes(s))) return false;
+        }
+
+        let resB = (b.ressource || "").trim().toLowerCase();
+        let resBClean = resB.replace(/\b(jaune|orange|parcours\s*jaune|parcours\s*orange|fichier\s*jaune|cm1|cm2)\b/gi, "").trim();
+        let memeRessource = (resB === resSrc) || (resSrcClean !== "" && resBClean === resSrcClean);
+        let memeLeconComp = (leconSrc !== "" && (b.lecon || "").trim().toLowerCase() === leconSrc && (b.competence || "").trim().toLowerCase() === compSrc);
+
+        return memeRessource || memeLeconComp;
+    });
+
+    if (candidats.length === 0) return actSource;
+
+    if (targetUseJaune) {
+        let candJaune = candidats.find(b =>
+            (b.varianteJaune && b.varianteJaune.trim() !== "") ||
+            (b.typeRes || "").toLowerCase().includes("fichier jaune") ||
+            (b.ressource || "").toLowerCase().includes("fichier jaune")
+        );
+        if (candJaune) return candJaune;
+    } else if ((actSource.typeRes || "").toLowerCase().includes("fichier jaune")) {
+        let candStandard = candidats.find(b => !(b.typeRes || "").toLowerCase().includes("fichier jaune") && ((b.niveau || "").toUpperCase().includes(nivTarget)));
+        if (candStandard) return candStandard;
+    }
+
+    if (isTargetCM) {
+        let candParcours = candidats.find(b => {
+            let nivB = (b.niveau || "").toUpperCase();
+            let txtB = `${b.ressource || ''} ${b.pageManuel || ''} ${b.pageOrange || ''}`.toLowerCase();
+            if (parcTarget === "jaune") {
+                return (b.pageManuel && b.pageManuel.trim() !== "" && (!b.pageOrange || b.pageOrange.trim() === "")) ||
+                       txtB.includes("jaune") ||
+                       (nivB.includes("CM1") && !nivB.includes("CM2"));
+            } else {
+                return (b.pageOrange && b.pageOrange.trim() !== "") ||
+                       txtB.includes("orange") ||
+                       (nivB.includes("CM2") && !nivB.includes("CM1"));
+            }
+        });
+        if (candParcours) return candParcours;
+    }
+
+    let candNiveau = candidats.find(b => (b.niveau || "").toUpperCase().includes(nivTarget));
+    if (candNiveau) return candNiveau;
+
+    return actSource;
 }
 
 function validerDuplication() {
     if (!idEleveCourant) return;
     const srcEl = eleves[idEleveCourant];
-    const planSource = srcEl.planHebdo, joursSource = srcEl.joursAssignes || {}, recSource = srcEl.recurrents || {}, seqsSource = srcEl.sequencesChoisies || {};
+    const planSource = srcEl.planHebdo, joursSource = srcEl.joursAssignes || {}, recSource = srcEl.recurrents || [], seqsSource = srcEl.sequencesChoisies || {};
     let checks = document.querySelectorAll('.cb-dupli-eleve:checked');
-    if (checks.length === 0) { showToast("Sélectionnez un élève.", "error"); return; } let msgCount = 0;
+    if (checks.length === 0) { showToast("Sélectionnez un élève.", "error"); return; }
+
+    let msgCount = 0;
+    let nbAdaptes = 0;
+
     checks.forEach(cb => {
-        const target = eleves[cb.value]; assurerStructureSemaines(target);
+        const target = eleves[cb.value];
+        assurerStructureSemaines(target);
         if (!target.joursAssignes) target.joursAssignes = {};
         if (!target.recurrents) target.recurrents = [];
         if (!target.sequencesChoisies) target.sequencesChoisies = {};
-        planSource.forEach(idAct => {
-            let act = baseDonnees.find(b => b.id === idAct);
-            if (!act) return;
-            let estRecSource = recSource.includes(idAct);
-            let seqCible = seqsSource[idAct] || getSequenceActivePourEleve(srcEl, act);
-            if (!target.planHebdo.includes(idAct) && (estRecSource || !estActiviteValideePourSequence(target, act, seqCible)) && target.planHebdo.length < (target.maxAteliers || 15)) {
-                target.planHebdo.push(idAct);
-                if (joursSource[idAct]) target.joursAssignes[idAct] = joursSource[idAct];
-                if (seqCible) target.sequencesChoisies[idAct] = seqCible;
-                if (estRecSource && !target.recurrents.includes(idAct)) target.recurrents.push(idAct);
+
+        planSource.forEach(idActSrc => {
+            let actOrigine = baseDonnees.find(b => b.id === idActSrc);
+            if (!actOrigine) return;
+
+            let seqCible = seqsSource[idActSrc] || getSequenceActivePourEleve(srcEl, actOrigine);
+            let actAdaptee = trouverActiviteAdapteePourEleve(actOrigine, srcEl, target, seqCible);
+            let idActFinal = actAdaptee.id;
+
+            if (idActFinal !== idActSrc) nbAdaptes++;
+
+            let estRecSource = Array.isArray(recSource) && recSource.includes(idActSrc);
+            let seqFinale = activiteAppartientASequence(actAdaptee, seqCible) ? seqCible : getSequenceActivePourEleve(target, actAdaptee);
+
+            if (!target.planHebdo.includes(idActFinal) && (estRecSource || !estActiviteValideePourSequence(target, actAdaptee, seqFinale)) && target.planHebdo.length < (target.maxAteliers || 15)) {
+                target.planHebdo.push(idActFinal);
+                if (joursSource[idActSrc]) target.joursAssignes[idActFinal] = joursSource[idActSrc];
+                if (seqFinale) target.sequencesChoisies[idActFinal] = seqFinale;
+                if (estRecSource && !target.recurrents.includes(idActFinal)) target.recurrents.push(idActFinal);
                 msgCount++;
             }
         });
         syncEleveVersSemaineActive(target);
     });
-    sauvegarderEleves(); fermerModal('modalDupliquer'); rafraichirDashboard(); showToast(`${msgCount} activités copiées !`, "success");
+
+    sauvegarderEleves();
+    fermerModal('modalDupliquer');
+    rafraichirDashboard();
+    showToast(`✅ ${msgCount} activité(s) dupliquée(s)${nbAdaptes > 0 ? ` (dont ${nbAdaptes} adaptée(s) au parcours/fichier)` : ''} !`, "success");
 }
 
 let activiteAssignationEnCours = null;
@@ -1480,10 +1657,6 @@ function estActiviteTablette(act) {
     for (let k in imagesParType) { if (k.trim().toLowerCase() === tName) return Boolean(imagesParType[k] && imagesParType[k].isTablette); } return false;
 }
 
-// VALIDATION PAR SÉQUENCE CIBLE :
-// - Enregistre la séquence cible dans l'historique ({ idActivite, date, sequence }).
-// - Si un atelier appartient à plusieurs séquences, il n'est archivé QUE pour la séquence cible en cours et reste disponible dans les autres séquences !
-// - Si c'est une évaluation et que toutes les évaluations de cette séquence sont faites, tous les ateliers de cette séquence sont archivés pour cette séquence uniquement.
 function marquerCommeValideSansRafraichir(idActivite, eleve, seqForcee = null) {
     const act = baseDonnees.find(b => b.id === idActivite); if (!act) return;
     const dateValid = new Date().toLocaleDateString('fr-FR');
@@ -1529,7 +1702,6 @@ function marquerCommeValideSansRafraichir(idActivite, eleve, seqForcee = null) {
                 if (!estActiviteValideePourSequence(eleve, b, seqCible)) {
                     eleve.historique.push({ idActivite: b.id, date: dateValid, sequence: seqCible });
                 }
-                // Si l'activité est dans le plan hebdo au titre de cette séquence, on la coche comme validée
                 let seqBActive = getSequenceActivePourEleve(eleve, b);
                 if (!seqBActive || seqBActive.toLowerCase() === seqNorm) {
                     eleve.valides[b.id] = dateValid;
@@ -2420,7 +2592,6 @@ function rafraichirDashboard() {
 // 7. ONGLET 4 : BASE DE DONNÉES, TAGS MULTI-SÉQUENCES & MULTI-COMPÉTENCES, CHANGEMENT DE MATIÈRE D'UNE SÉQUENCE
 // ==========================================
 
-// --- Pastilles (Tags) de SÉQUENCES en Saisie Simple ---
 function renderTagsSequencesSimple() {
     let cont = document.getElementById('tagsSequencesSimple');
     let hidden = document.getElementById('inputSequence');
@@ -2472,7 +2643,6 @@ function verifierSelectionDatalistSeqSimple(inputElem) {
     renderTagsSequencesSimple();
 }
 
-// --- Pastilles (Tags) de SÉQUENCES communes en Saisie Multiple ---
 function renderTagsSequencesMulti() {
     let cont = document.getElementById('tagsSequencesMulti');
     let hidden = document.getElementById('multiSequence');
@@ -2524,7 +2694,6 @@ function verifierSelectionDatalistSeqMulti(inputElem) {
     renderTagsSequencesMulti();
 }
 
-// --- Pastilles (Tags) de COMPÉTENCES en Saisie Simple ---
 function renderTagsCompetencesSimple() {
     let cont = document.getElementById('tagsCompetencesSimple');
     let hidden = document.getElementById('inputCompetence');
@@ -2581,7 +2750,6 @@ function verifierSelectionDatalistCompSimple(inputElem) {
     renderTagsCompetencesSimple();
 }
 
-// --- Pastilles (Tags) de COMPÉTENCES par ligne en Saisie Multiple ---
 function getTagsLigneMulti(tr) {
     try {
         return JSON.parse(tr.dataset.compTags || "[]");
@@ -2923,6 +3091,9 @@ function enregistrerSaisieMultiple() {
 
     extraireListeSequences(sequence).forEach(sq => {
         if (sq && !sequencesCustom.includes(sq)) sequencesCustom.push(sq);
+        if (periode && matiere) {
+            programmations[getCleProgSequence(matiere, sq)] = periode;
+        }
     });
     sauvegarderProgrammations(); postEditGlobal();
     document.getElementById('tbodySaisieMultiple').innerHTML = '';
@@ -3099,17 +3270,23 @@ function reassignerToutesOrphelinesModal() {
     showToast(`✅ ${count} activité(s) réassignée(s) dans "${nouvSeq}" !`, "success");
 }
 
-// Sauvegarde à la fois les renommages de séquences ET les changements de matière d'une séquence entière
 function sauvegarderToutesSequences() {
     let nivFiltre = document.getElementById('filtreNiveauModalSeq') ? document.getElementById('filtreNiveauModalSeq').value : 'Tous';
     let matFiltre = document.getElementById('filtreMatiereModalSeq') ? document.getElementById('filtreMatiereModalSeq').value : 'Toutes';
 
-    // 1. Appliquer d'abord les changements de matière sur les séquences concernées
     document.querySelectorAll('.select-matiere-seq').forEach(sel => {
         let seqName = sel.getAttribute('data-seq');
         let oldMat = sel.getAttribute('data-old-mat') || "";
         let newMat = sel.value.trim();
         if (seqName && newMat && newMat !== oldMat) {
+            if (oldMat) {
+                let oldKey = getCleProgSequence(oldMat, seqName);
+                let newKey = getCleProgSequence(newMat, seqName);
+                if (programmations[oldKey] !== undefined) {
+                    programmations[newKey] = programmations[oldKey];
+                    delete programmations[oldKey];
+                }
+            }
             baseDonnees.forEach(b => {
                 if (!b) return;
                 if (nivFiltre !== 'Tous' && !(b.niveau || "").toUpperCase().includes(nivFiltre)) return;
@@ -3122,11 +3299,19 @@ function sauvegarderToutesSequences() {
         }
     });
 
-    // 2. Appliquer ensuite les renommages de séquences (en préservant les ateliers multi-séquences)
     document.querySelectorAll('.input-rename-seq').forEach(inp => {
         let oldV = inp.getAttribute('data-old');
         let newV = inp.value.trim();
         if (oldV && oldV !== newV) {
+            Object.keys(programmations).forEach(k => {
+                if (k.startsWith('SEQ||') && k.endsWith('||' + oldV)) {
+                    let parts = k.split('||');
+                    if (newV) {
+                        programmations[`SEQ||${parts[1]}||${newV}`] = programmations[k];
+                    }
+                    delete programmations[k];
+                }
+            });
             baseDonnees.forEach(b => {
                 if (!b) return;
                 let list = extraireListeSequences(b.sequence);
@@ -3146,6 +3331,7 @@ function sauvegarderToutesSequences() {
         }
     });
 
+    sauvegarderProgrammations();
     postEditGlobal();
     fermerModal('modalSequences');
     showToast("✅ Séquences et matières mises à jour !", "success");
@@ -3316,6 +3502,9 @@ function enregistrerActiviteBase() {
     }
     extraireListeSequences(sequence).forEach(sq => {
         if (sq && !sequencesCustom.includes(sq)) sequencesCustom.push(sq);
+        if (periode && matiere) {
+            programmations[getCleProgSequence(matiere, sq)] = periode;
+        }
     });
     sauvegarderProgrammations(); postEditGlobal();
     document.getElementById('inputRessource').value = '';
@@ -3440,6 +3629,9 @@ function appliquerModificationGroupeeBase() {
             } else if (nouvPer) {
                 a.periode = nouvPer;
                 programmations[a.id] = nouvPer;
+                extraireListeSequences(a.sequence).forEach(s => {
+                    programmations[getCleProgSequence(a.matiere, s)] = nouvPer;
+                });
             }
             if (nouvEt !== "") a.difficulte = parseInt(nouvEt) || 0;
             if (nouvPers) a.personnes = nouvPers;
@@ -3527,12 +3719,14 @@ function afficherBase() {
 
     let html = '';
     liste.forEach(a => {
-        let coul = getCouleurMatiereBandeau(a.matiere), per = programmations[a.id] || a.periode || "-";
+        let coul = getCouleurMatiereBandeau(a.matiere), per = getPeriodesActiviteTexte(a);
         let badgePages = '';
         if (a.pageManuel && a.pageOrange) {
             badgePages = `<span style="background:#fef9e7; color:#7d6608; padding:1px 5px; border-radius:4px; font-size:11px; border:1px solid #f1c40f;">🟡 ${escHTML(a.pageManuel)}</span> <span style="background:#fdebd0; color:#9c640c; padding:1px 5px; border-radius:4px; font-size:11px; border:1px solid #f39c12;">🟠 ${escHTML(a.pageOrange)}</span> `;
         } else if (a.pageManuel) {
             badgePages = `<span style="background:#eaf2f8; color:#1b4f72; padding:1px 5px; border-radius:4px; font-size:11px;">📘 ${escHTML(a.pageManuel)}</span> `;
+        } else if (a.pageOrange) {
+            badgePages = `<span style="background:#fdebd0; color:#9c640c; padding:1px 5px; border-radius:4px; font-size:11px; border:1px solid #f39c12;">🟠 ${escHTML(a.pageOrange)}</span> `;
         }
         let detailsLivres = `${badgePages}${a.varianteJaune ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 5px; border-radius:4px; font-size:11px;">📒 ${escHTML(a.varianteJaune)}</span> ` : ''}`;
         let badgeLien = (a.lienExterne && a.lienExterne.trim())
@@ -3576,7 +3770,7 @@ function afficherBase() {
 }
 
 // ==========================================
-// 8. ONGLETS 5, 6, 7 & 8 : PROG, ÉTIQUETTES 3x8 (66x33,8mm), MATRICE & BILANS
+// 8. ONGLETS 5, 6, 7 & 8 : PROGRAMMATION PAR SÉQUENCES MULTI-PÉRIODES, ÉTIQUETTES 3x8, MATRICE & BILANS
 // ==========================================
 function initProgFilters() {
     const selMat = document.getElementById('selectMatiereProg'); if (!selMat) return;
@@ -3584,32 +3778,140 @@ function initProgFilters() {
     selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
     selMat.value = val;
 }
-function toggleProg(idAct, per) {
-    let actuel = programmations[idAct] || "";
-    if (actuel === per) delete programmations[idAct]; else programmations[idAct] = per;
-    let act = baseDonnees.find(b => b.id === idAct); if (act) act.periode = programmations[idAct] || "";
-    sauvegarderProgrammations(); sauvegarderBase(); afficherProgrammation();
+
+// Permet de cocher/décocher une période (P1 à P5) ou TOUTES les périodes ("TOUTES") sur une séquence entière,
+// et répercute automatiquement ces périodes sur tous les ateliers appartenant à cette séquence !
+function toggleProgSequence(matiere, sequence, per) {
+    let actuelles = getPeriodesSequence(matiere, sequence);
+    let nouvelles = [];
+
+    if (per === 'TOUTES') {
+        if (actuelles.length === PERIODES_LISTE.length) {
+            nouvelles = [];
+        } else {
+            nouvelles = [...PERIODES_LISTE];
+        }
+    } else {
+        if (actuelles.includes(per)) {
+            nouvelles = actuelles.filter(p => p !== per);
+        } else {
+            nouvelles = PERIODES_LISTE.filter(p => actuelles.includes(p) || p === per);
+        }
+    }
+
+    let cleSeq = getCleProgSequence(matiere, sequence);
+    if (nouvelles.length === 0) {
+        programmations[cleSeq] = "";
+    } else {
+        programmations[cleSeq] = nouvelles.join(', ');
+    }
+
+    // Met à jour la période sur chaque atelier lié à cette séquence
+    baseDonnees.forEach(a => {
+        if (!a) return;
+        if ((a.matiere || "").trim() === (matiere || "").trim() && activiteAppartientASequence(a, sequence)) {
+            let pUnion = new Set();
+            extraireListeSequences(a.sequence).forEach(s => {
+                getPeriodesSequence(a.matiere, s).forEach(p => pUnion.add(p));
+            });
+            let strP = PERIODES_LISTE.filter(p => pUnion.has(p)).join(', ');
+            a.periode = strP;
+            if (strP) programmations[a.id] = strP;
+            else delete programmations[a.id];
+        }
+    });
+
+    sauvegarderProgrammations();
+    sauvegarderBase();
+    afficherProgrammation();
+    afficherBase();
 }
+
 function afficherProgrammation() {
     const cont = document.getElementById('contenuProgrammation'); if (!cont) return;
     let niv = document.getElementById('selectNiveauProg') ? document.getElementById('selectNiveauProg').value : 'Tous';
     let mat = document.getElementById('selectMatiereProg') ? document.getElementById('selectMatiereProg').value : 'Toutes';
     let perFiltre = document.getElementById('selectPeriodeProg') ? document.getElementById('selectPeriodeProg').value : 'Toutes';
-    let liste = baseDonnees.filter(a => {
-        if (!a) return false;
-        if (niv !== 'Tous' && !(a.niveau || "").toUpperCase().includes(niv)) return false;
-        if (mat !== 'Toutes' && (a.matiere || "").trim() !== mat) return false;
-        let p = programmations[a.id] || a.periode || "";
-        if (perFiltre === 'Non_affecte' && p !== "") return false;
-        if (perFiltre !== 'Toutes' && perFiltre !== 'Non_affecte' && p !== perFiltre) return false;
+
+    // Regrouper la base de données par (Matière + Séquence)
+    let groupesSeqMap = new Map();
+    baseDonnees.forEach(a => {
+        if (!a) return;
+        if (niv !== 'Tous' && !(a.niveau || "").toUpperCase().includes(niv)) return;
+        if (mat !== 'Toutes' && (a.matiere || "").trim() !== mat) return;
+
+        let seqs = extraireListeSequences(a.sequence);
+        if (seqs.length === 0) return;
+
+        seqs.forEach(s => {
+            let matClean = (a.matiere || "").trim();
+            let cleGroupe = `${matClean}||${s}`;
+            if (!groupesSeqMap.has(cleGroupe)) {
+                groupesSeqMap.set(cleGroupe, {
+                    matiere: matClean,
+                    sequence: s,
+                    niveaux: new Set(),
+                    competences: new Set(),
+                    nbAteliers: 0,
+                    nbEvals: 0
+                });
+            }
+            let g = groupesSeqMap.get(cleGroupe);
+            g.nbAteliers++;
+            if (a.estEvaluation) g.nbEvals++;
+            (a.niveau || "").split(/[,/]+/).map(x => x.trim()).filter(Boolean).forEach(n => g.niveaux.add(n));
+            extraireListeCompetences(a.competence).forEach(c => g.competences.add(c));
+        });
+    });
+
+    let listeSeqs = Array.from(groupesSeqMap.values()).filter(g => {
+        let pArr = getPeriodesSequence(g.matiere, g.sequence);
+        if (perFiltre === 'Non_affecte') return pArr.length === 0;
+        if (perFiltre !== 'Toutes') return pArr.includes(perFiltre);
         return true;
     });
-    if (liste.length === 0) { cont.innerHTML = `<div class="empty-state"><p>Aucune activité pour ce filtre.</p></div>`; return; }
-    cont.innerHTML = `<table class="table-classique"><thead><tr><th style="width:70px;">Niveau</th><th style="width:180px;">Matière / Séquence(s)</th><th>Compétence(s)</th><th>Ressource</th><th style="width:230px; text-align:center;">Périodes (P1 à P5)</th></tr></thead><tbody>` + liste.map(a => {
-        let p = programmations[a.id] || a.periode || "", coul = getCouleurMatiereBandeau(a.matiere);
-        let btns = ['P1', 'P2', 'P3', 'P4', 'P5'].map(per => `<button type="button" class="prog-pill ${p === per ? 'active' : ''}" onclick="toggleProg('${a.id}', '${per}')">${per}</button>`).join('');
-        return `<tr><td><strong>${escHTML(a.niveau)}</strong></td><td><span style="background:${coul.bg}; color:#fff; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold;">${escHTML(a.matiere)}</span><br>${formaterAffichageSequences(a.sequence)}</td><td>${formaterAffichageCompetences(a.competence)}</td><td><strong>${escHTML(a.ressource)}</strong></td><td style="text-align:center;">${btns}</td></tr>`;
-    }).join('') + `</tbody></table>`;
+
+    listeSeqs.sort((a, b) => {
+        let mA = nettoyerNomPourTri(a.matiere), mB = nettoyerNomPourTri(b.matiere);
+        if (mA !== mB) return mA.localeCompare(mB, 'fr');
+        return a.sequence.localeCompare(b.sequence, 'fr');
+    });
+
+    if (listeSeqs.length === 0) {
+        cont.innerHTML = `<div class="empty-state"><p>Aucune séquence trouvée pour ce filtre.</p></div>`;
+        return;
+    }
+
+    cont.innerHTML = `<table class="table-classique">
+        <thead>
+            <tr>
+                <th style="width:90px;">Niveau(x)</th>
+                <th style="width:200px;">Matière</th>
+                <th style="width:230px;">Séquence</th>
+                <th>Compétence(s) & Ateliers inclus</th>
+                <th style="width:310px; text-align:center;">Périodes (multi-sélection possible)</th>
+            </tr>
+        </thead>
+        <tbody>` + listeSeqs.map(g => {
+            let pArr = getPeriodesSequence(g.matiere, g.sequence);
+            let toutesCochees = pArr.length === PERIODES_LISTE.length;
+            let coul = getCouleurMatiereBandeau(g.matiere);
+            let nivTxt = Array.from(g.niveaux).join(', ');
+            let compsHtml = Array.from(g.competences).map(c => `<span style="display:inline-block; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:1px 6px; margin:1px 2px; font-size:11px;">${escHTML(c)}</span>`).join(' ');
+
+            let btnsPeriodes = PERIODES_LISTE.map(per =>
+                `<button type="button" class="prog-pill ${pArr.includes(per) ? 'active' : ''}" onclick="toggleProgSequence('${escJS(g.matiere)}', '${escJS(g.sequence)}', '${per}')" title="Activer/Désactiver ${per} pour cette séquence">${per}</button>`
+            ).join('') +
+            `<button type="button" class="prog-pill all-periods ${toutesCochees ? 'active' : ''}" onclick="toggleProgSequence('${escJS(g.matiere)}', '${escJS(g.sequence)}', 'TOUTES')" title="Sélectionner ou désélectionner toutes les périodes (P1 à P5)">🌟 Année</button>`;
+
+            return `<tr>
+                <td><strong>${escHTML(nivTxt)}</strong></td>
+                <td><span style="background:${coul.bg}; color:#fff; padding:3px 8px; border-radius:4px; font-size:11.5px; font-weight:bold; display:inline-block;">${escHTML(g.matiere)}</span></td>
+                <td><strong style="font-size:13.5px; color:#1b4f72;">📑 ${escHTML(g.sequence)}</strong><br><small style="color:#666;">${g.nbAteliers} activité(s)${g.nbEvals > 0 ? ` dont ${g.nbEvals} 🎯 éval.` : ''}</small></td>
+                <td>${compsHtml || '<em style="color:#999;">Aucune compétence renseignée</em>'}</td>
+                <td style="text-align:center;">${btnsPeriodes}</td>
+            </tr>`;
+        }).join('') + `</tbody></table>`;
 }
 
 function afficherChoixEtiquettes() {
@@ -3704,18 +4006,18 @@ function genererMatriceCompetences() {
     let acts = baseDonnees.filter(a => {
         if (!a || !(a.niveau || "").toUpperCase().includes(niv)) return false;
         if (mat !== 'Toutes' && (a.matiere || "").trim() !== mat) return false;
-        let p = programmations[a.id] || a.periode || "";
-        if (per === 'Non_affecte' && p !== "") return false;
-        if (per !== 'Toutes' && per !== 'Non_affecte' && !p.includes(per)) return false;
+        let pArr = getPeriodesActivite(a);
+        if (per === 'Non_affecte' && pArr.length > 0) return false;
+        if (per !== 'Toutes' && per !== 'Non_affecte' && !pArr.includes(per)) return false;
         if (evalOnly && !a.estEvaluation) return false;
         return true;
     });
     if (elevesNiv.length === 0 || acts.length === 0) { cont.innerHTML = `<div class="empty-state"><p>Aucun élève ou activité pour ces critères.</p></div>`; return; }
 
-    let html = `<table class="table-classique"><thead><tr><th>Matière / Période / Compétence / Ressource</th>` + elevesNiv.map(e => `<th style="text-align:center;">${escHTML(e.nom)}</th>`).join('') + `</tr></thead><tbody>`;
+    let html = `<table class="table-classique"><thead><tr><th>Matière / Période(s) / Compétence / Ressource</th>` + elevesNiv.map(e => `<th style="text-align:center;">${escHTML(e.nom)}</th>`).join('') + `</tr></thead><tbody>`;
     acts.forEach(a => {
-        let coul = getCouleurMatiereBandeau(a.matiere), p = programmations[a.id] || a.periode || "";
-        let badgePer = p ? `<span class="filter-btn" style="padding:1px 5px; font-size:10.5px; margin-left:4px;">${escHTML(p)}</span>` : '';
+        let coul = getCouleurMatiereBandeau(a.matiere), p = getPeriodesActiviteTexte(a);
+        let badgePer = p !== '-' ? `<span class="filter-btn" style="padding:1px 5px; font-size:10.5px; margin-left:4px;">${escHTML(p)}</span>` : '';
         html += `<tr><td><span style="background:${coul.bg}; color:#fff; padding:1px 6px; border-radius:4px; font-size:11px;">${escHTML(a.matiere)}</span>${badgePer} <strong>${escHTML(a.ressource)}</strong> ${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}<br><small>${escHTML(a.sequence)} — ${escHTML(a.competence)}</small></td>` + elevesNiv.map(e => {
             let valide = e.historique && e.historique.some(h => h.idActivite === a.id), enCours = e.planHebdo && e.planHebdo.includes(a.id);
             return `<td style="text-align:center; font-size:16px;">${valide ? '✅' : (enCours ? '⏳' : '—')}</td>`;
