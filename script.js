@@ -71,11 +71,7 @@ if (!baseDonnees || !Array.isArray(baseDonnees)) baseDonnees = [];
 let eleves = JSON.parse(localStorage.getItem(KEY_ELEVES));
 if (!eleves || typeof eleves !== 'object') eleves = {};
 
-// Émojis exacts par matière renseignés dans la base :
-// ✅Français - Orthographe | ✏️Français - Écriture | ➗Mathématiques - Algèbre et Proportionnalité
-// 📏Mathématiques - Mesure | 📚Français - Conjugaison | 🔤Français - Grammaire
-// 🔷Mathématiques - Géométrie | 🤖Mathématiques - Programmation | 🧑‍🎓Français - Lexique / Vocabulaire
-// 🧮Mathématiques - Numération
+// Émojis exacts par matière renseignés dans la base
 function getEmojiMatiere(matiere, sequence = "") {
     let matRaw = (matiere || "").trim();
     if (matRaw.startsWith("🧑‍🎓")) return "🧑‍🎓";
@@ -134,16 +130,6 @@ function estEleveCM(eleveOuNiveau) {
     let niv = typeof eleveOuNiveau === 'string' ? eleveOuNiveau : (eleveOuNiveau && eleveOuNiveau.niveau ? eleveOuNiveau.niveau : "");
     niv = niv.toUpperCase().trim();
     return (niv === "CM1" || niv === "CM2");
-}
-
-function calculerPagePlusUn(val) {
-    if (!val || !val.trim()) return "";
-    let str = val.trim();
-    let m = str.match(/^(.*?p\.?\s*)(\d+)(.*)$/i);
-    if (m) return m[1] + (parseInt(m[2], 10) + 1) + m[3];
-    let mNum = str.match(/^(\d+)(.*)$/);
-    if (mNum) return (parseInt(mNum[1], 10) + 1) + mNum[2];
-    return str;
 }
 
 function getInfosActivitePourEleve(act, eleve) {
@@ -1654,7 +1640,6 @@ function getStyleNiveauProf(pole, niv) {
     return { bg: '#ecf0f1', text: '#2c3e50' };
 }
 
-// Structure : chaque jour (Lundi, Mardi, Jeudi, Vendredi) contient un tableau de 4 créneaux ordonnés de haut en bas (index 0 = 1er passage, index 3 = 4e passage)
 function creerSemaineProfVide(dateDebutISO = "", dateDebut = "", dateFin = "") {
     let grilles = { francais: {}, maths: {} };
     ["francais", "maths"].forEach(mat => {
@@ -1688,7 +1673,6 @@ function assurerStructurePlanningProf() {
         planningLeconsProf.semaineIndex = 0;
     }
 
-    // Migration automatique si une semaine utilisait l'ancien format par niveau vers le nouveau format ordonné de haut en bas par jour
     planningLeconsProf.semaines.forEach(s => {
         ["francais", "maths"].forEach(mat => {
             if (!s[mat]) s[mat] = {};
@@ -1830,13 +1814,11 @@ function majSlotLeconProf(pole, jour, slotIdx, champ, valeur) {
     if (champ !== 'texte') {
         rafraichirDashboard();
     } else {
-        // Met à jour le texte de l'affichage imprimable en direct sans perdre le focus du curseur
         let spanPrint = document.getElementById(`print_txt_${pole}_${jour}_${slotIdx}`);
         if (spanPrint) spanPrint.innerText = valeur || "—";
     }
 }
 
-// Permet de monter ou descendre un créneau dans la journée (ordre de passage de haut en bas)
 function deplacerSlotLeconProf(pole, jour, slotIdx, direction) {
     assurerStructurePlanningProf();
     let sem = planningLeconsProf.semaines[planningLeconsProf.semaineIndex];
@@ -1849,7 +1831,6 @@ function deplacerSlotLeconProf(pole, jour, slotIdx, direction) {
     rafraichirDashboard();
 }
 
-// Lance l'impression exclusive de l'affiche des leçons explicites pour les élèves
 function imprimerPlanningLeconsProf() {
     document.body.classList.add('print-lecons-only');
     window.print();
@@ -1878,7 +1859,6 @@ function genererDatalistSuggestionsLecons(pole, niveauGroupe) {
     return Array.from(suggestions).sort((a, b) => a.localeCompare(b, 'fr'));
 }
 
-// Génère un tableau (Français ou Maths) où les lignes de haut en bas correspondent à l'ordre de passage (1er -> 2e -> 3e -> 4e)
 function genererTableauLeconsPoleHtml(pole, titre, couleurBandeau, sem) {
     let datalistsHtml = "";
     GROUPES_NIVEAUX_PROF.forEach(niv => {
@@ -1900,7 +1880,6 @@ function genererTableauLeconsPoleHtml(pole, titre, couleurBandeau, sem) {
                 GROUPES_NIVEAUX_PROF.map(n => `<option value="${n}" ${cell.niveau === n ? 'selected' : ''}>Groupe ${n}</option>`).join('');
 
             return `<td style="background:${bgCell}; padding:6px; vertical-align:top; border:1px solid #cbd5e1;">
-                <!-- Version interactive pour l'enseignante (masquée à l'impression de l'affiche) -->
                 <div class="no-print">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; gap:3px;">
                         <select onchange="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'niveau', this.value)" style="background:${stNiv.bg}; color:${stNiv.text}; font-weight:bold; font-size:12px; padding:2px 6px; border-radius:5px; border:1px solid rgba(0,0,0,0.18); cursor:pointer;">
@@ -1918,7 +1897,6 @@ function genererTableauLeconsPoleHtml(pole, titre, couleurBandeau, sem) {
                     <input type="text" list="${idDl}" value="${escHTML(cell.texte || '')}" placeholder="Leçon / notion..." oninput="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'texte', this.value)" style="width:100%; padding:5px 7px; font-size:12.5px; font-weight:${cell.texte ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:5px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;'}">
                 </div>
 
-                <!-- Version Affiche Élèves pour l'impression (claire et lisible de loin) -->
                 <div class="only-print-lecons" style="text-align:center; padding:3px 2px;">
                     ${cell.niveau ? `<div style="display:inline-block; background:${stNiv.bg} !important; color:${stNiv.text} !important; font-weight:bold; font-size:11.5pt; padding:2px 10px; border-radius:6px; border:1px solid #2c3e50; margin-bottom:4px;">${escHTML(cell.niveau)}</div>` : ''}
                     <div id="print_txt_${pole}_${jour}_${slotIdx}" style="font-size:11pt; font-weight:bold; color:#1e293b; line-height:1.2; ${cell.fait ? 'text-decoration:line-through; opacity:0.6;' : ''}">
@@ -2007,13 +1985,11 @@ function rafraichirDashboard() {
 
     let blocAgendaProfHtml = `
     <div id="blocPlanningLeconsPrint" class="card-panel" style="margin-bottom:22px; background:#f8fbff; border:2px solid #1b4f72;">
-        <!-- En-tête spécial visible uniquement lors de l'impression de l'affiche pour les élèves -->
         <div class="only-print-lecons" style="text-align:center; border-bottom:3px solid #1b4f72; padding-bottom:8px; margin-bottom:12px;">
             <h1 style="margin:0; font-size:20pt; color:#1b4f72;">👩‍🏫 PLANNING DES LEÇONS AVEC LA MAÎTRESSE — ${escHTML(titreDatesAffiche)}</h1>
             <p style="margin:4px 0 0 0; font-size:11pt; color:#333;">Ordre de passage des groupes de haut en bas (1<sup>er</sup> passage ➔ 4<sup>e</sup> passage)</p>
         </div>
 
-        <!-- Barre d'outils enseignante (masquée à l'impression) -->
         <div class="semaines-flex no-print" style="margin-bottom:14px; padding-bottom:10px; border-bottom:1px dashed #bdc3c7;">
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                 <h3 style="margin:0; color:#1b4f72;">👩‍🏫 Planning des Leçons Explicites (Ordre de haut en bas)</h3>
@@ -2022,7 +1998,8 @@ function rafraichirDashboard() {
                 </select>
             </div>
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-<label style="font-size:13px; font-weight:bold;">Lundi : <input type="date" min="2025-01-01" max="2035-12-31" value="${escHTML(semProf.dateDebutISO || '')}" onchange="appliquerDateSemaineProf(this.value)"></label>                <span style="font-weight:bold; color:#1b4f72; font-size:13px;">${semProf.dateFin ? `➔ au Vendredi ${escHTML(semProf.dateFin)}` : '➔ Vendredi : --/--'}</span>
+                <label style="font-size:13px; font-weight:bold;">Lundi : <input type="date" min="2025-01-01" max="2035-12-31" value="${escHTML(semProf.dateDebutISO || '')}" onchange="appliquerDateSemaineProf(this.value)"></label>
+                <span style="font-weight:bold; color:#1b4f72; font-size:13px;">${semProf.dateFin ? `➔ au Vendredi ${escHTML(semProf.dateFin)}` : '➔ Vendredi : --/--'}</span>
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
                 <button type="button" class="btn-action" onclick="imprimerPlanningLeconsProf()" style="background:#8e44ad !important; color:#fff !important;" title="Imprimer ce planning de leçons pour l'afficher aux élèves">🖨️ Imprimer l'affichage élèves</button>
@@ -2108,9 +2085,8 @@ function rafraichirDashboard() {
     });
     cont.innerHTML = html + `</div>`;
 }
-
 // ==========================================
-// 7. ONGLET 4 : BASE DE DONNÉES, HÉRITAGE SAISIE MULTIPLE, MODIF GROUPÉE & SÉQUENCES
+// 7. ONGLET 4 : BASE DE DONNÉES, DUPLICATION PAR COLONNE (COPIER L1), MODIF GROUPÉE & SÉQUENCES
 // ==========================================
 function ajouterCompetenceSupplementaireSimple() {
     let inp = document.getElementById('inputCompetence');
@@ -2132,18 +2108,11 @@ function estCMSelectionneFormMulti() {
     return nivs.includes('CM1') || nivs.includes('CM2');
 }
 
-function autoRemplirPageOrangeSimple(val) {
-    let inpOrange = document.getElementById('inputPageOrange');
-    if (!inpOrange) return;
-    if (estCMSelectionneFormSimple()) inpOrange.value = calculerPagePlusUn(val);
-}
-
 function verifierNiveauxCMFormSimple() {
-    let inpManuel = document.getElementById('inputPageManuel'), inpOrange = document.getElementById('inputPageOrange');
-    if (inpManuel && inpOrange) {
+    let inpOrange = document.getElementById('inputPageOrange');
+    if (inpOrange) {
         if (estCMSelectionneFormSimple()) {
             inpOrange.disabled = false;
-            if (inpManuel.value.trim() && !inpOrange.value.trim()) inpOrange.value = calculerPagePlusUn(inpManuel.value);
         } else {
             inpOrange.value = "";
             inpOrange.disabled = true;
@@ -2152,7 +2121,38 @@ function verifierNiveauxCMFormSimple() {
     majCouleurAutoFormSimple();
 }
 
-// Héritage intelligent depuis la 1re ligne en Saisie Multiple (Leçon, Support, Page + Page Orange CM)
+// Vérifie si la case "📋 Copier L1" en haut de la colonne correspondante est cochée
+function estColonneMultiCopiee(typeChamp) {
+    let cb = document.getElementById('cbCopyMulti_' + typeChamp);
+    return Boolean(cb && cb.checked);
+}
+
+// Quand on coche/décoche "📋 Copier L1" en haut d'une colonne :
+// Si on vient de la cocher, on duplique immédiatement la 1re ligne sur toute la colonne
+function toggleDuplicationColonneMulti(typeChamp, isChecked) {
+    if (!isChecked) return;
+    let tbody = document.getElementById('tbodySaisieMultiple');
+    if (!tbody) return;
+    let lignes = Array.from(tbody.querySelectorAll('.ligne-saisie-multi'));
+    if (lignes.length < 2) return;
+
+    let classe = '.m-' + typeChamp;
+    let premierElem = lignes[0].querySelector(classe);
+    if (!premierElem) return;
+    let valL1 = premierElem.value;
+
+    for (let i = 1; i < lignes.length; i++) {
+        let cible = lignes[i].querySelector(classe);
+        if (cible && !cible.disabled) {
+            cible.value = valL1;
+            delete cible.dataset.manual;
+        }
+    }
+}
+
+// Gère la saisie dans le tableau multiple :
+// - Si on tape dans la ligne 1 et que la case "📋 Copier L1" de cette colonne est cochée, cela recopie de haut en bas (sauf sur les lignes modifiées manuellement).
+// - Si on modifie manuellement une ligne > 1, elle garde sa valeur individuelle.
 function gererSaisieChampMulti(elem, typeChamp) {
     let tbody = document.getElementById('tbodySaisieMultiple');
     if (!tbody) return;
@@ -2162,27 +2162,15 @@ function gererSaisieChampMulti(elem, typeChamp) {
 
     if (idxLigne > 0) {
         elem.dataset.manual = "true";
+        return;
     }
 
-    if (typeChamp === 'page') {
-        let inpOrange = tr.querySelector('.m-orange');
-        if (inpOrange && estCMSelectionneFormMulti()) {
-            inpOrange.value = calculerPagePlusUn(elem.value);
-        }
-    }
-
-    if (idxLigne === 0) {
-        let classe = typeChamp === 'lecon' ? '.m-lecon' : (typeChamp === 'type' ? '.m-type' : '.m-page');
+    if (idxLigne === 0 && estColonneMultiCopiee(typeChamp)) {
+        let classe = '.m-' + typeChamp;
         for (let i = 1; i < lignes.length; i++) {
             let cible = lignes[i].querySelector(classe);
-            if (cible && cible.dataset.manual !== "true") {
+            if (cible && !cible.disabled && cible.dataset.manual !== "true") {
                 cible.value = elem.value;
-                if (typeChamp === 'page') {
-                    let cibOrange = lignes[i].querySelector('.m-orange');
-                    if (cibOrange && estCMSelectionneFormMulti()) {
-                        cibOrange.value = calculerPagePlusUn(elem.value);
-                    }
-                }
             }
         }
     }
@@ -2191,16 +2179,18 @@ function gererSaisieChampMulti(elem, typeChamp) {
 function verifierNiveauxCMMulti() {
     let isCM = estCMSelectionneFormMulti();
     document.querySelectorAll('#tbodySaisieMultiple .ligne-saisie-multi').forEach(tr => {
-        let inpPage = tr.querySelector('.m-page'), inpOrange = tr.querySelector('.m-orange');
-        if (!inpPage || !inpOrange) return;
+        let inpOrange = tr.querySelector('.m-orange');
+        if (!inpOrange) return;
         if (isCM) {
             inpOrange.disabled = false;
-            if (inpPage.value.trim() && !inpOrange.value.trim()) inpOrange.value = calculerPagePlusUn(inpPage.value);
         } else {
             inpOrange.value = "";
             inpOrange.disabled = true;
         }
     });
+    if (isCM && estColonneMultiCopiee('orange')) {
+        toggleDuplicationColonneMulti('orange', true);
+    }
 }
 
 function toggleModeSaisieMultiple() {
@@ -2225,28 +2215,39 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
     let isCM = estCMSelectionneFormMulti();
     let optsTypes = `<option value="">-- Support * --</option>` + Object.keys(imagesParType || {}).map(t => `<option value="${escHTML(t)}">${escHTML((imagesParType[t].emoji ? imagesParType[t].emoji + ' ' : '') + t)}</option>`).join('');
 
+    // Récupère les valeurs de la 1re ligne uniquement pour les colonnes dont la case "📋 Copier L1" est cochée
     let premiereLigne = tbody.querySelector('.ligne-saisie-multi');
-    let defLecon = premiereLigne ? (premiereLigne.querySelector('.m-lecon')?.value || "") : "";
-    let defType = premiereLigne ? (premiereLigne.querySelector('.m-type')?.value || "") : "";
-    let defPage = premiereLigne ? (premiereLigne.querySelector('.m-page')?.value || "") : "";
-    let defOrange = (isCM && defPage) ? calculerPagePlusUn(defPage) : "";
+    let getValSiCoche = (champ) => {
+        if (!premiereLigne || !estColonneMultiCopiee(champ)) return "";
+        let el = premiereLigne.querySelector('.m-' + champ);
+        return el ? el.value : "";
+    };
+
+    let defLecon = getValSiCoche('lecon');
+    let defComp = getValSiCoche('comp');
+    let defType = getValSiCoche('type');
+    let defPers = getValSiCoche('pers');
+    let defPage = getValSiCoche('page');
+    let defOrange = isCM ? getValSiCoche('orange') : "";
+    let defJaune = getValSiCoche('jaune');
+    let defDiff = getValSiCoche('diff');
 
     for (let i = 0; i < nbLignes; i++) {
         let tr = document.createElement('tr');
         tr.className = 'ligne-saisie-multi';
         tr.innerHTML = `
             <td><input type="text" class="m-lecon" value="${escHTML(defLecon)}" placeholder="Ex: G1" oninput="gererSaisieChampMulti(this, 'lecon')" style="width:100%;"></td>
-            <td><input type="text" class="m-comp" list="listeCompetencesConnues" placeholder="Compétence(s) (; si plusieurs)" style="width:100%;"></td>
+            <td><input type="text" class="m-comp" list="listeCompetencesConnues" value="${escHTML(defComp)}" placeholder="Compétence(s) (; si plusieurs)" oninput="gererSaisieChampMulti(this, 'comp')" style="width:100%;"></td>
             <td><input type="text" class="m-res" placeholder="Ex: Ex 1" style="width:100%;"></td>
             <td><select class="m-type" onchange="gererSaisieChampMulti(this, 'type')" style="width:100%;">${optsTypes}</select></td>
             <td><input type="text" class="m-symbole" placeholder="1" style="width:100%;"></td>
-            <td><input type="text" class="m-pers" placeholder="👤" style="width:100%;"></td>
+            <td><input type="text" class="m-pers" value="${escHTML(defPers)}" placeholder="👤" oninput="gererSaisieChampMulti(this, 'pers')" style="width:100%;"></td>
             <td><input type="text" class="m-page" value="${escHTML(defPage)}" placeholder="p9" oninput="gererSaisieChampMulti(this, 'page')" style="width:100%;"></td>
-            <td><input type="text" class="m-orange" value="${escHTML(defOrange)}" placeholder="p10" ${isCM ? '' : 'disabled'} style="width:100%;"></td>
-            <td><input type="text" class="m-jaune" placeholder="1 p4" style="width:100%;"></td>
+            <td><input type="text" class="m-orange" value="${escHTML(defOrange)}" placeholder="p10" ${isCM ? '' : 'disabled'} oninput="gererSaisieChampMulti(this, 'orange')" style="width:100%;"></td>
+            <td><input type="text" class="m-jaune" value="${escHTML(defJaune)}" placeholder="1 p4" oninput="gererSaisieChampMulti(this, 'jaune')" style="width:100%;"></td>
             <td><input type="text" class="m-lien" placeholder="https://anton.app/..." style="width:100%;"></td>
             <td>
-                <select class="m-diff" style="width:100%;">
+                <select class="m-diff" onchange="gererSaisieChampMulti(this, 'diff')" style="width:100%;">
                     <option value="">-- Étoiles --</option>
                     <option value="0">0 étoile</option>
                     <option value="1">⭐ (1)</option>
@@ -2258,6 +2259,7 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
             <td style="text-align:center;"><button type="button" class="btn-remove" style="padding:3px 7px;" onclick="this.closest('tr').remove()">✖</button></td>
         `;
         if (defType) tr.querySelector('.m-type').value = defType;
+        if (defDiff !== "") tr.querySelector('.m-diff').value = defDiff;
         tbody.appendChild(tr);
     }
 }
