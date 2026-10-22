@@ -25,6 +25,7 @@ let programmations = JSON.parse(localStorage.getItem(KEY_PROG)) || {};
 let sequencesCustom = JSON.parse(localStorage.getItem(KEY_SEQ_CUSTOM)) || [];
 let planningLeconsProf = JSON.parse(localStorage.getItem(KEY_LECONS_PROF)) || { semaineIndex: 0, semaines: [] };
 let selectionGroupeeBase = new Set();
+let competencesSelectionneesSimple = [];
 
 let printConfig = JSON.parse(localStorage.getItem(KEY_PRINT_CFG)) || {
     titre: "Plan de travail",
@@ -120,7 +121,14 @@ function getCouleurMatiereBandeau(matiere) {
 
 function extraireListeCompetences(compStr) {
     if (!compStr) return [];
+    if (Array.isArray(compStr)) return compStr.map(s => String(s).trim()).filter(Boolean);
     return compStr.toString().split(/[;|]+/).map(s => s.trim()).filter(Boolean);
+}
+
+function formaterAffichageCompetences(compStr) {
+    let list = extraireListeCompetences(compStr);
+    if (list.length <= 1) return escHTML(compStr || "");
+    return list.map(c => `<span style="display:inline-block; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:1px 6px; margin:1px 2px; font-size:11.5px;">${escHTML(c)}</span>`).join(' ');
 }
 
 // ==========================================
@@ -291,6 +299,7 @@ function assurerStructureSemaines(e) {
     if (!e.suivi) e.suivi = {};
     if (!e.valides) e.valides = {};
     if (!e.planHebdo || !Array.isArray(e.planHebdo)) e.planHebdo = [];
+    if (!e.recurrents || !Array.isArray(e.recurrents)) e.recurrents = [];
     if (!e.enAttente || !Array.isArray(e.enAttente)) e.enAttente = [];
     if (!e.historique || !Array.isArray(e.historique)) e.historique = [];
     if (!e.masquees || !Array.isArray(e.masquees)) e.masquees = [];
@@ -300,6 +309,13 @@ function assurerStructureSemaines(e) {
     if (!e.dateDebutISO) e.dateDebutISO = "";
     if (!e.dateDebut) e.dateDebut = "";
     if (!e.dateFin) e.dateFin = "";
+
+    // S'assure que les activités récurrentes de l'élève sont bien présentes dans son plan actif
+    e.recurrents.forEach(idRec => {
+        if (baseDonnees.some(b => b.id === idRec) && !e.planHebdo.includes(idRec)) {
+            e.planHebdo.push(idRec);
+        }
+    });
 
     if (!e.semaines || !Array.isArray(e.semaines) || e.semaines.length === 0) {
         e.semaines = [{
@@ -336,6 +352,11 @@ function chargerSemaineDepuisIndex(e, nouvelIndex) {
     e.semaineIndex = idx;
     let s = e.semaines[idx];
     e.planHebdo = [...(s.planHebdo || [])];
+    (e.recurrents || []).forEach(idRec => {
+        if (baseDonnees.some(b => b.id === idRec) && !e.planHebdo.includes(idRec)) {
+            e.planHebdo.push(idRec);
+        }
+    });
     e.priorites = [...(s.priorites || [])];
     e.joursAssignes = { ...(s.joursAssignes || {}) };
     e.valides = { ...(s.valides || {}) };
@@ -724,7 +745,7 @@ function calculTailleStockage() {
     if (jauge) { jauge.style.width = pct + "%"; jauge.style.backgroundColor = pct > 80 ? "#e74c3c" : (pct > 50 ? "#f39c12" : "#27ae60"); }
 }
 // ==========================================
-// 4. ONGLET 1 : PLAN & SUIVI ÉLÈVES
+// 4. ONGLET 1 : PLAN & SUIVI ÉLÈVES (AVEC RITUELS RÉCURRENTS & VALIDATION DE SÉQUENCE)
 // ==========================================
 function majVisibiliteParcoursCreation(niveau) {
     let selParc = document.getElementById('nouvelEleveParcours');
@@ -767,6 +788,46 @@ function toggleFichierJauneEleve(isChecked) {
     eleves[idEleveCourant].fichierJaune = Boolean(isChecked);
     sauvegarderEleves(); majListeEleves(); afficherPlanHebdo(); afficherRessourcesDisponibles();
     showToast(isChecked ? "📒 Mode Fichier Jaune activé !" : "📘 Mode Manuel Standard activé !");
+}
+
+// Basculer une activité en "Rituel récurrent chaque semaine" pour l'élève courant
+function toggleRecurrentEleve(idActivite) {
+    if (!idEleveCourant || !eleves[idEleveCourant]) return;
+    let e = eleves[idEleveCourant];
+    if (!e.recurrents) e.recurrents = [];
+    let idx = e.recurrents.indexOf(idActivite);
+    if (idx > -1) {
+        e.recurrents.splice(idx, 1);
+        showToast("🔄 Activité retirée des rituels hebdomadaires de l'élève.");
+    } else {
+        e.recurrents.push(idActivite);
+        if (!e.planHebdo.includes(idActivite)) {
+            e.planHebdo.push(idActivite);
+        }
+        showToast("🔄 Activité épinglée chaque semaine pour cet élève !", "success");
+    }
+    sauvegarderEleves();
+    afficherPlanHebdo();
+    afficherRessourcesDisponibles();
+}
+
+function afficherBandeauRecurrentsEleve() {
+    let bloc = document.getElementById('blocRecurrentsEleve');
+    let cont = document.getElementById('listeBadgesRecurrentsEleve');
+    if (!bloc || !cont || !idEleveCourant || !eleves[idEleveCourant]) return;
+    let e = eleves[idEleveCourant];
+    let recs = (e.recurrents || []).map(id => baseDonnees.find(b => b.id === id)).filter(Boolean);
+    if (recs.length === 0) {
+        bloc.style.display = 'none';
+        return;
+    }
+    bloc.style.display = 'block';
+    cont.innerHTML = recs.map(a => `
+        <span class="comp-tag-pill" style="background:#fff; border-color:#8e44ad; color:#6c3483;">
+            🔄 ${escHTML(a.ressource)} <small style="opacity:0.75;">(${escHTML(a.matiere)})</small>
+            <span class="comp-tag-remove" title="Ne plus répéter chaque semaine" onclick="toggleRecurrentEleve('${a.id}')">✖</span>
+        </span>
+    `).join('');
 }
 
 function majListeEleves() {
@@ -829,7 +890,7 @@ function creerEleve() {
     let nouvEl = {
         id: id, nom: nom, niveau: niveau,
         fichierJaune: Boolean(cbJauneNew && cbJauneNew.checked),
-        planHebdo: [], enAttente: [], historique: [], masquees: [], priorites: [],
+        planHebdo: [], recurrents: [], enAttente: [], historique: [], masquees: [], priorites: [],
         maxAteliers: 15, maxTablettes: 2, suivi: {}, valides: {}, bilanEvaluations: {}, joursAssignes: {},
         dateDebutISO: "", dateDebut: "", dateFin: ""
     };
@@ -903,7 +964,7 @@ function majBarreSemainesUI() {
     if (inputDate) inputDate.value = e.dateDebutISO || "";
     if (spanFin) spanFin.innerText = e.dateFin ? `➔ au Vendredi ${e.dateFin}` : "➔ Vendredi : --/--";
     const labelTitre = document.getElementById('labelSemaineTitre');
-    if (labelTitre) labelTitre.innerText = `Semaine ${e.semaineIndex + 1}${(e.dateDebut && e.dateFin) ? ` du ${e.dateDebut} au${e.dateFin}` : ""}`;
+    if (labelTitre) labelTitre.innerText = `Semaine ${e.semaineIndex + 1}${(e.dateDebut && e.dateFin) ? ` du ${e.dateDebut} au ${e.dateFin}` : ""}`;
 }
 
 function appliquerDateDebutSemaine(dateISO) {
@@ -928,10 +989,12 @@ function ajouterSemaineAvance() {
         let calcPrec = calculerVendrediDepuisISO(derniereSem.dateDebutISO);
         if (calcPrec.lundiSuivantISO) { nouvDebutISO = calcPrec.lundiSuivantISO; let calcNouv = calculerVendrediDepuisISO(nouvDebutISO); nouvDebutFR = calcNouv.debutFR; nouvFinFR = calcNouv.finFR; }
     }
-    let planInitial = [...(e.enAttente || [])], priosInitiales = [...(e.enAttente || [])]; e.enAttente = [];
+    let planInitial = [...new Set([...(e.recurrents || []), ...(e.enAttente || [])])];
+    let priosInitiales = [...(e.enAttente || [])];
+    e.enAttente = [];
     e.semaines.push({ id: 'sem_' + Date.now(), dateDebutISO: nouvDebutISO, dateDebut: nouvDebutFR, dateFin: nouvFinFR, planHebdo: planInitial, priorites: priosInitiales, joursAssignes: {}, valides: {}, suivi: JSON.parse(JSON.stringify(e.suivi || {})) });
     chargerSemaineDepuisIndex(e, e.semaines.length - 1); sauvegarderEleves(); majBarreSemainesUI(); afficherPlanHebdo();
-    afficherRessourcesDisponibles(); showToast(`Semaine ${e.semaines.length} créée !`, "success");
+    afficherRessourcesDisponibles(); showToast(`Semaine ${e.semaines.length} créée (avec rituels récurrents) !`, "success");
 }
 
 function supprimerSemaineActive() {
@@ -1037,7 +1100,8 @@ function afficherRessourcesDisponibles() {
         if (per !== 'Toutes' && !perAct.includes(per)) return false;
         if (filtreEtoilesDispo > 0 && (parseInt(a.difficulte) || 0) !== filtreEtoilesDispo) return false;
         if (eleve.planHebdo.includes(a.id) || (eleve.enAttente && eleve.enAttente.includes(a.id))) return false;
-        if (eleve.historique.some(h => h.idActivite === a.id)) return false;
+        let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
+        if (!isRec && eleve.historique.some(h => h.idActivite === a.id)) return false;
         if (eleve.masquees && eleve.masquees.includes(a.id)) return false;
         return true;
     });
@@ -1050,10 +1114,11 @@ function afficherRessourcesDisponibles() {
         let coul = getCouleurMatiereBandeau(a.matiere), perAct = programmations[a.id] || a.periode || "-";
         let seqAffiche = a.sequence ? escHTML(a.sequence) : '<span style="color:#e67e22; font-weight:bold;">⚠️ Sans séquence</span>';
         let badgeLien = (a.lienExterne && a.lienExterne.trim()) ? ` <a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 5px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir le lien direct">🔗 Anton ↗</a>` : '';
+        let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
         html += `<tr>
             <td><strong>${escHTML(a.niveau)}</strong><br><small style="color:#7f8c8d;">${escHTML(perAct)}</small></td>
             <td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${coul.bg}; margin-right:4px;"></span><strong>${escHTML(a.matiere)}</strong><br>${seqAffiche} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
-            <td>${escHTML(a.competence)}</td>
+            <td>${formaterAffichageCompetences(a.competence)}</td>
             <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infos.badgeLivre}${badgeLien} ${a.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : ''}</td>
             <td style="text-align:center; background:${rep.bg};">${rep.html}</td>
             <td>
@@ -1068,9 +1133,10 @@ function afficherRessourcesDisponibles() {
             <td>
                 <div style="display:flex; gap:4px; flex-wrap:wrap;">
                     <button type="button" class="btn-action" onclick="ajouterAuPlan('${a.id}')">➕ Plan</button>
-                    <button type="button" class="filter-btn" onclick="mettreEnAttente('${a.id}')">⏳</button>
-                    <button type="button" class="btn-valid" onclick="validerDirectement('${a.id}')">✅</button>
-                    <button type="button" class="filter-btn" onclick="masquerActivite('${a.id}')">🙈</button>
+                    <button type="button" class="filter-btn" style="${isRec ? 'background:#8e44ad; color:#fff;' : ''}" title="Épingler comme rituel récurrent chaque semaine pour cet élève" onclick="toggleRecurrentEleve('${a.id}')">🔄 Hebdo</button>
+                    <button type="button" class="filter-btn" onclick="mettreEnAttente('${a.id}')" title="Mettre en réserve">⏳</button>
+                    <button type="button" class="btn-valid" onclick="validerDirectement('${a.id}')" title="Valider directement">✅</button>
+                    <button type="button" class="filter-btn" onclick="masquerActivite('${a.id}')" title="Masquer">🙈</button>
                 </div>
             </td>
         </tr>`;
@@ -1133,14 +1199,18 @@ function ouvrirModalDuplication() {
 }
 
 function validerDuplication() {
-    if (!idEleveCourant) return; const planSource = eleves[idEleveCourant].planHebdo, joursSource = eleves[idEleveCourant].joursAssignes || {};
+    if (!idEleveCourant) return; const planSource = eleves[idEleveCourant].planHebdo, joursSource = eleves[idEleveCourant].joursAssignes || {}, recSource = eleves[idEleveCourant].recurrents || [];
     let checks = document.querySelectorAll('.cb-dupli-eleve:checked');
     if (checks.length === 0) { showToast("Sélectionnez un élève.", "error"); return; } let msgCount = 0;
     checks.forEach(cb => {
-        const target = eleves[cb.value]; assurerStructureSemaines(target); if (!target.joursAssignes) target.joursAssignes = {};
+        const target = eleves[cb.value]; assurerStructureSemaines(target); if (!target.joursAssignes) target.joursAssignes = {}; if (!target.recurrents) target.recurrents = [];
         planSource.forEach(idAct => {
-            if (!target.planHebdo.includes(idAct) && !target.historique.some(h => h.idActivite === idAct) && target.planHebdo.length < (target.maxAteliers || 15)) {
-                target.planHebdo.push(idAct); if (joursSource[idAct]) target.joursAssignes[idAct] = joursSource[idAct]; msgCount++;
+            let estRecSource = recSource.includes(idAct);
+            if (!target.planHebdo.includes(idAct) && (estRecSource || !target.historique.some(h => h.idActivite === idAct)) && target.planHebdo.length < (target.maxAteliers || 15)) {
+                target.planHebdo.push(idAct);
+                if (joursSource[idAct]) target.joursAssignes[idAct] = joursSource[idAct];
+                if (estRecSource && !target.recurrents.includes(idAct)) target.recurrents.push(idAct);
+                msgCount++;
             }
         });
         syncEleveVersSemaineActive(target);
@@ -1153,10 +1223,11 @@ function assignerActivite(idActivite) {
     activiteAssignationEnCours = idActivite; let act = baseDonnees.find(a => a.id === idActivite); if (!act) return;
     document.getElementById('nomActiviteAssign').innerText = act.ressource;
     let selJour = document.getElementById('selectJourAssignMultiple'); if (selJour) selJour.value = "";
+    let cbRec = document.getElementById('cbAssignRecurrentMultiple'); if (cbRec) cbRec.checked = false;
     let html = genererBarreSelectionNiveauxHtml('cb-assign-eleve');
     getElevesTries().forEach(e => {
         assurerStructureSemaines(e);
-        let dejaPrevu = e.semaines.some(s => s.planHebdo && s.planHebdo.includes(idActivite)) || e.historique.some(h => h.idActivite === idActivite);
+        let dejaPrevu = e.semaines.some(s => s.planHebdo && s.planHebdo.includes(idActivite)) || (e.historique.some(h => h.idActivite === idActivite) && !(e.recurrents && e.recurrents.includes(idActivite)));
         let disabled = dejaPrevu ? "disabled checked" : "", color = disabled ? "color: #95a5a6; text-decoration: line-through;" : "";
         html += `<label style="cursor:pointer; font-size:14px; ${color}"><input type="checkbox" class="cb-assign-eleve" value="${e.id}" ${disabled}> [${e.niveau}] ${escHTML(e.nom)}</label>`;
     });
@@ -1166,11 +1237,17 @@ function assignerActivite(idActivite) {
 function validerAssignationMultiple() {
     if (!activiteAssignationEnCours) return; let checks = document.querySelectorAll('.cb-assign-eleve:checked:not(:disabled)');
     if (checks.length === 0) { fermerModal('modalAssigner'); return; }
-    let selJour = document.getElementById('selectJourAssignMultiple'), jourChoisi = selJour ? selJour.value : "", count = 0;
+    let selJour = document.getElementById('selectJourAssignMultiple'), jourChoisi = selJour ? selJour.value : "";
+    let cbRec = document.getElementById('cbAssignRecurrentMultiple'), isRecurrent = Boolean(cbRec && cbRec.checked);
+    let count = 0;
     checks.forEach(cb => {
         let e = eleves[cb.value]; assurerStructureSemaines(e);
-        if (e.planHebdo.length < (e.maxAteliers || 15)) {
-            e.planHebdo.push(activiteAssignationEnCours);
+        if (isRecurrent) {
+            if (!e.recurrents) e.recurrents = [];
+            if (!e.recurrents.includes(activiteAssignationEnCours)) e.recurrents.push(activiteAssignationEnCours);
+        }
+        if (e.planHebdo.length < (e.maxAteliers || 15) || isRecurrent) {
+            if (!e.planHebdo.includes(activiteAssignationEnCours)) e.planHebdo.push(activiteAssignationEnCours);
             if (jourChoisi) { if (!e.joursAssignes) e.joursAssignes = {}; e.joursAssignes[activiteAssignationEnCours] = jourChoisi; }
             syncEleveVersSemaineActive(e); count++;
         } else {
@@ -1179,12 +1256,14 @@ function validerAssignationMultiple() {
             count++;
         }
     });
-    sauvegarderEleves(); fermerModal('modalAssigner'); rafraichirDashboard(); if (idEleveCourant) afficherPlanHebdo(); showToast(`Assigné à ${count} élève(s).`, "success");
+    sauvegarderEleves(); fermerModal('modalAssigner'); rafraichirDashboard(); if (idEleveCourant) afficherPlanHebdo();
+    showToast(isRecurrent ? `🔄 Épinglé en rituel hebdo à ${count} élève(s) !` : `Assigné à ${count} élève(s).`, "success");
 }
 
 function cloreSemainePourUnEleve(eleve) {
     assurerStructureSemaines(eleve); syncEleveVersSemaineActive(eleve);
-    let aTransferer = [...(eleve.enAttente || [])];
+    // Les activités récurrentes reviennent automatiquement chaque semaine (décochées pour la nouvelle semaine)
+    let aTransferer = [...new Set([...(eleve.recurrents || []), ...(eleve.enAttente || [])])];
     (eleve.planHebdo || []).forEach(idAct => {
         let estVal = eleve.valides && eleve.valides[idAct];
         if (!estVal || (eleve.suivi && eleve.suivi[idAct] && (eleve.suivi[idAct].statut === 'a_revoir' || eleve.suivi[idAct].statut === 'a_refaire'))) {
@@ -1196,12 +1275,20 @@ function cloreSemainePourUnEleve(eleve) {
         eleve.semaines.splice(eleve.semaineIndex, 1);
         let nextIdx = Math.min(eleve.semaineIndex, eleve.semaines.length - 1), s = eleve.semaines[nextIdx];
         eleve.semaineIndex = nextIdx; if (!s.priorites) s.priorites = [];
-        aTransferer.forEach(idAct => { if (!s.planHebdo.includes(idAct)) s.planHebdo.unshift(idAct); if (!s.priorites.includes(idAct)) s.priorites.push(idAct); });
+        aTransferer.forEach(idAct => {
+            if (!s.planHebdo.includes(idAct)) s.planHebdo.unshift(idAct);
+            if (!(eleve.recurrents && eleve.recurrents.includes(idAct)) && !s.priorites.includes(idAct)) s.priorites.push(idAct);
+        });
+        // Décocher les rituels récurrents sur la nouvelle semaine pour pouvoir les refaire
+        (eleve.recurrents || []).forEach(idRec => {
+            if (s.valides && s.valides[idRec]) delete s.valides[idRec];
+        });
         eleve.planHebdo = [...s.planHebdo]; eleve.priorites = [...s.priorites]; eleve.joursAssignes = { ...(s.joursAssignes || {}) }; eleve.valides = { ...(s.valides || {}) }; eleve.suivi = { ...(s.suivi || {}), ...(s.suivi || {}) }; eleve.dateDebutISO = s.dateDebutISO || ""; eleve.dateDebut = s.dateDebut || ""; eleve.dateFin = s.dateFin || "";
     } else {
         let nextISO = "", nextDeb = "", nextFin = "";
         if (eleve.dateDebutISO) { let c = calculerVendrediDepuisISO(eleve.dateDebutISO); if (c.lundiSuivantISO) { nextISO = c.lundiSuivantISO; let c2 = calculerVendrediDepuisISO(nextISO); nextDeb = c2.debutFR; nextFin = c2.finFR; } }
-        eleve.planHebdo = [...aTransferer]; eleve.valides = {}; eleve.priorites = [...aTransferer]; eleve.joursAssignes = {}; eleve.dateDebutISO = nextISO; eleve.dateDebut = nextDeb; eleve.dateFin = nextFin;
+        let priosReport = aTransferer.filter(idAct => !(eleve.recurrents && eleve.recurrents.includes(idAct)));
+        eleve.planHebdo = [...aTransferer]; eleve.valides = {}; eleve.priorites = priosReport; eleve.joursAssignes = {}; eleve.dateDebutISO = nextISO; eleve.dateDebut = nextDeb; eleve.dateFin = nextFin;
         eleve.semaines[0] = { id: 'sem_' + Date.now(), dateDebutISO: nextISO, dateDebut: nextDeb, dateFin: nextFin, planHebdo: [...eleve.planHebdo], priorites: [...eleve.priorites], joursAssignes: {}, valides: {}, suivi: JSON.parse(JSON.stringify(eleve.suivi || {})) };
     }
     dashboardArchives = dashboardArchives.filter(cle => !cle.startsWith(eleve.id + '_'));
@@ -1209,7 +1296,7 @@ function cloreSemainePourUnEleve(eleve) {
 
 function commencerNouvelleSemaine() {
     if (!idEleveCourant) return; let eleve = eleves[idEleveCourant];
-    if (confirm(`Clôturer la Semaine ${eleve.semaineIndex + 1} de ${eleve.nom} et reporter les non validés ?`)) {
+    if (confirm(`Clôturer la Semaine ${eleve.semaineIndex + 1} de ${eleve.nom}, reporter les non validés et réinitialiser ses rituels hebdomadaires ?`)) {
         cloreSemainePourUnEleve(eleve);
         localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
         sauvegarderEleves(); chargerEleve(); rafraichirDashboard(); showToast("✅ Semaine suivante activée !", "success");
@@ -1245,44 +1332,66 @@ function estActiviteTablette(act) {
     for (let k in imagesParType) { if (k.trim().toLowerCase() === tName) return Boolean(imagesParType[k] && imagesParType[k].isTablette); } return false;
 }
 
-// Validation avec prise en charge des ÉVALUATIONS MULTI-COMPÉTENCES (séparées par ";")
+// NOUVELLE RÈGLE DE VALIDATION PAR SÉQUENCE :
+// - Si l'activité validée est une Évaluation (🎯), on vérifie si TOUTES les évaluations de cette même séquence (et matière / niveau de l'élève) sont validées.
+// - Si OUI : tous les ateliers appartenant à cette même séquence sont automatiquement validés et archivés pour l'élève (même s'il ne les a pas faits).
+// - Si NON (il reste une autre évaluation à faire dans la séquence) ou si la séquence n'a aucune évaluation : seul l'exercice validé est archivé.
 function marquerCommeValideSansRafraichir(idActivite, eleve) {
     const act = baseDonnees.find(b => b.id === idActivite); if (!act) return;
     const dateValid = new Date().toLocaleDateString('fr-FR');
     if (!eleve.valides) eleve.valides = {};
     eleve.valides[idActivite] = dateValid;
 
-    if (act.estEvaluation) {
-        let compsEval = extraireListeCompetences(act.competence).map(c => c.toLowerCase());
-        let nivEleve = (eleve.niveau || "CP").toUpperCase();
-        let niveauxAct = (act.niveau || "").toUpperCase().split(/[,/]+/).map(x => x.trim()).filter(Boolean);
+    let isRec = eleve.recurrents && eleve.recurrents.includes(idActivite);
+    if (!eleve.historique.some(h => h.idActivite === idActivite)) {
+        eleve.historique.push({ idActivite: idActivite, date: dateValid });
+    } else if (isRec) {
+        let hExist = eleve.historique.find(h => h.idActivite === idActivite);
+        if (hExist) hExist.date = dateValid;
+    }
+    if (eleve.suivi && eleve.suivi[idActivite]) delete eleve.suivi[idActivite];
 
-        baseDonnees.filter(b => {
+    // Si c'est une évaluation d'une séquence nommée, on vérifie si toutes les évaluations de la séquence sont terminées
+    let seqAct = (act.sequence || "").trim().toLowerCase();
+    let matAct = (act.matiere || "").trim().toLowerCase();
+    if (act.estEvaluation && seqAct !== "") {
+        let nivEleve = (eleve.niveau || "CP").toUpperCase();
+
+        // Toutes les activités de cette même séquence pour le niveau de l'élève
+        let activitesMemeSequence = baseDonnees.filter(b => {
             if (!b) return false;
-            if ((b.matiere || "").trim().toLowerCase() !== (act.matiere || "").trim().toLowerCase()) return false;
-            let compsB = extraireListeCompetences(b.competence).map(c => c.toLowerCase());
-            let matchComp = compsB.some(cb => compsEval.includes(cb));
-            if (!matchComp) return false;
+            if ((b.matiere || "").trim().toLowerCase() !== matAct) return false;
+            if ((b.sequence || "").trim().toLowerCase() !== seqAct) return false;
             let nivB = (b.niveau || "").toUpperCase();
-            return nivB.includes(nivEleve) || niveauxAct.some(n => nivB.includes(n));
-        }).forEach(b => {
-            if (!eleve.historique.some(h => h.idActivite === b.id)) {
-                eleve.historique.push({ idActivite: b.id, date: dateValid });
-            }
-            eleve.valides[b.id] = dateValid;
-            if (eleve.suivi && eleve.suivi[b.id]) delete eleve.suivi[b.id];
-            if (eleve.enAttente) eleve.enAttente = eleve.enAttente.filter(idA => idA !== b.id);
+            return !nivB || nivB.includes(nivEleve) || nivB === "TOUS";
         });
-    } else {
-        if (!eleve.historique.some(h => h.idActivite === idActivite)) {
-            eleve.historique.push({ idActivite: idActivite, date: dateValid });
+
+        let evalsDeLaSequence = activitesMemeSequence.filter(b => b.estEvaluation);
+
+        // Vérifier si toutes les évaluations de la séquence sont désormais validées par l'élève
+        let toutesEvalsFaites = evalsDeLaSequence.length > 0 && evalsDeLaSequence.every(ev => {
+            return (eleve.valides && eleve.valides[ev.id]) || (eleve.historique && eleve.historique.some(h => h.idActivite === ev.id));
+        });
+
+        if (toutesEvalsFaites) {
+            activitesMemeSequence.forEach(b => {
+                if (!eleve.historique.some(h => h.idActivite === b.id)) {
+                    eleve.historique.push({ idActivite: b.id, date: dateValid });
+                }
+                eleve.valides[b.id] = dateValid;
+                if (eleve.suivi && eleve.suivi[b.id]) delete eleve.suivi[b.id];
+                if (eleve.enAttente) eleve.enAttente = eleve.enAttente.filter(idA => idA !== b.id);
+            });
+            showToast(`🎯 Séquence "${act.sequence}" validée et archivée en entier !`, "success");
+        } else {
+            let nbRestantes = evalsDeLaSequence.filter(ev => !(eleve.valides && eleve.valides[ev.id]) && !(eleve.historique && eleve.historique.some(h => h.idActivite === ev.id))).length;
+            showToast(`🎯 Évaluation validée (${nbRestantes} autre(s) évaluation(s) restante(s) pour archiver la séquence).`, "success");
         }
-        if (eleve.suivi && eleve.suivi[idActivite]) delete eleve.suivi[idActivite];
     }
 }
 
 function annulerValidationPlan(idActivite) { if (!idEleveCourant) return; let eleve = eleves[idEleveCourant]; if (eleve.valides && eleve.valides[idActivite]) { delete eleve.valides[idActivite]; eleve.historique = eleve.historique.filter(h => h.idActivite !== idActivite); sauvegarderEleves(); afficherPlanHebdo(); afficherHistorique(); rafraichirDashboard(); } }
-function validerDirectement(idActivite) { if (!idEleveCourant) return; marquerCommeValideSansRafraichir(idActivite, eleves[idEleveCourant]); sauvegarderEleves(); afficherRessourcesDisponibles(); afficherHistorique(); afficherPlanHebdo(); rafraichirDashboard(); showToast("Validé !", "success"); }
+function validerDirectement(idActivite) { if (!idEleveCourant) return; marquerCommeValideSansRafraichir(idActivite, eleves[idEleveCourant]); sauvegarderEleves(); afficherRessourcesDisponibles(); afficherHistorique(); afficherPlanHebdo(); rafraichirDashboard(); }
 function masquerActivite(idActivite) { if (!idEleveCourant) return; eleves[idEleveCourant].masquees.push(idActivite); sauvegarderEleves(); afficherRessourcesDisponibles(); afficherHistorique(); }
 function demasquerActivite(idActivite) { if (!idEleveCourant) return; eleves[idEleveCourant].masquees = eleves[idEleveCourant].masquees.filter(id => id !== idActivite); sauvegarderEleves(); afficherRessourcesDisponibles(); afficherHistorique(); }
 
@@ -1323,7 +1432,16 @@ function annulerAttente(idActivite, basculerDansPlan = false) {
 }
 
 function retirerDuPlan(idActivite) {
-    let e = eleves[idEleveCourant], idx = e.planHebdo.indexOf(idActivite);
+    let e = eleves[idEleveCourant];
+    if (e.recurrents && e.recurrents.includes(idActivite)) {
+        if (!confirm("Cette activité est épinglée en rituel hebdomadaire (🔄). Voulez-vous aussi la retirer des rituels récurrents de cet élève ?")) {
+            let idxOnly = e.planHebdo.indexOf(idActivite);
+            if (idxOnly > -1) e.planHebdo.splice(idxOnly, 1);
+            sauvegarderEleves(); afficherPlanHebdo(); return;
+        }
+        e.recurrents = e.recurrents.filter(id => id !== idActivite);
+    }
+    let idx = e.planHebdo.indexOf(idActivite);
     if (idx > -1) e.planHebdo.splice(idx, 1);
     else { idx = (e.enAttente || []).indexOf(idActivite); if (idx > -1) e.enAttente.splice(idx, 1); }
     if (e.suivi && e.suivi[idActivite]) delete e.suivi[idActivite];
@@ -1340,6 +1458,7 @@ function desarchiverActivite(idActivite) {
 
 function afficherPlanHebdo() {
     const eleve = eleves[idEleveCourant], tbodyApercu = document.getElementById('tableApercuPlan'); if (!tbodyApercu || !eleve) return; tbodyApercu.innerHTML = '';
+    afficherBandeauRecurrentsEleve();
     document.getElementById('compteurAteliersEleve').innerText = eleve.planHebdo.length; document.getElementById('maxAteliersAffiche').innerText = eleve.maxAteliers || 15;
     let nbTabCount = eleve.planHebdo.map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length;
     let compteurTabElem = document.getElementById('compteurTablettesEleve'); if (compteurTabElem) compteurTabElem.innerText = `${nbTabCount}/${eleve.maxTablettes ?? 2}`;
@@ -1347,7 +1466,9 @@ function afficherPlanHebdo() {
     let planObjects = getListeTrie(eleve.planHebdo, eleve.priorites || []);
     planObjects.forEach((a, index) => {
         const num = index + 1;
+        let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
         let badge = a.estEvaluation ? `<span class="badge-eval">🎯 Éval</span>` : '';
+        let badgeRecHtml = isRec ? ` <span class="badge-recurrent" title="Revient automatiquement chaque semaine">🔄 Hebdo</span>` : '';
         let badgeLien = (a.lienExterne && a.lienExterne.trim()) ? ` <a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 5px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir sur Anton">🔗 Anton ↗</a>` : '';
         let estValide = eleve.valides && eleve.valides[a.id];
         let rowClass = a.estEvaluation ? 'row-eval' : (estValide ? 'row-valide' : '');
@@ -1360,6 +1481,7 @@ function afficherPlanHebdo() {
         let suiviHtml = `<div style="margin-top:4px; display:flex; gap:4px; flex-wrap:wrap;">
             <button type="button" class="filter-btn" style="font-size:11px; padding:2px 6px; ${statutSuivi === 'a_revoir' ? 'background:#c0392b; color:#fff;' : ''}" onclick="definirStatutSuivi('${a.id}', '${statutSuivi === 'a_revoir' ? '' : 'a_revoir'}')">👩‍🏫 À revoir</button>
             <button type="button" class="filter-btn" style="font-size:11px; padding:2px 6px; ${statutSuivi === 'a_refaire' ? 'background:#e67e22; color:#fff;' : ''}" onclick="definirStatutSuivi('${a.id}', '${statutSuivi === 'a_refaire' ? '' : 'a_refaire'}')">🔄 À refaire</button>
+            <button type="button" class="filter-btn" style="font-size:11px; padding:2px 6px; ${isRec ? 'background:#8e44ad; color:#fff; border-color:#6c3483;' : ''}" title="Épingler/Désépingler comme rituel hebdomadaire pour cet élève" onclick="toggleRecurrentEleve('${a.id}')">${isRec ? '🔄 Hebdo actif' : '➕🔄 Hebdo'}</button>
         </div>`;
         if (eleve.suivi && eleve.suivi[a.id] && eleve.suivi[a.id].commentaire) {
             suiviHtml += `<div style="color:#7f8c8d; font-size:11px; margin-top:2px;">💬 ${escHTML(eleve.suivi[a.id].commentaire)}</div>`;
@@ -1377,8 +1499,8 @@ function afficherPlanHebdo() {
             <td style="text-align:center; cursor:pointer; font-size:18px;" onclick="basculerPriorite('${a.id}')" style="${isPrio ? 'color:#f1c40f;' : 'color:#bdc3c7;'}">${isPrio ? '⭐' : '☆'}</td>
             <td class="${jourActuel ? 'col-num num-jour-impose' : 'col-num'}">${logoDebutLigne}${num}</td>
             <td><span style="display:inline-block; padding:2px 8px; border-radius:4px; background:${coulMat.bg}; color:${coulMat.text}; font-weight:bold; font-size:12px; margin-bottom:3px;">${escHTML(a.matiere)}</span><br>${escHTML(a.sequence)}</td>
-            <td>${a.lecon ? '<strong>'+escHTML(a.lecon)+'</strong> - ' : ''}${escHTML(a.competence)}</td>
-            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infosL.badgeLivre}${badgeLien} ${badge} ${suiviHtml}</td>
+            <td>${a.lecon ? '<strong>'+escHTML(a.lecon)+'</strong> - ' : ''}${formaterAffichageCompetences(a.competence)}</td>
+            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infosL.badgeLivre}${badgeLien} ${badge}${badgeRecHtml} ${suiviHtml}</td>
             <td style="text-align:center; background:${rep.bg};">${rep.html}</td>
             <td style="text-align:center;">${selectJourHtml}</td>
             <td>${actionHtml}</td>
@@ -1394,7 +1516,7 @@ function afficherPlanHebdo() {
             blocAtt.style.display = 'block';
             tbodyAtt.innerHTML = attList.map(a => `<tr>
                 <td><strong>${escHTML(a.matiere)}</strong> — ${escHTML(a.sequence)}</td>
-                <td>${escHTML(a.competence)}</td>
+                <td>${formaterAffichageCompetences(a.competence)}</td>
                 <td><strong>${escHTML(a.ressource)}</strong></td>
                 <td>
                     <button type="button" class="btn-action" style="padding:4px 8px;" onclick="annulerAttente('${a.id}', true)">⬆️ Mettre au plan</button>
@@ -1409,9 +1531,9 @@ function afficherPlanHebdo() {
 
 function afficherHistorique() {
     const eleve = eleves[idEleveCourant], tbodyHist = document.getElementById('tableHistorique'), tbodyMasq = document.getElementById('tableMasquees'); if (!tbodyHist || !tbodyMasq || !eleve) return; tbodyHist.innerHTML = ''; tbodyMasq.innerHTML = '';
-    [...eleve.historique].reverse().forEach(hist => { const a = baseDonnees.find(b => b.id === hist.idActivite); if (a) tbodyHist.innerHTML += `<tr><td><strong>${escHTML(hist.date)}</strong></td><td>${escHTML(a.niveau)}</td><td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td><td>${escHTML(a.competence)}</td><td>${formaterEtoiles(a.difficulte)}${escHTML(a.ressource)}</td><td style="text-align:center;"><button type="button" class="filter-btn" onclick="desarchiverActivite('${a.id}')">↩️</button></td></tr>`; });
+    [...eleve.historique].reverse().forEach(hist => { const a = baseDonnees.find(b => b.id === hist.idActivite); if (a) tbodyHist.innerHTML += `<tr><td><strong>${escHTML(hist.date)}</strong></td><td>${escHTML(a.niveau)}</td><td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td><td>${formaterAffichageCompetences(a.competence)}</td><td>${formaterEtoiles(a.difficulte)}${escHTML(a.ressource)}</td><td style="text-align:center;"><button type="button" class="filter-btn" onclick="desarchiverActivite('${a.id}')">↩️</button></td></tr>`; });
     if (eleve.historique.length === 0) tbodyHist.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#7f8c8d;">Aucun.</td></tr>';
-    eleve.masquees.forEach(idAct => { const a = baseDonnees.find(b => b.id === idAct); if (a) tbodyMasq.innerHTML += `<tr><td>${escHTML(a.niveau)}</td><td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td><td>${escHTML(a.competence)}</td><td>${escHTML(a.ressource)}</td><td style="text-align:center;"><button type="button" class="filter-btn" onclick="demasquerActivite('${a.id}')">↩️</button></td></tr>`; });
+    eleve.masquees.forEach(idAct => { const a = baseDonnees.find(b => b.id === idAct); if (a) tbodyMasq.innerHTML += `<tr><td>${escHTML(a.niveau)}</td><td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td><td>${formaterAffichageCompetences(a.competence)}</td><td>${escHTML(a.ressource)}</td><td style="text-align:center;"><button type="button" class="filter-btn" onclick="demasquerActivite('${a.id}')">↩️</button></td></tr>`; });
     if (eleve.masquees.length === 0) tbodyMasq.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#7f8c8d;">Aucune.</td></tr>';
 }
 
@@ -1544,7 +1666,7 @@ function genererHtmlFicheEleve(e, format = 'A4') {
         rowsHtml += `<tr class="${rowClass}">
             <td class="${numCellClass}" style="white-space:nowrap;">${logoMaitresseDebut}${num}</td>
             <td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td>
-            <td>${a.lecon ? '<em>' + escHTML(a.lecon) + '</em><br>' : ''}${escHTML(a.competence)}</td>
+            <td>${a.lecon ? '<em>' + escHTML(a.lecon) + '</em><br>' : ''}${formaterAffichageCompetences(a.competence)}</td>
             <td>${logoMaitresseDebut}${formaterEtoiles(a.difficulte)}<strong style="${resStyle}">${escHTML(a.ressource)}</strong> ${infos.badgeLivre}${badgeEval}</td>
             <td class="col-center">${escHTML(infos.typeEffectif)}</td>
             <td class="col-center print-visual-cell" style="background-color:${rep.bg} !important; width:85px; text-align:center;">${rep.html}</td>
@@ -2069,7 +2191,8 @@ function rafraichirDashboard() {
         let detailsPlanHtml = isExp ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed #ccc; font-size:12.5px;">` + getListeTrie(e.planHebdo, e.priorites || []).map((a, idx) => {
             let fait = e.valides && e.valides[a.id], st = (e.suivi && e.suivi[a.id]) ? e.suivi[a.id].statut : "";
             let iconeLien = (a.lienExterne && a.lienExterne.trim()) ? ` <a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" title="Ouvrir sur Anton" style="text-decoration:none;">🔗</a>` : '';
-            return `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #f1f5f9;"><span style="${fait ? 'text-decoration:line-through; color:#27ae60;' : ''}"><strong>${idx + 1}.</strong> ${escHTML(a.ressource)}${iconeLien}</span><div style="display:flex; gap:3px;">${!fait ? `<button type="button" class="filter-btn" style="padding:1px 5px;" onclick="validerDepuisDashboard('${e.id}', '${a.id}')">✅</button><button type="button" class="filter-btn" style="padding:1px 5px; ${st === 'a_revoir' ? 'background:#c0392b; color:#fff;' : ''}" onclick="setSuivi('${e.id}', '${a.id}', '${st === 'a_revoir' ? '' : 'a_revoir'}')">👩‍🏫</button><button type="button" class="filter-btn" style="padding:1px 5px; ${st === 'a_refaire' ? 'background:#e67e22; color:#fff;' : ''}" onclick="setSuivi('${e.id}', '${a.id}', '${st === 'a_refaire' ? '' : 'a_refaire'}')">🔄</button>` : '✅'}</div></div>`;
+            let isRec = e.recurrents && e.recurrents.includes(a.id);
+            return `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #f1f5f9;"><span style="${fait ? 'text-decoration:line-through; color:#27ae60;' : ''}"><strong>${idx + 1}.</strong> ${escHTML(a.ressource)}${isRec ? ' 🔄' : ''}${iconeLien}</span><div style="display:flex; gap:3px;">${!fait ? `<button type="button" class="filter-btn" style="padding:1px 5px;" onclick="validerDepuisDashboard('${e.id}', '${a.id}')">✅</button><button type="button" class="filter-btn" style="padding:1px 5px; ${st === 'a_revoir' ? 'background:#c0392b; color:#fff;' : ''}" onclick="setSuivi('${e.id}', '${a.id}', '${st === 'a_revoir' ? '' : 'a_revoir'}')">👩‍🏫</button><button type="button" class="filter-btn" style="padding:1px 5px; ${st === 'a_refaire' ? 'background:#e67e22; color:#fff;' : ''}" onclick="setSuivi('${e.id}', '${a.id}', '${st === 'a_refaire' ? '' : 'a_refaire'}')">🔄</button>` : '✅'}</div></div>`;
         }).join('') + `</div>` : '';
 
         html += `<div class="dash-card">
@@ -2085,17 +2208,140 @@ function rafraichirDashboard() {
     });
     cont.innerHTML = html + `</div>`;
 }
+
 // ==========================================
-// 7. ONGLET 4 : BASE DE DONNÉES, DUPLICATION PAR COLONNE (COPIER L1), MODIF GROUPÉE & SÉQUENCES
+// 7. ONGLET 4 : BASE DE DONNÉES, TAGS MULTI-COMPÉTENCES (AVEC RECHERCHE MOT-CLÉ), COPIER L1 & SÉQUENCES
 // ==========================================
-function ajouterCompetenceSupplementaireSimple() {
-    let inp = document.getElementById('inputCompetence');
-    if (!inp) return;
-    let nouv = prompt("Nom de la compétence supplémentaire à associer à cette évaluation :");
-    if (nouv && nouv.trim()) {
-        inp.value = inp.value.trim() ? `${inp.value.trim()} ; ${nouv.trim()}` : nouv.trim();
-        document.getElementById('cbEstEvaluation').checked = true;
+
+// --- Système de pastilles (Tags) de compétences en Saisie Simple ---
+function renderTagsCompetencesSimple() {
+    let cont = document.getElementById('tagsCompetencesSimple');
+    let hidden = document.getElementById('inputCompetence');
+    let picker = document.getElementById('inputCompetencePickerSimple');
+    if (!cont || !hidden) return;
+
+    cont.innerHTML = competencesSelectionneesSimple.map((c, idx) => `
+        <span class="comp-tag-pill">
+            🎯 ${escHTML(c)}
+            <span class="comp-tag-remove" title="Retirer cette compétence" onclick="retirerTagCompetenceSimple(${idx})">✖</span>
+        </span>
+    `).join('');
+
+    let texteActuelPicker = picker ? picker.value.trim() : "";
+    let toutes = [...competencesSelectionneesSimple];
+    if (texteActuelPicker && !toutes.includes(texteActuelPicker)) {
+        toutes.push(texteActuelPicker);
     }
+    hidden.value = toutes.join(' ; ');
+}
+
+function ajouterTagCompetenceSimple(valForcee) {
+    let picker = document.getElementById('inputCompetencePickerSimple');
+    let val = (valForcee !== undefined ? valForcee : (picker ? picker.value : "")).trim();
+    if (!val) return;
+    extraireListeCompetences(val).forEach(item => {
+        if (!competencesSelectionneesSimple.includes(item)) {
+            competencesSelectionneesSimple.push(item);
+        }
+    });
+    if (picker) picker.value = "";
+    renderTagsCompetencesSimple();
+}
+
+function retirerTagCompetenceSimple(idx) {
+    competencesSelectionneesSimple.splice(idx, 1);
+    renderTagsCompetencesSimple();
+}
+
+// Dès qu'on clique sur une suggestion existante dans la liste déroulante (datalist), elle s'ajoute en pastille et vide le champ pour chercher la suivante
+function verifierSelectionDatalistCompSimple(inputElem) {
+    let val = inputElem.value.trim();
+    if (!val) {
+        renderTagsCompetencesSimple();
+        return;
+    }
+    let dl = document.getElementById('listeCompetencesConnues');
+    if (dl) {
+        let existeDansListe = Array.from(dl.options).some(opt => opt.value === val);
+        if (existeDansListe) {
+            ajouterTagCompetenceSimple(val);
+            return;
+        }
+    }
+    renderTagsCompetencesSimple();
+}
+
+// --- Système de pastilles (Tags) de compétences par ligne en Saisie Multiple ---
+function getTagsLigneMulti(tr) {
+    try {
+        return JSON.parse(tr.dataset.compTags || "[]");
+    } catch (e) {
+        return [];
+    }
+}
+
+function setTagsLigneMulti(tr, tagsArray) {
+    tr.dataset.compTags = JSON.stringify(tagsArray || []);
+    renderTagsCompetencesLigneMulti(tr);
+}
+
+function renderTagsCompetencesLigneMulti(tr) {
+    if (!tr) return;
+    let tags = getTagsLigneMulti(tr);
+    let cont = tr.querySelector('.m-comp-tags');
+    let picker = tr.querySelector('.m-comp-picker');
+    let hidden = tr.querySelector('.m-comp');
+    if (cont) {
+        cont.innerHTML = tags.map((c, idx) => `
+            <span class="comp-tag-pill">
+                🎯 ${escHTML(c)}
+                <span class="comp-tag-remove" title="Retirer" onclick="retirerTagCompetenceMulti(this, ${idx})">✖</span>
+            </span>
+        `).join('');
+    }
+    let toutes = [...tags];
+    let txtPicker = picker ? picker.value.trim() : "";
+    if (txtPicker && !toutes.includes(txtPicker)) toutes.push(txtPicker);
+    if (hidden) hidden.value = toutes.join(' ; ');
+}
+
+function ajouterTagCompetenceMulti(btnOrInput, valForcee) {
+    let tr = btnOrInput.closest('tr');
+    if (!tr) return;
+    let picker = tr.querySelector('.m-comp-picker');
+    let val = (valForcee !== undefined ? valForcee : (picker ? picker.value : "")).trim();
+    if (!val) return;
+    let tags = getTagsLigneMulti(tr);
+    extraireListeCompetences(val).forEach(item => {
+        if (!tags.includes(item)) tags.push(item);
+    });
+    if (picker) picker.value = "";
+    setTagsLigneMulti(tr, tags);
+    gererSaisieChampMulti(tr.querySelector('.m-comp'), 'comp');
+}
+
+function retirerTagCompetenceMulti(spanElem, idx) {
+    let tr = spanElem.closest('tr');
+    if (!tr) return;
+    let tags = getTagsLigneMulti(tr);
+    tags.splice(idx, 1);
+    setTagsLigneMulti(tr, tags);
+    gererSaisieChampMulti(tr.querySelector('.m-comp'), 'comp');
+}
+
+function verifierSelectionDatalistCompMulti(inputElem) {
+    let tr = inputElem.closest('tr');
+    if (!tr) return;
+    let val = inputElem.value.trim();
+    if (val) {
+        let dl = document.getElementById('listeCompetencesConnues');
+        if (dl && Array.from(dl.options).some(opt => opt.value === val)) {
+            ajouterTagCompetenceMulti(inputElem, val);
+            return;
+        }
+    }
+    renderTagsCompetencesLigneMulti(tr);
+    gererSaisieChampMulti(tr.querySelector('.m-comp'), 'comp');
 }
 
 function estCMSelectionneFormSimple() {
@@ -2121,20 +2367,29 @@ function verifierNiveauxCMFormSimple() {
     majCouleurAutoFormSimple();
 }
 
-// Vérifie si la case "📋 Copier L1" en haut de la colonne correspondante est cochée
 function estColonneMultiCopiee(typeChamp) {
     let cb = document.getElementById('cbCopyMulti_' + typeChamp);
     return Boolean(cb && cb.checked);
 }
 
-// Quand on coche/décoche "📋 Copier L1" en haut d'une colonne :
-// Si on vient de la cocher, on duplique immédiatement la 1re ligne sur toute la colonne
 function toggleDuplicationColonneMulti(typeChamp, isChecked) {
     if (!isChecked) return;
     let tbody = document.getElementById('tbodySaisieMultiple');
     if (!tbody) return;
     let lignes = Array.from(tbody.querySelectorAll('.ligne-saisie-multi'));
     if (lignes.length < 2) return;
+
+    if (typeChamp === 'comp') {
+        let tagsL1 = getTagsLigneMulti(lignes[0]);
+        let txtPickerL1 = lignes[0].querySelector('.m-comp-picker')?.value || "";
+        for (let i = 1; i < lignes.length; i++) {
+            let cibPicker = lignes[i].querySelector('.m-comp-picker');
+            if (cibPicker) cibPicker.value = txtPickerL1;
+            delete lignes[i].querySelector('.m-comp').dataset.manual;
+            setTagsLigneMulti(lignes[i], [...tagsL1]);
+        }
+        return;
+    }
 
     let classe = '.m-' + typeChamp;
     let premierElem = lignes[0].querySelector(classe);
@@ -2150,9 +2405,6 @@ function toggleDuplicationColonneMulti(typeChamp, isChecked) {
     }
 }
 
-// Gère la saisie dans le tableau multiple :
-// - Si on tape dans la ligne 1 et que la case "📋 Copier L1" de cette colonne est cochée, cela recopie de haut en bas (sauf sur les lignes modifiées manuellement).
-// - Si on modifie manuellement une ligne > 1, elle garde sa valeur individuelle.
 function gererSaisieChampMulti(elem, typeChamp) {
     let tbody = document.getElementById('tbodySaisieMultiple');
     if (!tbody) return;
@@ -2166,6 +2418,20 @@ function gererSaisieChampMulti(elem, typeChamp) {
     }
 
     if (idxLigne === 0 && estColonneMultiCopiee(typeChamp)) {
+        if (typeChamp === 'comp') {
+            let tagsL1 = getTagsLigneMulti(lignes[0]);
+            let txtPickerL1 = lignes[0].querySelector('.m-comp-picker')?.value || "";
+            for (let i = 1; i < lignes.length; i++) {
+                let cibComp = lignes[i].querySelector('.m-comp');
+                if (cibComp && cibComp.dataset.manual !== "true") {
+                    let cibPicker = lignes[i].querySelector('.m-comp-picker');
+                    if (cibPicker) cibPicker.value = txtPickerL1;
+                    setTagsLigneMulti(lignes[i], [...tagsL1]);
+                }
+            }
+            return;
+        }
+
         let classe = '.m-' + typeChamp;
         for (let i = 1; i < lignes.length; i++) {
             let cible = lignes[i].querySelector(classe);
@@ -2215,7 +2481,6 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
     let isCM = estCMSelectionneFormMulti();
     let optsTypes = `<option value="">-- Support * --</option>` + Object.keys(imagesParType || {}).map(t => `<option value="${escHTML(t)}">${escHTML((imagesParType[t].emoji ? imagesParType[t].emoji + ' ' : '') + t)}</option>`).join('');
 
-    // Récupère les valeurs de la 1re ligne uniquement pour les colonnes dont la case "📋 Copier L1" est cochée
     let premiereLigne = tbody.querySelector('.ligne-saisie-multi');
     let getValSiCoche = (champ) => {
         if (!premiereLigne || !estColonneMultiCopiee(champ)) return "";
@@ -2224,7 +2489,8 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
     };
 
     let defLecon = getValSiCoche('lecon');
-    let defComp = getValSiCoche('comp');
+    let defTagsComp = (premiereLigne && estColonneMultiCopiee('comp')) ? getTagsLigneMulti(premiereLigne) : [];
+    let defPickerComp = (premiereLigne && estColonneMultiCopiee('comp')) ? (premiereLigne.querySelector('.m-comp-picker')?.value || "") : "";
     let defType = getValSiCoche('type');
     let defPers = getValSiCoche('pers');
     let defPage = getValSiCoche('page');
@@ -2237,7 +2503,14 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
         tr.className = 'ligne-saisie-multi';
         tr.innerHTML = `
             <td><input type="text" class="m-lecon" value="${escHTML(defLecon)}" placeholder="Ex: G1" oninput="gererSaisieChampMulti(this, 'lecon')" style="width:100%;"></td>
-            <td><input type="text" class="m-comp" list="listeCompetencesConnues" value="${escHTML(defComp)}" placeholder="Compétence(s) (; si plusieurs)" oninput="gererSaisieChampMulti(this, 'comp')" style="width:100%;"></td>
+            <td>
+                <div class="m-comp-tags comp-tags-container"></div>
+                <div style="display:flex; gap:4px;">
+                    <input type="text" class="m-comp-picker" list="listeCompetencesConnues" value="${escHTML(defPickerComp)}" placeholder="🔍 Mot-clé ou nouvelle..." oninput="verifierSelectionDatalistCompMulti(this)" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterTagCompetenceMulti(this);}" style="flex:1;">
+                    <button type="button" class="filter-btn" style="padding:3px 7px;" title="Ajouter cette compétence" onclick="ajouterTagCompetenceMulti(this)">➕</button>
+                </div>
+                <input type="hidden" class="m-comp" value="">
+            </td>
             <td><input type="text" class="m-res" placeholder="Ex: Ex 1" style="width:100%;"></td>
             <td><select class="m-type" onchange="gererSaisieChampMulti(this, 'type')" style="width:100%;">${optsTypes}</select></td>
             <td><input type="text" class="m-symbole" placeholder="1" style="width:100%;"></td>
@@ -2261,6 +2534,7 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
         if (defType) tr.querySelector('.m-type').value = defType;
         if (defDiff !== "") tr.querySelector('.m-diff').value = defDiff;
         tbody.appendChild(tr);
+        setTagsLigneMulti(tr, [...defTagsComp]);
     }
 }
 
@@ -2273,6 +2547,8 @@ function enregistrerSaisieMultiple() {
     let periode = document.getElementById('multiPeriode').value;
 
     let lignes = Array.from(document.querySelectorAll('#tbodySaisieMultiple .ligne-saisie-multi'));
+    lignes.forEach(tr => renderTagsCompetencesLigneMulti(tr));
+
     let lignesActives = lignes.filter(tr => {
         return tr.querySelector('.m-res').value.trim() !== "" || tr.querySelector('.m-comp').value.trim() !== "";
     });
@@ -2540,14 +2816,25 @@ function ouvrirModalGestionCompetences() {
 }
 function afficherListeCompetencesModal() {
     let matFiltre = document.getElementById('filtreMatiereModalComp') ? document.getElementById('filtreMatiereModalComp').value : 'Toutes';
-    let comps = [...new Set(baseDonnees.filter(b => matFiltre === 'Toutes' || (b.matiere || "").trim() === matFiltre).map(b => (b.competence || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+    let toutesComps = [];
+    baseDonnees.filter(b => matFiltre === 'Toutes' || (b.matiere || "").trim() === matFiltre).forEach(b => {
+        extraireListeCompetences(b.competence).forEach(c => toutesComps.push(c));
+    });
+    let comps = [...new Set(toutesComps)].sort((a, b) => a.localeCompare(b, 'fr'));
     let cont = document.getElementById('listeCompetencesModalContainer'); if (!cont) return;
     cont.innerHTML = comps.map(c => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;"><input type="text" class="input-rename-comp" data-old="${escHTML(c)}" value="${escHTML(c)}" style="flex:1;"></div>`).join('');
 }
 function sauvegarderToutesCompetences() {
     document.querySelectorAll('.input-rename-comp').forEach(inp => {
         let oldV = inp.getAttribute('data-old'), newV = inp.value.trim();
-        if (oldV && newV && oldV !== newV) baseDonnees.forEach(b => { if ((b.competence || "").trim() === oldV) b.competence = newV; });
+        if (oldV && newV && oldV !== newV) {
+            baseDonnees.forEach(b => {
+                let list = extraireListeCompetences(b.competence);
+                if (list.includes(oldV)) {
+                    b.competence = list.map(item => item === oldV ? newV : item).join(' ; ');
+                }
+            });
+        }
     });
     postEditGlobal(); fermerModal('modalCompetences'); showToast("Compétences mises à jour !", "success");
 }
@@ -2610,6 +2897,7 @@ function changerImageDB(idAct) { let a = baseDonnees.find(b => b.id === idAct); 
 function viderBase() { if (confirm("⚠️ Vider l'intégralité de la base de données d'ateliers ?")) { baseDonnees = []; postEditGlobal(); showToast("Base de données vidée.", "success"); } }
 
 function enregistrerActiviteBase() {
+    renderTagsCompetencesSimple();
     let matiere = document.getElementById('inputMatiere').value.trim();
     let sequence = document.getElementById('inputSequence').value.trim();
     let lecon = document.getElementById('inputLecon').value.trim();
@@ -2669,6 +2957,7 @@ function enregistrerActiviteBase() {
     if (document.getElementById('inputPageOrange')) document.getElementById('inputPageOrange').value = '';
     document.getElementById('inputVarianteJaune').value = '';
     if (document.getElementById('inputLienExterne')) document.getElementById('inputLienExterne').value = '';
+    if (document.getElementById('inputCompetencePickerSimple')) document.getElementById('inputCompetencePickerSimple').value = '';
 }
 
 function editerActiviteBase(idAct) {
@@ -2678,7 +2967,9 @@ function editerActiviteBase(idAct) {
     document.getElementById('inputMatiere').value = a.matiere || '';
     document.getElementById('inputSequence').value = a.sequence || '';
     document.getElementById('inputLecon').value = a.lecon || '';
-    document.getElementById('inputCompetence').value = a.competence || '';
+    competencesSelectionneesSimple = extraireListeCompetences(a.competence);
+    if (document.getElementById('inputCompetencePickerSimple')) document.getElementById('inputCompetencePickerSimple').value = '';
+    renderTagsCompetencesSimple();
     document.getElementById('inputRessource').value = a.ressource || '';
     document.getElementById('selectTypeRessource').value = a.typeRes || '';
     if (document.getElementById('inputSymbole')) document.getElementById('inputSymbole').value = a.symbole || '';
@@ -2701,6 +2992,9 @@ function editerActiviteBase(idAct) {
 
 function annulerEditionBase() {
     idEnCoursEdition = null;
+    competencesSelectionneesSimple = [];
+    if (document.getElementById('inputCompetencePickerSimple')) document.getElementById('inputCompetencePickerSimple').value = '';
+    renderTagsCompetencesSimple();
     document.getElementById('titreFormulaireBase').innerText = "➕ Ajouter ou modifier une activité";
     document.getElementById('btnAnnulerEditBase').style.display = 'none';
 }
@@ -2863,7 +3157,7 @@ function afficherBase() {
             <td><strong>${escHTML(a.niveau)}</strong></td>
             <td><span class="filter-btn" style="padding:2px 6px; font-size:11px;">${escHTML(per)}</span></td>
             <td><span style="display:inline-block; padding:2px 7px; border-radius:4px; background:${coul.bg}; color:${coul.text}; font-size:11.5px; font-weight:bold;">${escHTML(a.matiere)}</span><br>${seqHtml} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
-            <td>${escHTML(a.competence)}</td>
+            <td>${formaterAffichageCompetences(a.competence)}</td>
             <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${detailsLivres}${badgeLien}${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}</td>
             <td>${escHTML(a.typeRes || '')}</td>
             <td style="text-align:center;">${escHTML(a.personnes || '')}</td>
@@ -2918,10 +3212,10 @@ function afficherProgrammation() {
         return true;
     });
     if (liste.length === 0) { cont.innerHTML = `<div class="empty-state"><p>Aucune activité pour ce filtre.</p></div>`; return; }
-    cont.innerHTML = `<table class="table-classique"><thead><tr><th style="width:70px;">Niveau</th><th style="width:180px;">Matière / Séquence</th><th>Compétence</th><th>Ressource</th><th style="width:230px; text-align:center;">Périodes (P1 à P5)</th></tr></thead><tbody>` + liste.map(a => {
+    cont.innerHTML = `<table class="table-classique"><thead><tr><th style="width:70px;">Niveau</th><th style="width:180px;">Matière / Séquence</th><th>Compétence(s)</th><th>Ressource</th><th style="width:230px; text-align:center;">Périodes (P1 à P5)</th></tr></thead><tbody>` + liste.map(a => {
         let p = programmations[a.id] || a.periode || "", coul = getCouleurMatiereBandeau(a.matiere);
         let btns = ['P1', 'P2', 'P3', 'P4', 'P5'].map(per => `<button type="button" class="prog-pill ${p === per ? 'active' : ''}" onclick="toggleProg('${a.id}', '${per}')">${per}</button>`).join('');
-        return `<tr><td><strong>${escHTML(a.niveau)}</strong></td><td><span style="background:${coul.bg}; color:#fff; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold;">${escHTML(a.matiere)}</span><br>${escHTML(a.sequence)}</td><td>${escHTML(a.competence)}</td><td><strong>${escHTML(a.ressource)}</strong></td><td style="text-align:center;">${btns}</td></tr>`;
+        return `<tr><td><strong>${escHTML(a.niveau)}</strong></td><td><span style="background:${coul.bg}; color:#fff; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold;">${escHTML(a.matiere)}</span><br>${escHTML(a.sequence)}</td><td>${formaterAffichageCompetences(a.competence)}</td><td><strong>${escHTML(a.ressource)}</strong></td><td style="text-align:center;">${btns}</td></tr>`;
     }).join('') + `</tbody></table>`;
 }
 
@@ -3056,9 +3350,9 @@ function genererBilanEleve() {
     let html = `<div class="card-panel"><h3>📋 Bilan des acquisitions de ${escHTML(e.nom)} (${escHTML(e.niveau)}) — ${hist.length} activités validées</h3>`;
     Object.keys(parMat).forEach(m => {
         let coul = getCouleurMatiereBandeau(m);
-        html += `<div class="bandeau-matiere-print" style="background:${coul.bg}; color:${coul.text}; margin-top:15px;">${escHTML(m.toUpperCase())}</div><table class="table-classique"><thead><tr><th style="width:90px;">Date</th><th style="width:160px;">Séquence</th><th>Compétence</th><th>Atelier validé</th><th style="width:170px;">Maîtrise (LSU)</th></tr></thead><tbody>` + parMat[m].map(it => {
+        html += `<div class="bandeau-matiere-print" style="background:${coul.bg}; color:${coul.text}; margin-top:15px;">${escHTML(m.toUpperCase())}</div><table class="table-classique"><thead><tr><th style="width:90px;">Date</th><th style="width:160px;">Séquence</th><th>Compétence(s)</th><th>Atelier validé</th><th style="width:170px;">Maîtrise (LSU)</th></tr></thead><tbody>` + parMat[m].map(it => {
             let cleComp = `${it.act.matiere}||${it.act.competence || it.act.ressource}`, nivMaitrise = e.bilanEvaluations[cleComp] || "Atteint";
-            return `<tr><td>${escHTML(it.date)}</td><td>${escHTML(it.act.sequence)}</td><td><strong>${escHTML(it.act.competence)}</strong></td><td>${escHTML(it.act.ressource)}</td><td><select onchange="changerBilanEval('${e.id}', '${escJS(cleComp)}', this.value)" style="width:100%; font-weight:bold;"><option value="Dépassé" ${nivMaitrise === 'Dépassé' ? 'selected' : ''}>✨ Dépassé</option><option value="Atteint" ${nivMaitrise === 'Atteint' ? 'selected' : ''}>✅ Atteint</option><option value="Partiellement atteint" ${nivMaitrise === 'Partiellement atteint' ? 'selected' : ''}>🟠 Partiellement atteint</option><option value="Non atteint" ${nivMaitrise === 'Non atteint' ? 'selected' : ''}>🔴 Non atteint</option></select></td></tr>`;
+            return `<tr><td>${escHTML(it.date)}</td><td>${escHTML(it.act.sequence)}</td><td><strong>${formaterAffichageCompetences(it.act.competence)}</strong></td><td>${escHTML(it.act.ressource)}</td><td><select onchange="changerBilanEval('${e.id}', '${escJS(cleComp)}', this.value)" style="width:100%; font-weight:bold;"><option value="Dépassé" ${nivMaitrise === 'Dépassé' ? 'selected' : ''}>✨ Dépassé</option><option value="Atteint" ${nivMaitrise === 'Atteint' ? 'selected' : ''}>✅ Atteint</option><option value="Partiellement atteint" ${nivMaitrise === 'Partiellement atteint' ? 'selected' : ''}>🟠 Partiellement atteint</option><option value="Non atteint" ${nivMaitrise === 'Non atteint' ? 'selected' : ''}>🔴 Non atteint</option></select></td></tr>`;
         }).join('') + `</tbody></table>`;
     });
     cont.innerHTML = html + `</div>`;
@@ -3107,6 +3401,7 @@ document.addEventListener("DOMContentLoaded", function() {
     let selType = document.getElementById('selectTypeRessource');
     if (selType) selType.addEventListener('change', majCouleurAutoFormSimple);
     verifierNiveauxCMFormSimple();
+    renderTagsCompetencesSimple();
     rafraichirToutApresImport();
     tenterConnexionAutoFirebase();
 });
