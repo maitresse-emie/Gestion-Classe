@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GestionClasse - Plans de Travail & Suivi</title>
-    <link rel="stylesheet" href="style.css?v=20261101">
+    <link rel="stylesheet" href="style.css?v=20261102">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
 </head>
@@ -149,7 +149,7 @@
                                 <thead>
                                     <tr>
                                         <th style="width:65px;">Niv./Pér.</th>
-                                        <th style="width:150px;">Séquence / Leçon</th>
+                                        <th style="width:165px;">Séquence Cible / Leçon</th>
                                         <th>Compétence(s)</th>
                                         <th>Ressource & Support</th>
                                         <th style="width:75px; text-align:center;">N° Atelier</th>
@@ -216,7 +216,7 @@
                                         <tr>
                                             <th style="width:85px;">Date</th>
                                             <th style="width:55px;">Niv.</th>
-                                            <th>Matière / Séquence</th>
+                                            <th>Matière / Séquence validée</th>
                                             <th>Compétence(s)</th>
                                             <th>Ressource</th>
                                             <th style="width:50px;">Rest.</th>
@@ -341,7 +341,7 @@
                     <h2>📁 4. Base de données des activités et ateliers</h2>
                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
                         <button type="button" class="filter-btn" onclick="ouvrirModalGestionMatieres()">⚙️ Matières</button>
-                        <button type="button" class="filter-btn" onclick="ouvrirModalGestionSequences()">⚙️ Séquences</button>
+                        <button type="button" class="filter-btn" onclick="ouvrirModalGestionSequences()">⚙️ Séquences & Matières liées</button>
                         <button type="button" class="filter-btn" onclick="ouvrirModalGestionCompetences()">⚙️ Compétences</button>
                         <button type="button" class="filter-btn" onclick="ouvrirModalGestionTypes()">⚙️ Types & Logos</button>
                     </div>
@@ -363,9 +363,14 @@
                             <input type="text" id="inputMatiere" list="listeMatieresConnues" placeholder="Ex: 🔤Français - Grammaire">
                             <datalist id="listeMatieresConnues"></datalist>
                         </div>
-                        <div>
-                            <label>Séquence / Sous-matière * :</label>
-                            <input type="text" id="inputSequence" list="listeSequencesConnues" placeholder="Ex: La phrase et la ponctuation">
+                        <div style="grid-column: span 2;">
+                            <label>Séquence(s) / Sous-matière(s) * <small style="font-weight:normal; color:#666;">(Vous pouvez rattacher cet atelier à une ou plusieurs séquences : cherchez ou créez puis cliquez sur ➕)</small> :</label>
+                            <div id="tagsSequencesSimple" class="comp-tags-container"></div>
+                            <div style="display:flex; gap:6px;">
+                                <input type="text" id="inputSequencePickerSimple" list="listeSequencesConnues" placeholder="🔍 Rechercher ou créer une séquence..." style="flex:1;" onchange="verifierSelectionDatalistSeqSimple(this)" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterTagSequenceSimple();}">
+                                <button type="button" class="btn-action" onclick="ajouterTagSequenceSimple()" title="Rattacher cette séquence à l'atelier">➕ Séq.</button>
+                            </div>
+                            <input type="hidden" id="inputSequence">
                             <datalist id="listeSequencesConnues"></datalist>
                         </div>
                         <div>
@@ -377,7 +382,7 @@
                             <div id="tagsCompetencesSimple" class="comp-tags-container"></div>
                             <div style="display:flex; gap:6px;">
                                 <input type="text" id="inputCompetencePickerSimple" list="listeCompetencesConnues" placeholder="🔍 Rechercher par mot-clé ou créer une compétence..." style="flex:1;" onchange="verifierSelectionDatalistCompSimple(this)" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterTagCompetenceSimple();}">
-                                <button type="button" class="btn-action" onclick="ajouterTagCompetenceSimple()" title="Ajouter cette compétence à l'activité">➕ Ajouter</button>
+                                <button type="button" class="btn-action" onclick="ajouterTagCompetenceSimple()" title="Ajouter cette compétence à l'activité">➕ Comp.</button>
                             </div>
                             <input type="hidden" id="inputCompetence">
                             <datalist id="listeCompetencesConnues"></datalist>
@@ -464,11 +469,11 @@
                     </div>
                 </div>
 
-                <!-- MODE 2 : SAISIE MULTIPLE D'EXERCICES POUR UNE MÊME SÉQUENCE -->
+                <!-- MODE 2 : SAISIE MULTIPLE D'EXERCICES POUR UNE OU PLUSIEURS SÉQUENCES -->
                 <div id="blocSaisieMultipleBase" class="card-panel" style="margin-bottom:20px; display:none; border:2px solid #2980b9; background:#f8fbff;">
-                    <h3 style="color:#1b4f72; margin-bottom:6px;">⚡ Saisie multiple d'exercices pour une même séquence</h3>
+                    <h3 style="color:#1b4f72; margin-bottom:6px;">⚡ Saisie multiple d'exercices</h3>
                     <p style="font-size:12.5px; color:#555; margin-bottom:12px;">
-                        💡 <strong>Astuce :</strong> Cochez <strong>« 📋 Copier L1 »</strong> en haut d'une colonne si vous souhaitez que la valeur de la 1<sup>re</sup> ligne se duplique automatiquement sur toute la colonne (la colonne <strong>Leçon</strong> est cochée par défaut). Pour ajouter plusieurs compétences sur une ligne, cherchez-les par mot-clé et cliquez sur <code>➕</code>.
+                        💡 <strong>Astuce :</strong> Cochez <strong>« 📋 Copier L1 »</strong> en haut d'une colonne si vous souhaitez que la valeur de la 1<sup>re</sup> ligne se duplique automatiquement sur toute la colonne (la colonne <strong>Leçon</strong> est cochée par défaut). Vous pouvez associer une ou plusieurs séquences communes en haut !
                     </p>
 
                     <div class="form-grid-base" style="margin-bottom:14px; padding-bottom:12px; border-bottom:1px dashed #bdc3c7;">
@@ -487,8 +492,13 @@
                             <input type="text" id="multiMatiere" list="listeMatieresConnues" placeholder="Ex: 🔤Français - Grammaire">
                         </div>
                         <div>
-                            <label><strong>3. Séquence commune * :</strong></label>
-                            <input type="text" id="multiSequence" list="listeSequencesConnues" placeholder="Ex: La phrase et la ponctuation">
+                            <label><strong>3. Séquence(s) commune(s) * :</strong></label>
+                            <div id="tagsSequencesMulti" class="comp-tags-container"></div>
+                            <div style="display:flex; gap:4px;">
+                                <input type="text" id="multiSequencePicker" list="listeSequencesConnues" placeholder="🔍 Séquence..." style="flex:1;" onchange="verifierSelectionDatalistSeqMulti(this)" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterTagSequenceMulti();}">
+                                <button type="button" class="btn-action" style="padding:4px 8px;" onclick="ajouterTagSequenceMulti()">➕</button>
+                            </div>
+                            <input type="hidden" id="multiSequence">
                         </div>
                         <div>
                             <label><strong>4. Période commune (optionnel) :</strong></label>
@@ -578,8 +588,9 @@
                         <strong style="color:#d35400;">☑️ <span id="nbAteliersCochesBase">0</span> activité(s) sélectionnée(s) — Modifier en lot :</strong>
                         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
                             <select id="bulkSelectType"><option value="">-- Changer Support --</option></select>
-                            <input type="text" id="bulkInputMatiere" list="listeMatieresConnues" placeholder="Changer Matière..." style="width:155px;">
-                            <input type="text" id="bulkInputSequence" list="listeSequencesConnues" placeholder="Changer Séquence..." style="width:155px;">
+                            <input type="text" id="bulkInputMatiere" list="listeMatieresConnues" placeholder="Changer Matière..." style="width:145px;">
+                            <input type="text" id="bulkInputSequence" list="listeSequencesConnues" placeholder="Remplacer Séq..." style="width:140px;" title="Remplace la séquence des ateliers cochés">
+                            <input type="text" id="bulkInputAddSequence" list="listeSequencesConnues" placeholder="➕ Ajouter Séq..." style="width:140px;" title="Ajoute une séquence supplémentaire sans effacer celles existantes">
                             <select id="bulkSelectPeriode">
                                 <option value="">-- Changer Période --</option>
                                 <option value="VIDER">🚫 Sans période</option>
@@ -596,7 +607,7 @@
                                 <option value="2">⭐⭐ (2)</option>
                                 <option value="3">⭐⭐⭐ (3)</option>
                             </select>
-                            <input type="text" id="bulkInputPersonnes" placeholder="Nb Pers (👤)..." style="width:105px;">
+                            <input type="text" id="bulkInputPersonnes" placeholder="Nb Pers (👤)..." style="width:95px;">
                             <button type="button" class="btn-valid" onclick="appliquerModificationGroupeeBase()">✅ Appliquer aux cochés</button>
                             <button type="button" class="btn-danger" onclick="supprimerSelectionGroupeeBase()" title="Supprimer les activités cochées">🗑️</button>
                         </div>
@@ -610,7 +621,7 @@
                             <th style="width:34px; text-align:center;"><input type="checkbox" id="cbToutCocherBase" onchange="cocherToutBase(this.checked)" title="Tout sélectionner pour modifier en lot"></th>
                             <th style="width:65px;">Niveau</th>
                             <th style="width:60px;">Période</th>
-                            <th style="width:160px;">Matière / Séquence</th>
+                            <th style="width:175px;">Matière / Séquence(s)</th>
                             <th>Compétence(s)</th>
                             <th>Ressource, Pages & Lien Anton</th>
                             <th style="width:90px;">Type</th>
@@ -861,11 +872,12 @@
         </div>
     </div>
 
+    <!-- Modale Séquences : Renommer + Changer la Matière de toute une séquence + Réassigner -->
     <div id="modalSequences" class="modal" style="display:none;">
-        <div class="modal-content" style="max-width:760px;">
-            <h3>⚙️ Gérer, filtrer et réassigner les Séquences</h3>
+        <div class="modal-content" style="max-width:860px;">
+            <h3>⚙️ Gérer les Séquences & Modifier la Matière d'une séquence entière</h3>
             <p style="font-size:12px; color:#555; margin-bottom:8px;">
-                💡 Supprimer une séquence ne supprime <strong>aucune activité</strong> : les activités liées passent en <em>« ⚠️ Sans séquence »</em> pour que vous puissiez les réassigner facilement.
+                💡 Vous pouvez <strong>renommer une séquence</strong> ou <strong>changer directement la matière de toute la séquence</strong> grâce au menu déroulant à droite de chaque ligne. Supprimer une séquence ne supprime aucune activité (elles passent en <em>« ⚠️ Sans séquence »</em>).
             </p>
             <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; background:#f8f9fa; padding:10px; border-radius:6px;">
                 <label><strong>Niveau :</strong>
@@ -886,7 +898,7 @@
                 <input type="text" id="inputNouvelleSeqModal" placeholder="➕ Créer une nouvelle séquence..." style="flex:1;">
                 <button type="button" class="btn-action" onclick="creerNouvelleSequenceModal()">➕ Ajouter à la liste</button>
             </div>
-            <div id="listeSequencesModalContainer" style="max-height:250px; overflow-y:auto; margin:10px 0; border:1px solid #ddd; padding:10px; border-radius:6px;"></div>
+            <div id="listeSequencesModalContainer" style="max-height:260px; overflow-y:auto; margin:10px 0; border:1px solid #ddd; padding:10px; border-radius:6px;"></div>
             <div id="blocOrphelinsSeqModal" style="display:none; max-height:180px; overflow-y:auto; margin:10px 0; border:2px dashed #e67e22; background:#fef9e7; padding:10px; border-radius:6px;"></div>
             <div style="display:flex; justify-content:flex-end; gap:10px;">
                 <button type="button" class="btn-remove" onclick="fermerModal('modalSequences')">Fermer</button>
@@ -941,6 +953,11 @@
     <div id="modalAssigner" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>📌 Assigner l'activité : <span id="nomActiviteAssign"></span></h3>
+            <div id="blocChoixSequenceAssignModal" style="margin:10px 0; display:none;">
+                <label><strong>Dans quelle séquence assigner cet atelier ?</strong>
+                    <select id="selectSequenceAssignMultiple" style="padding:6px; border-radius:4px; width:100%; margin-top:4px;"></select>
+                </label>
+            </div>
             <div style="margin:10px 0; display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
                 <label>Jour imposé (optionnel) :
                     <select id="selectJourAssignMultiple" style="padding:6px; border-radius:4px;">
@@ -1000,6 +1017,6 @@
 
     <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" style="display:none; position:fixed; bottom:20px; right:20px; z-index:99; background:#1b4f72; color:#fff; border:none; padding:12px 16px; border-radius:50%; cursor:pointer; font-size:16px; box-shadow:0 3px 8px rgba(0,0,0,0.2);">⬆️</button>
 
-    <script src="script.js?v=20261101"></script>
+    <script src="script.js?v=20261102"></script>
 </body>
 </html>
