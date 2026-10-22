@@ -2022,8 +2022,7 @@ function rafraichirDashboard() {
                 </select>
             </div>
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                <label style="font-size:13px; font-weight:bold;">Lundi : <input type="date" value="${escHTML(semProf.dateDebutISO || '')}" onchange="appliquerDateSemaineProf(this.value)"></label>
-                <span style="font-weight:bold; color:#1b4f72; font-size:13px;">${semProf.dateFin ? `➔ au Vendredi ${escHTML(semProf.dateFin)}` : '➔ Vendredi : --/--'}</span>
+<label style="font-size:13px; font-weight:bold;">Lundi : <input type="date" min="2025-01-01" max="2035-12-31" value="${escHTML(semProf.dateDebutISO || '')}" onchange="appliquerDateSemaineProf(this.value)"></label>                <span style="font-weight:bold; color:#1b4f72; font-size:13px;">${semProf.dateFin ? `➔ au Vendredi ${escHTML(semProf.dateFin)}` : '➔ Vendredi : --/--'}</span>
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
                 <button type="button" class="btn-action" onclick="imprimerPlanningLeconsProf()" style="background:#8e44ad !important; color:#fff !important;" title="Imprimer ce planning de leçons pour l'afficher aux élèves">🖨️ Imprimer l'affichage élèves</button>
