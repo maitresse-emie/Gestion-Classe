@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GestionClasse - Plans de Travail & Suivi</title>
-    <link rel="stylesheet" href="style.css?v=20261029">
+    <link rel="stylesheet" href="style.css?v=20261030">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
 </head>
@@ -311,7 +311,7 @@
         <!-- ========================================== -->
         <div id="pageDashboard" class="page">
             <div class="panel">
-                <div class="page-header-flex">
+                <div class="page-header-flex no-print">
                     <h2>📊 3. Tableau de bord de la classe</h2>
                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
                         <button type="button" class="btn-valid" onclick="cloturerSemaineClasseGlobale()">🏁 Clôturer la semaine pour TOUTE la classe</button>
@@ -828,7 +828,6 @@
         </div>
     </div>
 
-    <!-- Modale Séquences enrichie : Filtre par Niveau + Matière, Création de séquence, Suppression sans perte d'activités -->
     <div id="modalSequences" class="modal" style="display:none;">
         <div class="modal-content" style="max-width:760px;">
             <h3>⚙️ Gérer, filtrer et réassigner les Séquences</h3>
@@ -965,6 +964,6 @@
 
     <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" style="display:none; position:fixed; bottom:20px; right:20px; z-index:99; background:#1b4f72; color:#fff; border:none; padding:12px 16px; border-radius:50%; cursor:pointer; font-size:16px; box-shadow:0 3px 8px rgba(0,0,0,0.2);">⬆️</button>
 
-    <script src="script.js?v=20261029"></script>
+    <script src="script.js?v=20261030"></script>
 </body>
 </html>
