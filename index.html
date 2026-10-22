@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GestionClasse - Plans de Travail & Suivi</title>
-    <link rel="stylesheet" href="style.css?v=20261102">
+    <link rel="stylesheet" href="style.css?v=20261104">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
 </head>
@@ -418,12 +418,13 @@
                         <div>
                             <label>Période :</label>
                             <select id="selectPeriodeForm">
-                                <option value="">-- Sans période --</option>
+                                <option value="">-- Automatique selon la séquence --</option>
                                 <option value="P1">Période 1</option>
                                 <option value="P2">Période 2</option>
                                 <option value="P3">Période 3</option>
                                 <option value="P4">Période 4</option>
                                 <option value="P5">Période 5</option>
+                                <option value="P1, P2, P3, P4, P5">🌟 Toute l'année (P1 à P5)</option>
                             </select>
                         </div>
                         <div>
@@ -503,12 +504,13 @@
                         <div>
                             <label><strong>4. Période commune (optionnel) :</strong></label>
                             <select id="multiPeriode">
-                                <option value="">-- Sans période --</option>
+                                <option value="">-- Automatique selon la séquence --</option>
                                 <option value="P1">Période 1</option>
                                 <option value="P2">Période 2</option>
                                 <option value="P3">Période 3</option>
                                 <option value="P4">Période 4</option>
                                 <option value="P5">Période 5</option>
+                                <option value="P1, P2, P3, P4, P5">🌟 Toute l'année (P1 à P5)</option>
                             </select>
                         </div>
                     </div>
@@ -599,6 +601,7 @@
                                 <option value="P3">Période 3</option>
                                 <option value="P4">Période 4</option>
                                 <option value="P5">Période 5</option>
+                                <option value="P1, P2, P3, P4, P5">🌟 Toute l'année (P1-P5)</option>
                             </select>
                             <select id="bulkSelectEtoiles">
                                 <option value="">-- Changer Étoiles --</option>
@@ -620,7 +623,7 @@
                         <tr>
                             <th style="width:34px; text-align:center;"><input type="checkbox" id="cbToutCocherBase" onchange="cocherToutBase(this.checked)" title="Tout sélectionner pour modifier en lot"></th>
                             <th style="width:65px;">Niveau</th>
-                            <th style="width:60px;">Période</th>
+                            <th style="width:75px;">Période(s)</th>
                             <th style="width:175px;">Matière / Séquence(s)</th>
                             <th>Compétence(s)</th>
                             <th>Ressource, Pages & Lien Anton</th>
@@ -635,10 +638,15 @@
             </div>
         </div>
 
-        <!-- 5. PROGRAMMATION -->
+        <!-- ========================================== -->
+        <!-- 5. PROGRAMMATION PAR SÉQUENCES             -->
+        <!-- ========================================== -->
         <div id="pageProg" class="page">
             <div class="panel">
-                <h2>📅 5. Programmation annuelle par périodes (P1 à P5)</h2>
+                <h2>📅 5. Programmation annuelle des Séquences par périodes (P1 à P5)</h2>
+                <p style="font-size:13px; color:#555; margin-bottom:12px;">
+                    💡 Cliquez sur une ou plusieurs périodes (<strong>P1 à P5</strong>) ou sur <strong>« 🌟 Année »</strong> pour ranger directement toute une séquence dans les périodes souhaitées. Tous les ateliers de la séquence suivent automatiquement !
+                </p>
                 <div class="card-panel" style="margin-bottom:15px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
                     <label><strong>Niveau :</strong>
                         <select id="selectNiveauProg" onchange="afficherProgrammation()">
@@ -942,6 +950,9 @@
     <div id="modalDupliquer" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>📋 Dupliquer le plan de <span id="nomEleveSourceDupli"></span></h3>
+            <p style="font-size:12px; color:#555; margin-top:4px;">
+                💡 Les exercices s'adapteront automatiquement au parcours (🟡 Jaune / 🟠 Orange) ou au 📒 Fichier Jaune de chaque élève sélectionné !
+            </p>
             <div id="listeElevesDupli" style="max-height:260px; overflow-y:auto; margin:15px 0; border:1px solid #ddd; padding:10px; display:flex; flex-direction:column; gap:6px;"></div>
             <div style="display:flex; justify-content:flex-end; gap:10px;">
                 <button type="button" class="btn-remove" onclick="fermerModal('modalDupliquer')">Annuler</button>
@@ -1017,6 +1028,6 @@
 
     <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" style="display:none; position:fixed; bottom:20px; right:20px; z-index:99; background:#1b4f72; color:#fff; border:none; padding:12px 16px; border-radius:50%; cursor:pointer; font-size:16px; box-shadow:0 3px 8px rgba(0,0,0,0.2);">⬆️</button>
 
-    <script src="script.js?v=20261102"></script>
+    <script src="script.js?v=20261104"></script>
 </body>
 </html>
