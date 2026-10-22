@@ -535,6 +535,11 @@ input[type="text"], input[type="number"], input[type="date"], select {
     print-color-adjust: exact;
 }
 
+/* Affichage imprimable du tableau des leçons explicites (pour les élèves) */
+.only-print-lecons {
+    display: none;
+}
+
 /* Modales */
 .modal, .modal-overlay {
     position: fixed;
@@ -604,6 +609,18 @@ input[type="text"], input[type="number"], input[type="date"], select {
         gap: 0mm !important;
         margin: 0 auto !important;
         padding: 0 !important;
+    }
+    /* Mode impression exclusif de l'affiche des leçons explicites pour la classe */
+    body.print-lecons-only .no-print-lecons { display: none !important; }
+    body.print-lecons-only .only-print-lecons { display: block !important; }
+    body.print-lecons-only .grid-lecons-poles {
+        display: block !important;
+    }
+    body.print-lecons-only .card-pole-lecon {
+        margin-bottom: 14px !important;
+        page-break-inside: avoid;
+        break-inside: avoid;
+        border: 2px solid #2c3e50 !important;
     }
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 }
