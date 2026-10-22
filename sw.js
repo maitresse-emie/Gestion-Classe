@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gestionclasse-v2026-10-30';
+const CACHE_NAME = 'gestionclasse-v2026-10-31';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -7,7 +7,6 @@ const ASSETS_TO_CACHE = [
   './manifest.json'
 ];
 
-// Installation et mise en cache initiale
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
@@ -17,7 +16,6 @@ self.addEventListener('install', (event) => {
   );
 });
 
-// Activation et purge automatique de tous les anciens caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -33,7 +31,6 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Stratégie "Network First" : charge toujours la dernière version en ligne, et utilise le cache si hors-ligne
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || event.request.url.includes('firebasedatabase.app')) {
     return;
