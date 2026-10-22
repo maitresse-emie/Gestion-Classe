@@ -516,19 +516,33 @@ input[type="text"], input[type="number"], input[type="date"], select {
 }
 
 .prog-pill {
-    padding: 4px 9px;
+    padding: 5px 9px;
     border-radius: 6px;
     border: 1px solid #bdc3c7;
     background: #f8f9fa;
     cursor: pointer;
     font-weight: bold;
     font-size: 12px;
-    margin-right: 3px;
+    margin: 2px;
+    transition: all 0.15s ease;
+}
+.prog-pill:hover {
+    border-color: #d35400;
 }
 .prog-pill.active {
     background: #d35400;
     color: #fff;
     border-color: #a04000;
+}
+.prog-pill.all-periods {
+    background: #fef9e7;
+    color: #7d6608;
+    border-color: #f1c40f;
+}
+.prog-pill.all-periods.active {
+    background: #27ae60;
+    color: #ffffff;
+    border-color: #1e8449;
 }
 
 /* Dashboard */
