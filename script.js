@@ -18,6 +18,20 @@ const KEY_PRINT_CFG = 'maConfigImpression_Finale';
 const KEY_SEQ_CUSTOM = 'mesSequencesCustom_Finale';
 const KEY_LECONS_PROF = 'mesLeconsProf_Finale';
 
+const MATIERES_DEFAUT_LISTE = [
+    "✅Français - Orthographe",
+    "✏️Français - Écriture",
+    "📚Français - Conjugaison",
+    "🔤Français - Grammaire",
+    "🧑‍🎓Français - Lexique",
+    "🧑‍🎓Français - Vocabulaire",
+    "🧮Mathématiques - Numération",
+    "➗Mathématiques - Algèbre et Proportionnalité",
+    "📏Mathématiques - Mesure",
+    "🔷Mathématiques - Géométrie",
+    "🤖Mathématiques - Programmation"
+];
+
 let dashboardExpanded = new Set();
 let dashboardArchives = JSON.parse(localStorage.getItem(KEY_ARCHIVES_TODO)) || [];
 let afficherArchivesMode = false;
@@ -26,6 +40,8 @@ let sequencesCustom = JSON.parse(localStorage.getItem(KEY_SEQ_CUSTOM)) || [];
 let planningLeconsProf = JSON.parse(localStorage.getItem(KEY_LECONS_PROF)) || { semaineIndex: 0, semaines: [] };
 let selectionGroupeeBase = new Set();
 let competencesSelectionneesSimple = [];
+let sequencesSelectionneesSimple = [];
+let sequencesSelectionneesMulti = [];
 
 let printConfig = JSON.parse(localStorage.getItem(KEY_PRINT_CFG)) || {
     titre: "Plan de travail",
@@ -129,6 +145,62 @@ function formaterAffichageCompetences(compStr) {
     let list = extraireListeCompetences(compStr);
     if (list.length <= 1) return escHTML(compStr || "");
     return list.map(c => `<span style="display:inline-block; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:1px 6px; margin:1px 2px; font-size:11.5px;">${escHTML(c)}</span>`).join(' ');
+}
+
+// ==========================================
+// GESTION MULTI-SÉQUENCES PAR ATELIER
+// ==========================================
+function extraireListeSequences(seqStr) {
+    if (!seqStr) return [];
+    if (Array.isArray(seqStr)) return seqStr.map(s => String(s).trim()).filter(Boolean);
+    return seqStr.toString().split(/[;|]+/).map(s => s.trim()).filter(Boolean);
+}
+
+function activiteAppartientASequence(act, nomSequence) {
+    if (!act) return false;
+    let cibles = extraireListeSequences(act.sequence).map(s => s.toLowerCase());
+    let s = (nomSequence || "").trim().toLowerCase();
+    if (!s) return cibles.length === 0;
+    return cibles.includes(s);
+}
+
+function formaterAffichageSequences(seqStr) {
+    let list = extraireListeSequences(seqStr);
+    if (list.length === 0) return `<span style="color:#e67e22; font-weight:bold;">⚠️ Sans séquence</span>`;
+    if (list.length === 1) return escHTML(list[0]);
+    return list.map(s => `<span style="display:inline-block; background:#fef9e7; color:#7d6608; border:1px solid #f5b041; border-radius:6px; padding:1px 6px; margin:1px 2px; font-size:11.5px; font-weight:600;">📑 ${escHTML(s)}</span>`).join(' ');
+}
+
+// Vérifie si un atelier a déjà été validé/archivé pour une séquence spécifique
+// (S'il appartient à plusieurs séquences, le valider dans la Séquence A ne l'archive PAS dans la Séquence B)
+function estActiviteValideePourSequence(eleve, act, seqCible) {
+    if (!eleve || !act) return false;
+    let seqsAct = extraireListeSequences(act.sequence);
+    let targetNorm = (seqCible || "").trim().toLowerCase();
+
+    return (eleve.historique || []).some(h => {
+        if (!h || h.idActivite !== act.id) return false;
+        let hSeqNorm = (h.sequence || "").trim().toLowerCase();
+        if (seqsAct.length <= 1) {
+            return true;
+        }
+        if (!targetNorm) {
+            return false;
+        }
+        if (hSeqNorm) {
+            return hSeqNorm === targetNorm;
+        }
+        return seqsAct[0].toLowerCase() === targetNorm;
+    });
+}
+
+function getSequenceActivePourEleve(eleve, act) {
+    let seqs = extraireListeSequences(act ? act.sequence : "");
+    if (eleve && eleve.sequencesChoisies && eleve.sequencesChoisies[act.id]) {
+        let choisie = eleve.sequencesChoisies[act.id];
+        if (seqs.some(s => s.toLowerCase() === choisie.toLowerCase())) return choisie;
+    }
+    return seqs[0] || "";
 }
 
 // ==========================================
@@ -306,11 +378,11 @@ function assurerStructureSemaines(e) {
     if (!e.priorites) e.priorites = [];
     if (!e.bilanEvaluations) e.bilanEvaluations = {};
     if (!e.joursAssignes) e.joursAssignes = {};
+    if (!e.sequencesChoisies) e.sequencesChoisies = {};
     if (!e.dateDebutISO) e.dateDebutISO = "";
     if (!e.dateDebut) e.dateDebut = "";
     if (!e.dateFin) e.dateFin = "";
 
-    // S'assure que les activités récurrentes de l'élève sont bien présentes dans son plan actif
     e.recurrents.forEach(idRec => {
         if (baseDonnees.some(b => b.id === idRec) && !e.planHebdo.includes(idRec)) {
             e.planHebdo.push(idRec);
@@ -322,6 +394,7 @@ function assurerStructureSemaines(e) {
             id: 'sem_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
             dateDebutISO: e.dateDebutISO || "", dateDebut: e.dateDebut || "", dateFin: e.dateFin || "",
             planHebdo: [...e.planHebdo], priorites: [...e.priorites], joursAssignes: { ...e.joursAssignes },
+            sequencesChoisies: { ...e.sequencesChoisies },
             valides: { ...e.valides }, suivi: JSON.parse(JSON.stringify(e.suivi || {}))
         }];
         e.semaineIndex = 0;
@@ -337,6 +410,7 @@ function syncEleveVersSemaineActive(e) {
     e.semaines[idx].planHebdo = [...(e.planHebdo || [])];
     e.semaines[idx].priorites = [...(e.priorites || [])];
     e.semaines[idx].joursAssignes = { ...(e.joursAssignes || {}) };
+    e.semaines[idx].sequencesChoisies = { ...(e.sequencesChoisies || {}) };
     e.semaines[idx].valides = { ...(e.valides || {}) };
     e.semaines[idx].suivi = JSON.parse(JSON.stringify(e.suivi || {}));
     e.semaines[idx].dateDebutISO = e.dateDebutISO || "";
@@ -359,6 +433,7 @@ function chargerSemaineDepuisIndex(e, nouvelIndex) {
     });
     e.priorites = [...(s.priorites || [])];
     e.joursAssignes = { ...(s.joursAssignes || {}) };
+    e.sequencesChoisies = { ...(s.sequencesChoisies || {}) };
     e.valides = { ...(s.valides || {}) };
     e.suivi = { ...(s.suivi || {}) };
     e.dateDebutISO = s.dateDebutISO || "";
@@ -605,7 +680,12 @@ function eliminerDoublonsHistoriques() {
     Object.values(eleves).forEach(e => {
         if (e.historique && Array.isArray(e.historique)) {
             let uniqueMap = new Map();
-            e.historique.forEach(h => { if (h && h.idActivite) uniqueMap.set(h.idActivite, h); });
+            e.historique.forEach(h => {
+                if (h && h.idActivite) {
+                    let cle = `${h.idActivite}||${(h.sequence || "").toLowerCase()}`;
+                    uniqueMap.set(cle, h);
+                }
+            });
             e.historique = Array.from(uniqueMap.values());
         }
     });
@@ -647,7 +727,7 @@ let idEleveCourant = null, idEleveImpressionCourant = null;
 let filtreCourantDB = 'Tous', filtreCourantMatiere = 'Toutes', filtreCourantSequenceDB = 'Toutes', filtreCourantTypeDB = 'Tous';
 let idEnCoursEdition = null;
 
-function getListeTrie(idsArray, priosArray = []) {
+function getListeTrie(idsArray, priosArray = [], eleveContext = null) {
     if (!idsArray) return [];
     let planObjects = idsArray.map(id => baseDonnees.find(b => b.id === id)).filter(Boolean);
     planObjects.sort((a, b) => {
@@ -656,7 +736,8 @@ function getListeTrie(idsArray, priosArray = []) {
         if (prioA !== prioB) return prioB - prioA;
         let matA = nettoyerNomPourTri(a.matiere), matB = nettoyerNomPourTri(b.matiere);
         if (matA !== matB) return matA.localeCompare(matB, 'fr');
-        let sA = (a.sequence || "").trim(), sB = (b.sequence || "").trim();
+        let sA = eleveContext ? getSequenceActivePourEleve(eleveContext, a) : (a.sequence || "").trim();
+        let sB = eleveContext ? getSequenceActivePourEleve(eleveContext, b) : (b.sequence || "").trim();
         if (sA !== sB) return sA.localeCompare(sB, 'fr');
         let cA = (a.competence || "").trim(), cB = (b.competence || "").trim();
         if (cA !== cB) return cA.localeCompare(cB, 'fr');
@@ -745,7 +826,7 @@ function calculTailleStockage() {
     if (jauge) { jauge.style.width = pct + "%"; jauge.style.backgroundColor = pct > 80 ? "#e74c3c" : (pct > 50 ? "#f39c12" : "#27ae60"); }
 }
 // ==========================================
-// 4. ONGLET 1 : PLAN & SUIVI ÉLÈVES (AVEC RITUELS RÉCURRENTS & VALIDATION DE SÉQUENCE)
+// 4. ONGLET 1 : PLAN & SUIVI ÉLÈVES (MULTI-SÉQUENCES INDÉPENDANTES & RITUELS)
 // ==========================================
 function majVisibiliteParcoursCreation(niveau) {
     let selParc = document.getElementById('nouvelEleveParcours');
@@ -790,7 +871,6 @@ function toggleFichierJauneEleve(isChecked) {
     showToast(isChecked ? "📒 Mode Fichier Jaune activé !" : "📘 Mode Manuel Standard activé !");
 }
 
-// Basculer une activité en "Rituel récurrent chaque semaine" pour l'élève courant
 function toggleRecurrentEleve(idActivite) {
     if (!idEleveCourant || !eleves[idEleveCourant]) return;
     let e = eleves[idEleveCourant];
@@ -891,7 +971,7 @@ function creerEleve() {
         id: id, nom: nom, niveau: niveau,
         fichierJaune: Boolean(cbJauneNew && cbJauneNew.checked),
         planHebdo: [], recurrents: [], enAttente: [], historique: [], masquees: [], priorites: [],
-        maxAteliers: 15, maxTablettes: 2, suivi: {}, valides: {}, bilanEvaluations: {}, joursAssignes: {},
+        maxAteliers: 15, maxTablettes: 2, suivi: {}, valides: {}, bilanEvaluations: {}, joursAssignes: {}, sequencesChoisies: {},
         dateDebutISO: "", dateDebut: "", dateFin: ""
     };
     if (estEleveCM(niveau)) nouvEl.parcours = parcSelect ? parcSelect.value : (niveau === "CM2" ? "orange" : "jaune");
@@ -992,9 +1072,9 @@ function ajouterSemaineAvance() {
     let planInitial = [...new Set([...(e.recurrents || []), ...(e.enAttente || [])])];
     let priosInitiales = [...(e.enAttente || [])];
     e.enAttente = [];
-    e.semaines.push({ id: 'sem_' + Date.now(), dateDebutISO: nouvDebutISO, dateDebut: nouvDebutFR, dateFin: nouvFinFR, planHebdo: planInitial, priorites: priosInitiales, joursAssignes: {}, valides: {}, suivi: JSON.parse(JSON.stringify(e.suivi || {})) });
+    e.semaines.push({ id: 'sem_' + Date.now(), dateDebutISO: nouvDebutISO, dateDebut: nouvDebutFR, dateFin: nouvFinFR, planHebdo: planInitial, priorites: priosInitiales, joursAssignes: {}, sequencesChoisies: { ...(e.sequencesChoisies || {}) }, valides: {}, suivi: JSON.parse(JSON.stringify(e.suivi || {})) });
     chargerSemaineDepuisIndex(e, e.semaines.length - 1); sauvegarderEleves(); majBarreSemainesUI(); afficherPlanHebdo();
-    afficherRessourcesDisponibles(); showToast(`Semaine ${e.semaines.length} créée (avec rituels récurrents) !`, "success");
+    afficherRessourcesDisponibles(); showToast(`Semaine ${e.semaines.length} créée !`, "success");
 }
 
 function supprimerSemaineActive() {
@@ -1003,7 +1083,7 @@ function supprimerSemaineActive() {
     if (confirm(`Supprimer la Semaine ${e.semaineIndex + 1} préparée pour ${e.nom} ?`)) {
         e.semaines.splice(e.semaineIndex, 1);
         let nouvIdx = Math.max(0, e.semaineIndex - 1), s = e.semaines[nouvIdx];
-        e.semaineIndex = nouvIdx; e.planHebdo = [...(s.planHebdo || [])]; e.priorites = [...(s.priorites || [])]; e.joursAssignes = { ...(s.joursAssignes || {}) }; e.valides = { ...(s.valides || {}) }; e.suivi = { ...(s.suivi || {}) }; e.dateDebutISO = s.dateDebutISO || ""; e.dateDebut = s.dateDebut || ""; e.dateFin = s.dateFin || "";
+        e.semaineIndex = nouvIdx; e.planHebdo = [...(s.planHebdo || [])]; e.priorites = [...(s.priorites || [])]; e.joursAssignes = { ...(s.joursAssignes || {}) }; e.sequencesChoisies = { ...(s.sequencesChoisies || {}) }; e.valides = { ...(s.valides || {}) }; e.suivi = { ...(s.suivi || {}) }; e.dateDebutISO = s.dateDebutISO || ""; e.dateDebut = s.dateDebut || ""; e.dateFin = s.dateFin || "";
         sauvegarderEleves(); majBarreSemainesUI(); afficherPlanHebdo(); afficherRessourcesDisponibles(); rafraichirDashboard(); showToast("Semaine supprimée.", "success");
     }
 }
@@ -1033,21 +1113,12 @@ function chargerEleve() {
 
 function initialiserSelectsFormulaire() {
     const selMat = document.getElementById('selectMatiere');
-    const matieresParDefaut = [
-        "✅Français - Orthographe",
-        "✏️Français - Écriture",
-        "📚Français - Conjugaison",
-        "🔤Français - Grammaire",
-        "🧑‍🎓Français - Lexique",
-        "🧑‍🎓Français - Vocabulaire",
-        "🧮Mathématiques - Numération",
-        "➗Mathématiques - Algèbre et Proportionnalité",
-        "📏Mathématiques - Mesure",
-        "🔷Mathématiques - Géométrie",
-        "🤖Mathématiques - Programmation"
-    ];
-    let matieres = [...new Set([...matieresParDefaut, ...baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean)])].sort((a, b) => nettoyerNomPourTri(a).localeCompare(nettoyerNomPourTri(b), 'fr'));
-    let sequences = [...new Set([...sequencesCustom, ...baseDonnees.map(b => (b.sequence || "").trim()).filter(Boolean)])].sort((a, b) => a.localeCompare(b, 'fr'));
+    let matieres = [...new Set([...MATIERES_DEFAUT_LISTE, ...baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean)])].sort((a, b) => nettoyerNomPourTri(a).localeCompare(nettoyerNomPourTri(b), 'fr'));
+
+    let toutesSeqs = [...sequencesCustom];
+    baseDonnees.forEach(b => extraireListeSequences(b.sequence).forEach(s => toutesSeqs.push(s)));
+    let sequences = [...new Set(toutesSeqs.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+
     let toutesComps = [];
     baseDonnees.forEach(b => extraireListeCompetences(b.competence).forEach(c => toutesComps.push(c)));
     let competences = [...new Set(toutesComps)].sort((a, b) => a.localeCompare(b, 'fr'));
@@ -1067,7 +1138,11 @@ function changementMatiereSelection() {
     const selMat = document.getElementById('selectMatiere'), selSeq = document.getElementById('selectSequence');
     if (!selMat || !selSeq) return;
     let mat = selMat.value;
-    let sequences = [...new Set(baseDonnees.filter(b => !mat || mat === 'TOUTES_MATIERES' || (b.matiere || "").trim() === mat).map(b => (b.sequence || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+    let toutesSeqs = [];
+    baseDonnees.filter(b => !mat || mat === 'TOUTES_MATIERES' || (b.matiere || "").trim() === mat).forEach(b => {
+        extraireListeSequences(b.sequence).forEach(s => toutesSeqs.push(s));
+    });
+    let sequences = [...new Set(toutesSeqs.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
     let html = '<option value="TOUTES_SEQUENCES">-- Toutes les séquences --</option>';
     sequences.forEach(s => { html += `<option value="${escHTML(s)}">${escHTML(s)}</option>`; });
     selSeq.innerHTML = html; afficherRessourcesDisponibles();
@@ -1094,15 +1169,32 @@ function afficherRessourcesDisponibles() {
         let nivAct = (a.niveau || "").toUpperCase();
         if (nivAct && !nivAct.includes(nivEleve) && nivAct !== "TOUS") return false;
         if (mat !== 'TOUTES_MATIERES' && (a.matiere || "").trim() !== mat) return false;
-        if (seq && seq !== 'TOUTES_SEQUENCES' && (a.sequence || "").trim() !== seq) return false;
+        if (seq && seq !== 'TOUTES_SEQUENCES' && !activiteAppartientASequence(a, seq)) return false;
+
         let cleCompProg = `${a.matiere}||${a.sequence}||${a.competence}`;
         let perAct = programmations[a.id] || programmations[cleCompProg] || a.periode || "";
         if (per !== 'Toutes' && !perAct.includes(per)) return false;
         if (filtreEtoilesDispo > 0 && (parseInt(a.difficulte) || 0) !== filtreEtoilesDispo) return false;
         if (eleve.planHebdo.includes(a.id) || (eleve.enAttente && eleve.enAttente.includes(a.id))) return false;
-        let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
-        if (!isRec && eleve.historique.some(h => h.idActivite === a.id)) return false;
         if (eleve.masquees && eleve.masquees.includes(a.id)) return false;
+
+        let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
+        if (isRec) return true;
+
+        // Gestion multi-séquences :
+        // - Si une séquence précise est filtrée, on vérifie si l'atelier a été validé dans CETTE séquence.
+        // - Si "Toutes les séquences" est affiché, l'atelier reste visible tant qu'il lui reste au moins une séquence non validée !
+        let seqsAct = extraireListeSequences(a.sequence);
+        if (seq && seq !== 'TOUTES_SEQUENCES') {
+            if (estActiviteValideePourSequence(eleve, a, seq)) return false;
+        } else {
+            if (seqsAct.length <= 1) {
+                if (estActiviteValideePourSequence(eleve, a, seqsAct[0] || "")) return false;
+            } else {
+                let toutesSeqsFaites = seqsAct.every(s => estActiviteValideePourSequence(eleve, a, s));
+                if (toutesSeqsFaites) return false;
+            }
+        }
         return true;
     });
 
@@ -1112,12 +1204,28 @@ function afficherRessourcesDisponibles() {
     liste.forEach(a => {
         let infos = getInfosActivitePourEleve(a, eleve), rep = getRepereAtelierHtml(a, eleve, 24);
         let coul = getCouleurMatiereBandeau(a.matiere), perAct = programmations[a.id] || a.periode || "-";
-        let seqAffiche = a.sequence ? escHTML(a.sequence) : '<span style="color:#e67e22; font-weight:bold;">⚠️ Sans séquence</span>';
+        let seqsAct = extraireListeSequences(a.sequence);
+        let seqRestantes = seqsAct.filter(s => !estActiviteValideePourSequence(eleve, a, s));
+        if (seqRestantes.length === 0) seqRestantes = seqsAct;
+
+        let seqAfficheHtml = '';
+        if (seq && seq !== 'TOUTES_SEQUENCES') {
+            seqAfficheHtml = `<span style="background:#fef9e7; color:#7d6608; border:1px solid #f5b041; border-radius:4px; padding:1px 5px; font-size:11.5px; font-weight:bold;">📑 ${escHTML(seq)}</span><input type="hidden" id="seq_dispo_${a.id}" value="${escHTML(seq)}">`;
+        } else if (seqRestantes.length > 1) {
+            seqAfficheHtml = `<select id="seq_dispo_${a.id}" style="width:100%; padding:2px 4px; font-size:11.5px; font-weight:bold; background:#fef9e7; color:#7d6608; border:1px solid #f5b041; border-radius:4px; margin-top:2px;">` +
+                seqRestantes.map(s => `<option value="${escHTML(s)}">📑 Séq : ${escHTML(s)}</option>`).join('') +
+                `</select>`;
+        } else if (seqRestantes.length === 1) {
+            seqAfficheHtml = `${escHTML(seqRestantes[0])}<input type="hidden" id="seq_dispo_${a.id}" value="${escHTML(seqRestantes[0])}">`;
+        } else {
+            seqAfficheHtml = `<span style="color:#e67e22; font-weight:bold;">⚠️ Sans séquence</span><input type="hidden" id="seq_dispo_${a.id}" value="">`;
+        }
+
         let badgeLien = (a.lienExterne && a.lienExterne.trim()) ? ` <a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 5px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir le lien direct">🔗 Anton ↗</a>` : '';
         let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
         html += `<tr>
             <td><strong>${escHTML(a.niveau)}</strong><br><small style="color:#7f8c8d;">${escHTML(perAct)}</small></td>
-            <td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${coul.bg}; margin-right:4px;"></span><strong>${escHTML(a.matiere)}</strong><br>${seqAffiche} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
+            <td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${coul.bg}; margin-right:4px;"></span><strong>${escHTML(a.matiere)}</strong><br>${seqAfficheHtml} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
             <td>${formaterAffichageCompetences(a.competence)}</td>
             <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infos.badgeLivre}${badgeLien} ${a.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : ''}</td>
             <td style="text-align:center; background:${rep.bg};">${rep.html}</td>
@@ -1135,7 +1243,7 @@ function afficherRessourcesDisponibles() {
                     <button type="button" class="btn-action" onclick="ajouterAuPlan('${a.id}')">➕ Plan</button>
                     <button type="button" class="filter-btn" style="${isRec ? 'background:#8e44ad; color:#fff;' : ''}" title="Épingler comme rituel récurrent chaque semaine pour cet élève" onclick="toggleRecurrentEleve('${a.id}')">🔄 Hebdo</button>
                     <button type="button" class="filter-btn" onclick="mettreEnAttente('${a.id}')" title="Mettre en réserve">⏳</button>
-                    <button type="button" class="btn-valid" onclick="validerDirectement('${a.id}')" title="Valider directement">✅</button>
+                    <button type="button" class="btn-valid" onclick="validerDirectement('${a.id}')" title="Valider pour cette séquence">✅</button>
                     <button type="button" class="filter-btn" onclick="masquerActivite('${a.id}')" title="Masquer">🙈</button>
                 </div>
             </td>
@@ -1149,6 +1257,15 @@ function assignerJour(idActivite, jour) {
     let eleve = eleves[idEleveCourant]; if (!eleve.joursAssignes) eleve.joursAssignes = {};
     if (jour) eleve.joursAssignes[idActivite] = jour; else delete eleve.joursAssignes[idActivite];
     sauvegarderEleves(); afficherPlanHebdo();
+}
+
+function changerSequenceChoisiePlan(idActivite, nouvSeq) {
+    if (!idEleveCourant || !eleves[idEleveCourant]) return;
+    let eleve = eleves[idEleveCourant];
+    if (!eleve.sequencesChoisies) eleve.sequencesChoisies = {};
+    eleve.sequencesChoisies[idActivite] = nouvSeq;
+    sauvegarderEleves();
+    afficherPlanHebdo();
 }
 
 function definirStatutSuivi(idActivite, statut) {
@@ -1199,16 +1316,25 @@ function ouvrirModalDuplication() {
 }
 
 function validerDuplication() {
-    if (!idEleveCourant) return; const planSource = eleves[idEleveCourant].planHebdo, joursSource = eleves[idEleveCourant].joursAssignes || {}, recSource = eleves[idEleveCourant].recurrents || [];
+    if (!idEleveCourant) return;
+    const srcEl = eleves[idEleveCourant];
+    const planSource = srcEl.planHebdo, joursSource = srcEl.joursAssignes || {}, recSource = srcEl.recurrents || {}, seqsSource = srcEl.sequencesChoisies || {};
     let checks = document.querySelectorAll('.cb-dupli-eleve:checked');
     if (checks.length === 0) { showToast("Sélectionnez un élève.", "error"); return; } let msgCount = 0;
     checks.forEach(cb => {
-        const target = eleves[cb.value]; assurerStructureSemaines(target); if (!target.joursAssignes) target.joursAssignes = {}; if (!target.recurrents) target.recurrents = [];
+        const target = eleves[cb.value]; assurerStructureSemaines(target);
+        if (!target.joursAssignes) target.joursAssignes = {};
+        if (!target.recurrents) target.recurrents = [];
+        if (!target.sequencesChoisies) target.sequencesChoisies = {};
         planSource.forEach(idAct => {
+            let act = baseDonnees.find(b => b.id === idAct);
+            if (!act) return;
             let estRecSource = recSource.includes(idAct);
-            if (!target.planHebdo.includes(idAct) && (estRecSource || !target.historique.some(h => h.idActivite === idAct)) && target.planHebdo.length < (target.maxAteliers || 15)) {
+            let seqCible = seqsSource[idAct] || getSequenceActivePourEleve(srcEl, act);
+            if (!target.planHebdo.includes(idAct) && (estRecSource || !estActiviteValideePourSequence(target, act, seqCible)) && target.planHebdo.length < (target.maxAteliers || 15)) {
                 target.planHebdo.push(idAct);
                 if (joursSource[idAct]) target.joursAssignes[idAct] = joursSource[idAct];
+                if (seqCible) target.sequencesChoisies[idAct] = seqCible;
                 if (estRecSource && !target.recurrents.includes(idAct)) target.recurrents.push(idAct);
                 msgCount++;
             }
@@ -1224,24 +1350,48 @@ function assignerActivite(idActivite) {
     document.getElementById('nomActiviteAssign').innerText = act.ressource;
     let selJour = document.getElementById('selectJourAssignMultiple'); if (selJour) selJour.value = "";
     let cbRec = document.getElementById('cbAssignRecurrentMultiple'); if (cbRec) cbRec.checked = false;
+
+    let seqsAct = extraireListeSequences(act.sequence);
+    let blocSeq = document.getElementById('blocChoixSequenceAssignModal');
+    let selSeq = document.getElementById('selectSequenceAssignMultiple');
+    if (blocSeq && selSeq) {
+        if (seqsAct.length > 1) {
+            blocSeq.style.display = 'block';
+            selSeq.innerHTML = seqsAct.map(s => `<option value="${escHTML(s)}">📑 ${escHTML(s)}</option>`).join('');
+            selSeq.onchange = () => rafraichirListeElevesModalAssign(act, selSeq.value);
+        } else {
+            blocSeq.style.display = 'none';
+            selSeq.innerHTML = `<option value="${escHTML(seqsAct[0] || '')}">${escHTML(seqsAct[0] || '')}</option>`;
+        }
+    }
+    rafraichirListeElevesModalAssign(act, seqsAct[0] || "");
+    ouvrirModal('modalAssigner');
+}
+
+function rafraichirListeElevesModalAssign(act, seqCible) {
     let html = genererBarreSelectionNiveauxHtml('cb-assign-eleve');
     getElevesTries().forEach(e => {
         assurerStructureSemaines(e);
-        let dejaPrevu = e.semaines.some(s => s.planHebdo && s.planHebdo.includes(idActivite)) || (e.historique.some(h => h.idActivite === idActivite) && !(e.recurrents && e.recurrents.includes(idActivite)));
-        let disabled = dejaPrevu ? "disabled checked" : "", color = disabled ? "color: #95a5a6; text-decoration: line-through;" : "";
+        let dejaDansPlan = e.semaines.some(s => s.planHebdo && s.planHebdo.includes(act.id));
+        let dejaValidePourCetteSeq = estActiviteValideePourSequence(e, act, seqCible) && !(e.recurrents && e.recurrents.includes(act.id));
+        let disabled = (dejaDansPlan || dejaValidePourCetteSeq) ? "disabled checked" : "";
+        let color = disabled ? "color: #95a5a6; text-decoration: line-through;" : "";
         html += `<label style="cursor:pointer; font-size:14px; ${color}"><input type="checkbox" class="cb-assign-eleve" value="${e.id}" ${disabled}> [${e.niveau}] ${escHTML(e.nom)}</label>`;
     });
-    document.getElementById('listeElevesAssign').innerHTML = html; ouvrirModal('modalAssigner');
+    document.getElementById('listeElevesAssign').innerHTML = html;
 }
 
 function validerAssignationMultiple() {
     if (!activiteAssignationEnCours) return; let checks = document.querySelectorAll('.cb-assign-eleve:checked:not(:disabled)');
     if (checks.length === 0) { fermerModal('modalAssigner'); return; }
     let selJour = document.getElementById('selectJourAssignMultiple'), jourChoisi = selJour ? selJour.value : "";
+    let selSeq = document.getElementById('selectSequenceAssignMultiple'), seqChoisie = selSeq ? selSeq.value : "";
     let cbRec = document.getElementById('cbAssignRecurrentMultiple'), isRecurrent = Boolean(cbRec && cbRec.checked);
     let count = 0;
     checks.forEach(cb => {
         let e = eleves[cb.value]; assurerStructureSemaines(e);
+        if (!e.sequencesChoisies) e.sequencesChoisies = {};
+        if (seqChoisie) e.sequencesChoisies[activiteAssignationEnCours] = seqChoisie;
         if (isRecurrent) {
             if (!e.recurrents) e.recurrents = [];
             if (!e.recurrents.includes(activiteAssignationEnCours)) e.recurrents.push(activiteAssignationEnCours);
@@ -1262,7 +1412,6 @@ function validerAssignationMultiple() {
 
 function cloreSemainePourUnEleve(eleve) {
     assurerStructureSemaines(eleve); syncEleveVersSemaineActive(eleve);
-    // Les activités récurrentes reviennent automatiquement chaque semaine (décochées pour la nouvelle semaine)
     let aTransferer = [...new Set([...(eleve.recurrents || []), ...(eleve.enAttente || [])])];
     (eleve.planHebdo || []).forEach(idAct => {
         let estVal = eleve.valides && eleve.valides[idAct];
@@ -1279,17 +1428,16 @@ function cloreSemainePourUnEleve(eleve) {
             if (!s.planHebdo.includes(idAct)) s.planHebdo.unshift(idAct);
             if (!(eleve.recurrents && eleve.recurrents.includes(idAct)) && !s.priorites.includes(idAct)) s.priorites.push(idAct);
         });
-        // Décocher les rituels récurrents sur la nouvelle semaine pour pouvoir les refaire
         (eleve.recurrents || []).forEach(idRec => {
             if (s.valides && s.valides[idRec]) delete s.valides[idRec];
         });
-        eleve.planHebdo = [...s.planHebdo]; eleve.priorites = [...s.priorites]; eleve.joursAssignes = { ...(s.joursAssignes || {}) }; eleve.valides = { ...(s.valides || {}) }; eleve.suivi = { ...(s.suivi || {}), ...(s.suivi || {}) }; eleve.dateDebutISO = s.dateDebutISO || ""; eleve.dateDebut = s.dateDebut || ""; eleve.dateFin = s.dateFin || "";
+        eleve.planHebdo = [...s.planHebdo]; eleve.priorites = [...s.priorites]; eleve.joursAssignes = { ...(s.joursAssignes || {}) }; eleve.sequencesChoisies = { ...(eleve.sequencesChoisies || {}), ...(s.sequencesChoisies || {}) }; eleve.valides = { ...(s.valides || {}) }; eleve.suivi = { ...(eleve.suivi || {}), ...(s.suivi || {}) }; eleve.dateDebutISO = s.dateDebutISO || ""; eleve.dateDebut = s.dateDebut || ""; eleve.dateFin = s.dateFin || "";
     } else {
         let nextISO = "", nextDeb = "", nextFin = "";
         if (eleve.dateDebutISO) { let c = calculerVendrediDepuisISO(eleve.dateDebutISO); if (c.lundiSuivantISO) { nextISO = c.lundiSuivantISO; let c2 = calculerVendrediDepuisISO(nextISO); nextDeb = c2.debutFR; nextFin = c2.finFR; } }
         let priosReport = aTransferer.filter(idAct => !(eleve.recurrents && eleve.recurrents.includes(idAct)));
         eleve.planHebdo = [...aTransferer]; eleve.valides = {}; eleve.priorites = priosReport; eleve.joursAssignes = {}; eleve.dateDebutISO = nextISO; eleve.dateDebut = nextDeb; eleve.dateFin = nextFin;
-        eleve.semaines[0] = { id: 'sem_' + Date.now(), dateDebutISO: nextISO, dateDebut: nextDeb, dateFin: nextFin, planHebdo: [...eleve.planHebdo], priorites: [...eleve.priorites], joursAssignes: {}, valides: {}, suivi: JSON.parse(JSON.stringify(eleve.suivi || {})) };
+        eleve.semaines[0] = { id: 'sem_' + Date.now(), dateDebutISO: nextISO, dateDebut: nextDeb, dateFin: nextFin, planHebdo: [...eleve.planHebdo], priorites: [...eleve.priorites], joursAssignes: {}, sequencesChoisies: { ...(eleve.sequencesChoisies || {}) }, valides: {}, suivi: JSON.parse(JSON.stringify(eleve.suivi || {})) };
     }
     dashboardArchives = dashboardArchives.filter(cle => !cle.startsWith(eleve.id + '_'));
 }
@@ -1332,71 +1480,105 @@ function estActiviteTablette(act) {
     for (let k in imagesParType) { if (k.trim().toLowerCase() === tName) return Boolean(imagesParType[k] && imagesParType[k].isTablette); } return false;
 }
 
-// NOUVELLE RÈGLE DE VALIDATION PAR SÉQUENCE :
-// - Si l'activité validée est une Évaluation (🎯), on vérifie si TOUTES les évaluations de cette même séquence (et matière / niveau de l'élève) sont validées.
-// - Si OUI : tous les ateliers appartenant à cette même séquence sont automatiquement validés et archivés pour l'élève (même s'il ne les a pas faits).
-// - Si NON (il reste une autre évaluation à faire dans la séquence) ou si la séquence n'a aucune évaluation : seul l'exercice validé est archivé.
-function marquerCommeValideSansRafraichir(idActivite, eleve) {
+// VALIDATION PAR SÉQUENCE CIBLE :
+// - Enregistre la séquence cible dans l'historique ({ idActivite, date, sequence }).
+// - Si un atelier appartient à plusieurs séquences, il n'est archivé QUE pour la séquence cible en cours et reste disponible dans les autres séquences !
+// - Si c'est une évaluation et que toutes les évaluations de cette séquence sont faites, tous les ateliers de cette séquence sont archivés pour cette séquence uniquement.
+function marquerCommeValideSansRafraichir(idActivite, eleve, seqForcee = null) {
     const act = baseDonnees.find(b => b.id === idActivite); if (!act) return;
     const dateValid = new Date().toLocaleDateString('fr-FR');
     if (!eleve.valides) eleve.valides = {};
     eleve.valides[idActivite] = dateValid;
 
+    let seqCible = (seqForcee !== null && seqForcee !== undefined && seqForcee !== "")
+        ? seqForcee
+        : getSequenceActivePourEleve(eleve, act);
+
     let isRec = eleve.recurrents && eleve.recurrents.includes(idActivite);
-    if (!eleve.historique.some(h => h.idActivite === idActivite)) {
-        eleve.historique.push({ idActivite: idActivite, date: dateValid });
+    let dejaHistPourSeq = estActiviteValideePourSequence(eleve, act, seqCible);
+
+    if (!dejaHistPourSeq) {
+        eleve.historique.push({ idActivite: idActivite, date: dateValid, sequence: seqCible });
     } else if (isRec) {
-        let hExist = eleve.historique.find(h => h.idActivite === idActivite);
+        let hExist = eleve.historique.find(h => h.idActivite === idActivite && (!seqCible || (h.sequence || "").toLowerCase() === seqCible.toLowerCase()));
         if (hExist) hExist.date = dateValid;
     }
     if (eleve.suivi && eleve.suivi[idActivite]) delete eleve.suivi[idActivite];
 
-    // Si c'est une évaluation d'une séquence nommée, on vérifie si toutes les évaluations de la séquence sont terminées
-    let seqAct = (act.sequence || "").trim().toLowerCase();
+    let seqNorm = (seqCible || "").trim().toLowerCase();
     let matAct = (act.matiere || "").trim().toLowerCase();
-    if (act.estEvaluation && seqAct !== "") {
+    if (act.estEvaluation && seqNorm !== "") {
         let nivEleve = (eleve.niveau || "CP").toUpperCase();
 
-        // Toutes les activités de cette même séquence pour le niveau de l'élève
         let activitesMemeSequence = baseDonnees.filter(b => {
             if (!b) return false;
             if ((b.matiere || "").trim().toLowerCase() !== matAct) return false;
-            if ((b.sequence || "").trim().toLowerCase() !== seqAct) return false;
+            if (!activiteAppartientASequence(b, seqCible)) return false;
             let nivB = (b.niveau || "").toUpperCase();
             return !nivB || nivB.includes(nivEleve) || nivB === "TOUS";
         });
 
         let evalsDeLaSequence = activitesMemeSequence.filter(b => b.estEvaluation);
 
-        // Vérifier si toutes les évaluations de la séquence sont désormais validées par l'élève
         let toutesEvalsFaites = evalsDeLaSequence.length > 0 && evalsDeLaSequence.every(ev => {
-            return (eleve.valides && eleve.valides[ev.id]) || (eleve.historique && eleve.historique.some(h => h.idActivite === ev.id));
+            return (eleve.valides && eleve.valides[ev.id]) || estActiviteValideePourSequence(eleve, ev, seqCible);
         });
 
         if (toutesEvalsFaites) {
             activitesMemeSequence.forEach(b => {
-                if (!eleve.historique.some(h => h.idActivite === b.id)) {
-                    eleve.historique.push({ idActivite: b.id, date: dateValid });
+                if (!estActiviteValideePourSequence(eleve, b, seqCible)) {
+                    eleve.historique.push({ idActivite: b.id, date: dateValid, sequence: seqCible });
                 }
-                eleve.valides[b.id] = dateValid;
-                if (eleve.suivi && eleve.suivi[b.id]) delete eleve.suivi[b.id];
-                if (eleve.enAttente) eleve.enAttente = eleve.enAttente.filter(idA => idA !== b.id);
+                // Si l'activité est dans le plan hebdo au titre de cette séquence, on la coche comme validée
+                let seqBActive = getSequenceActivePourEleve(eleve, b);
+                if (!seqBActive || seqBActive.toLowerCase() === seqNorm) {
+                    eleve.valides[b.id] = dateValid;
+                    if (eleve.suivi && eleve.suivi[b.id]) delete eleve.suivi[b.id];
+                    if (eleve.enAttente) eleve.enAttente = eleve.enAttente.filter(idA => idA !== b.id);
+                }
             });
-            showToast(`🎯 Séquence "${act.sequence}" validée et archivée en entier !`, "success");
+            showToast(`🎯 Séquence "${seqCible}" validée et archivée en entier !`, "success");
         } else {
-            let nbRestantes = evalsDeLaSequence.filter(ev => !(eleve.valides && eleve.valides[ev.id]) && !(eleve.historique && eleve.historique.some(h => h.idActivite === ev.id))).length;
-            showToast(`🎯 Évaluation validée (${nbRestantes} autre(s) évaluation(s) restante(s) pour archiver la séquence).`, "success");
+            let nbRestantes = evalsDeLaSequence.filter(ev => !(eleve.valides && eleve.valides[ev.id]) && !estActiviteValideePourSequence(eleve, ev, seqCible)).length;
+            showToast(`🎯 Évaluation validée (${nbRestantes} autre(s) évaluation(s) restante(s) pour archiver la séquence "${seqCible}").`, "success");
         }
     }
 }
 
-function annulerValidationPlan(idActivite) { if (!idEleveCourant) return; let eleve = eleves[idEleveCourant]; if (eleve.valides && eleve.valides[idActivite]) { delete eleve.valides[idActivite]; eleve.historique = eleve.historique.filter(h => h.idActivite !== idActivite); sauvegarderEleves(); afficherPlanHebdo(); afficherHistorique(); rafraichirDashboard(); } }
-function validerDirectement(idActivite) { if (!idEleveCourant) return; marquerCommeValideSansRafraichir(idActivite, eleves[idEleveCourant]); sauvegarderEleves(); afficherRessourcesDisponibles(); afficherHistorique(); afficherPlanHebdo(); rafraichirDashboard(); }
+function annulerValidationPlan(idActivite) {
+    if (!idEleveCourant) return;
+    let eleve = eleves[idEleveCourant];
+    let act = baseDonnees.find(b => b.id === idActivite);
+    let seqActive = act ? getSequenceActivePourEleve(eleve, act) : "";
+    if (eleve.valides && eleve.valides[idActivite]) {
+        delete eleve.valides[idActivite];
+        eleve.historique = eleve.historique.filter(h => {
+            if (h.idActivite !== idActivite) return true;
+            if (seqActive && h.sequence) return h.sequence.toLowerCase() !== seqActive.toLowerCase();
+            return false;
+        });
+        sauvegarderEleves(); afficherPlanHebdo(); afficherHistorique(); afficherRessourcesDisponibles(); rafraichirDashboard();
+    }
+}
+
+function validerDirectement(idActivite) {
+    if (!idEleveCourant) return;
+    let eleve = eleves[idEleveCourant];
+    let seqInput = document.getElementById('seq_dispo_' + idActivite);
+    let seqCible = seqInput ? seqInput.value : null;
+    marquerCommeValideSansRafraichir(idActivite, eleve, seqCible);
+    sauvegarderEleves(); afficherRessourcesDisponibles(); afficherHistorique(); afficherPlanHebdo(); rafraichirDashboard();
+}
 function masquerActivite(idActivite) { if (!idEleveCourant) return; eleves[idEleveCourant].masquees.push(idActivite); sauvegarderEleves(); afficherRessourcesDisponibles(); afficherHistorique(); }
 function demasquerActivite(idActivite) { if (!idEleveCourant) return; eleves[idEleveCourant].masquees = eleves[idEleveCourant].masquees.filter(id => id !== idActivite); sauvegarderEleves(); afficherRessourcesDisponibles(); afficherHistorique(); }
 
 function ajouterAuPlan(idActivite) {
     const eleve = eleves[idEleveCourant], max = eleve.maxAteliers || 15;
+    let seqInput = document.getElementById('seq_dispo_' + idActivite);
+    let seqChoisie = seqInput ? seqInput.value : "";
+    if (!eleve.sequencesChoisies) eleve.sequencesChoisies = {};
+    if (seqChoisie) eleve.sequencesChoisies[idActivite] = seqChoisie;
+
     if (eleve.planHebdo.length >= max) {
         if (!eleve.enAttente) eleve.enAttente = [];
         if (!eleve.enAttente.includes(idActivite)) eleve.enAttente.push(idActivite);
@@ -1418,6 +1600,11 @@ function ajouterAuPlan(idActivite) {
 function mettreEnAttente(idActivite) {
     if (!idEleveCourant) return;
     let eleve = eleves[idEleveCourant]; if (!eleve.enAttente) eleve.enAttente = [];
+    let seqInput = document.getElementById('seq_dispo_' + idActivite);
+    if (seqInput && seqInput.value) {
+        if (!eleve.sequencesChoisies) eleve.sequencesChoisies = {};
+        eleve.sequencesChoisies[idActivite] = seqInput.value;
+    }
     if (!eleve.enAttente.includes(idActivite)) eleve.enAttente.push(idActivite);
     sauvegarderEleves(); afficherRessourcesDisponibles(); afficherPlanHebdo();
     showToast("⏳ Placé en attente pour la semaine suivante.");
@@ -1450,10 +1637,15 @@ function retirerDuPlan(idActivite) {
     sauvegarderEleves(); majBarreSemainesUI(); afficherRessourcesDisponibles(); afficherPlanHebdo(); rafraichirDashboard(); showToast("Retiré");
 }
 
-function desarchiverActivite(idActivite) {
+function desarchiverActivite(idActivite, seqSpecifique = "") {
     if (!idEleveCourant) return;
-    const eleve = eleves[idEleveCourant], index = eleve.historique.findIndex(h => h.idActivite === idActivite);
-    if (index > -1) { eleve.historique.splice(index, 1); if (eleve.valides) delete eleve.valides[idActivite]; sauvegarderEleves(); afficherHistorique(); afficherPlanHebdo(); afficherRessourcesDisponibles(); rafraichirDashboard(); }
+    const eleve = eleves[idEleveCourant];
+    const index = eleve.historique.findIndex(h => h.idActivite === idActivite && (!seqSpecifique || (h.sequence || "") === seqSpecifique));
+    if (index > -1) {
+        eleve.historique.splice(index, 1);
+        if (eleve.valides) delete eleve.valides[idActivite];
+        sauvegarderEleves(); afficherHistorique(); afficherPlanHebdo(); afficherRessourcesDisponibles(); rafraichirDashboard();
+    }
 }
 
 function afficherPlanHebdo() {
@@ -1463,7 +1655,7 @@ function afficherPlanHebdo() {
     let nbTabCount = eleve.planHebdo.map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length;
     let compteurTabElem = document.getElementById('compteurTablettesEleve'); if (compteurTabElem) compteurTabElem.innerText = `${nbTabCount}/${eleve.maxTablettes ?? 2}`;
 
-    let planObjects = getListeTrie(eleve.planHebdo, eleve.priorites || []);
+    let planObjects = getListeTrie(eleve.planHebdo, eleve.priorites || [], eleve);
     planObjects.forEach((a, index) => {
         const num = index + 1;
         let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
@@ -1477,6 +1669,14 @@ function afficherPlanHebdo() {
         let logoDebutLigne = statutSuivi === 'a_revoir' ? `👩‍🏫 ` : (statutSuivi === 'a_refaire' ? `🔄 ` : "");
         let infosL = getInfosActivitePourEleve(a, eleve);
         let rep = getRepereAtelierHtml(a, eleve, 28);
+
+        let seqsAct = extraireListeSequences(a.sequence);
+        let seqActive = getSequenceActivePourEleve(eleve, a);
+        let seqPlanHtml = seqsAct.length > 1
+            ? `<select onchange="changerSequenceChoisiePlan('${a.id}', this.value)" style="width:100%; padding:2px 4px; font-size:11.5px; font-weight:bold; background:#fef9e7; color:#7d6608; border:1px solid #f5b041; border-radius:4px; margin-top:2px;">` +
+              seqsAct.map(s => `<option value="${escHTML(s)}" ${s === seqActive ? 'selected' : ''}>📑 ${escHTML(s)}</option>`).join('') +
+              `</select>`
+            : escHTML(seqActive);
 
         let suiviHtml = `<div style="margin-top:4px; display:flex; gap:4px; flex-wrap:wrap;">
             <button type="button" class="filter-btn" style="font-size:11px; padding:2px 6px; ${statutSuivi === 'a_revoir' ? 'background:#c0392b; color:#fff;' : ''}" onclick="definirStatutSuivi('${a.id}', '${statutSuivi === 'a_revoir' ? '' : 'a_revoir'}')">👩‍🏫 À revoir</button>
@@ -1498,7 +1698,7 @@ function afficherPlanHebdo() {
             <td style="text-align:center;"><input type="checkbox" class="cb-plan-valider" value="${a.id}" ${estValide ? 'checked disabled' : ''} style="transform: scale(1.3); cursor:pointer;"></td>
             <td style="text-align:center; cursor:pointer; font-size:18px;" onclick="basculerPriorite('${a.id}')" style="${isPrio ? 'color:#f1c40f;' : 'color:#bdc3c7;'}">${isPrio ? '⭐' : '☆'}</td>
             <td class="${jourActuel ? 'col-num num-jour-impose' : 'col-num'}">${logoDebutLigne}${num}</td>
-            <td><span style="display:inline-block; padding:2px 8px; border-radius:4px; background:${coulMat.bg}; color:${coulMat.text}; font-weight:bold; font-size:12px; margin-bottom:3px;">${escHTML(a.matiere)}</span><br>${escHTML(a.sequence)}</td>
+            <td><span style="display:inline-block; padding:2px 8px; border-radius:4px; background:${coulMat.bg}; color:${coulMat.text}; font-weight:bold; font-size:12px; margin-bottom:3px;">${escHTML(a.matiere)}</span><br>${seqPlanHtml}</td>
             <td>${a.lecon ? '<strong>'+escHTML(a.lecon)+'</strong> - ' : ''}${formaterAffichageCompetences(a.competence)}</td>
             <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infosL.badgeLivre}${badgeLien} ${badge}${badgeRecHtml} ${suiviHtml}</td>
             <td style="text-align:center; background:${rep.bg};">${rep.html}</td>
@@ -1515,7 +1715,7 @@ function afficherPlanHebdo() {
         if (attList.length > 0) {
             blocAtt.style.display = 'block';
             tbodyAtt.innerHTML = attList.map(a => `<tr>
-                <td><strong>${escHTML(a.matiere)}</strong> — ${escHTML(a.sequence)}</td>
+                <td><strong>${escHTML(a.matiere)}</strong> — ${escHTML(getSequenceActivePourEleve(eleve, a))}</td>
                 <td>${formaterAffichageCompetences(a.competence)}</td>
                 <td><strong>${escHTML(a.ressource)}</strong></td>
                 <td>
@@ -1531,9 +1731,15 @@ function afficherPlanHebdo() {
 
 function afficherHistorique() {
     const eleve = eleves[idEleveCourant], tbodyHist = document.getElementById('tableHistorique'), tbodyMasq = document.getElementById('tableMasquees'); if (!tbodyHist || !tbodyMasq || !eleve) return; tbodyHist.innerHTML = ''; tbodyMasq.innerHTML = '';
-    [...eleve.historique].reverse().forEach(hist => { const a = baseDonnees.find(b => b.id === hist.idActivite); if (a) tbodyHist.innerHTML += `<tr><td><strong>${escHTML(hist.date)}</strong></td><td>${escHTML(a.niveau)}</td><td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td><td>${formaterAffichageCompetences(a.competence)}</td><td>${formaterEtoiles(a.difficulte)}${escHTML(a.ressource)}</td><td style="text-align:center;"><button type="button" class="filter-btn" onclick="desarchiverActivite('${a.id}')">↩️</button></td></tr>`; });
+    [...eleve.historique].reverse().forEach(hist => {
+        const a = baseDonnees.find(b => b.id === hist.idActivite);
+        if (a) {
+            let seqHist = hist.sequence || a.sequence || "";
+            tbodyHist.innerHTML += `<tr><td><strong>${escHTML(hist.date)}</strong></td><td>${escHTML(a.niveau)}</td><td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(seqHist)}</td><td>${formaterAffichageCompetences(a.competence)}</td><td>${formaterEtoiles(a.difficulte)}${escHTML(a.ressource)}</td><td style="text-align:center;"><button type="button" class="filter-btn" onclick="desarchiverActivite('${a.id}', '${escJS(hist.sequence || '')}')">↩️</button></td></tr>`;
+        }
+    });
     if (eleve.historique.length === 0) tbodyHist.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#7f8c8d;">Aucun.</td></tr>';
-    eleve.masquees.forEach(idAct => { const a = baseDonnees.find(b => b.id === idAct); if (a) tbodyMasq.innerHTML += `<tr><td>${escHTML(a.niveau)}</td><td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td><td>${formaterAffichageCompetences(a.competence)}</td><td>${escHTML(a.ressource)}</td><td style="text-align:center;"><button type="button" class="filter-btn" onclick="demasquerActivite('${a.id}')">↩️</button></td></tr>`; });
+    eleve.masquees.forEach(idAct => { const a = baseDonnees.find(b => b.id === idAct); if (a) tbodyMasq.innerHTML += `<tr><td>${escHTML(a.niveau)}</td><td><strong>${escHTML(a.matiere)}</strong><br>${formaterAffichageSequences(a.sequence)}</td><td>${formaterAffichageCompetences(a.competence)}</td><td>${escHTML(a.ressource)}</td><td style="text-align:center;"><button type="button" class="filter-btn" onclick="demasquerActivite('${a.id}')">↩️</button></td></tr>`; });
     if (eleve.masquees.length === 0) tbodyMasq.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#7f8c8d;">Aucune.</td></tr>';
 }
 
@@ -1594,7 +1800,7 @@ function appliquerDateImpression(dateISO) {
 
 function genererHtmlFicheEleve(e, format = 'A4') {
     assurerStructureSemaines(e);
-    let planObjects = getListeTrie(e.planHebdo, e.priorites || []);
+    let planObjects = getListeTrie(e.planHebdo, e.priorites || [], e);
 
     let titreFiche = (printConfig && printConfig.titre) ? printConfig.titre.trim() : "Plan de travail";
     let consignePerso = (printConfig && printConfig.consigne && printConfig.consigne.trim() !== "")
@@ -1641,13 +1847,14 @@ function genererHtmlFicheEleve(e, format = 'A4') {
 
     planObjects.forEach((a, index) => {
         const num = index + 1;
-        let cleSeq = `${a.matiere || ''}||${a.sequence || ''}`;
+        let seqEleve = getSequenceActivePourEleve(e, a);
+        let cleSeq = `${a.matiere || ''}||${seqEleve || ''}`;
         if (cleSeq !== derniereCleSeq) {
             derniereCleSeq = cleSeq;
             let coul = getCouleurMatiereBandeau(a.matiere);
             rowsHtml += `<tr class="sequence-separator-row">
                 <td colspan="7" style="background-color: ${coul.bg} !important; color: ${coul.text} !important; border-color: ${coul.border} !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
-                    📑 ${escHTML(a.matiere || '')} — Séquence : ${escHTML(a.sequence || 'Sans séquence')}
+                    📑 ${escHTML(a.matiere || '')} — Séquence : ${escHTML(seqEleve || 'Sans séquence')}
                 </td>
             </tr>`;
         }
@@ -1665,7 +1872,7 @@ function genererHtmlFicheEleve(e, format = 'A4') {
 
         rowsHtml += `<tr class="${rowClass}">
             <td class="${numCellClass}" style="white-space:nowrap;">${logoMaitresseDebut}${num}</td>
-            <td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(a.sequence)}</td>
+            <td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(seqEleve)}</td>
             <td>${a.lecon ? '<em>' + escHTML(a.lecon) + '</em><br>' : ''}${formaterAffichageCompetences(a.competence)}</td>
             <td>${logoMaitresseDebut}${formaterEtoiles(a.difficulte)}<strong style="${resStyle}">${escHTML(a.ressource)}</strong> ${infos.badgeLivre}${badgeEval}</td>
             <td class="col-center">${escHTML(infos.typeEffectif)}</td>
@@ -1975,8 +2182,8 @@ function genererDatalistSuggestionsLecons(pole, niveauGroupe) {
         if (!nivCibles.some(n => nivAct.includes(n))) return;
 
         let prefixLecon = a.lecon ? `${a.lecon} - ` : "";
-        if (a.competence) suggestions.add(`${prefixLecon}${a.competence}`);
-        if (a.sequence) suggestions.add(`${prefixLecon}${a.sequence}`);
+        extraireListeCompetences(a.competence).forEach(c => suggestions.add(`${prefixLecon}${c}`));
+        extraireListeSequences(a.sequence).forEach(s => suggestions.add(`${prefixLecon}${s}`));
     });
     return Array.from(suggestions).sort((a, b) => a.localeCompare(b, 'fr'));
 }
@@ -2153,7 +2360,7 @@ function rafraichirDashboard() {
                 let cleRem = `${e.id}_${idAct}`, estArch = dashboardArchives.includes(cleRem);
                 if (afficherArchivesMode || !estArch) {
                     let coul = getCouleurMatiereBandeau(act.matiere);
-                    lignesRemediation += `<tr style="${estArch ? 'opacity:0.5;' : ''}"><td><strong>[${escHTML(e.niveau)}] ${escHTML(e.nom)}</strong></td><td><span style="background:${coul.bg}; color:#fff; padding:2px 6px; border-radius:4px; font-size:11px;">${escHTML(act.matiere)}</span> ${escHTML(act.sequence)}</td><td><strong>${escHTML(act.ressource)}</strong></td><td>${s.statut === 'a_revoir' ? '👩‍🏫' : '🔄'}</td><td><button type="button" class="btn-valid" style="padding:3px 7px;" onclick="validerDepuisDashboard('${e.id}', '${idAct}')">✅</button><button type="button" class="filter-btn" style="padding:3px 7px;" onclick="${estArch ? `restaurerArchive('${cleRem}')` : `archiverItem('${cleRem}')`}">${estArch ? '↩️' : '📥'}</button></td></tr>`;
+                    lignesRemediation += `<tr style="${estArch ? 'opacity:0.5;' : ''}"><td><strong>[${escHTML(e.niveau)}] ${escHTML(e.nom)}</strong></td><td><span style="background:${coul.bg}; color:#fff; padding:2px 6px; border-radius:4px; font-size:11px;">${escHTML(act.matiere)}</span> ${escHTML(getSequenceActivePourEleve(e, act))}</td><td><strong>${escHTML(act.ressource)}</strong></td><td>${s.statut === 'a_revoir' ? '👩‍🏫' : '🔄'}</td><td><button type="button" class="btn-valid" style="padding:3px 7px;" onclick="validerDepuisDashboard('${e.id}', '${idAct}')">✅</button><button type="button" class="filter-btn" style="padding:3px 7px;" onclick="${estArch ? `restaurerArchive('${cleRem}')` : `archiverItem('${cleRem}')`}">${estArch ? '↩️' : '📥'}</button></td></tr>`;
                 }
             }
             if (!estVal && estActiviteTablette(act)) {
@@ -2188,7 +2395,7 @@ function rafraichirDashboard() {
         let pct = total > 0 ? Math.round((nbValides / total) * 100) : 0;
         let nbTab = (e.planHebdo || []).map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length;
         let isExp = dashboardExpanded.has(e.id), badgeParc = estEleveCM(e) ? ((e.parcours === 'orange') ? ' 🟠' : ' 🟡') : '';
-        let detailsPlanHtml = isExp ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed #ccc; font-size:12.5px;">` + getListeTrie(e.planHebdo, e.priorites || []).map((a, idx) => {
+        let detailsPlanHtml = isExp ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed #ccc; font-size:12.5px;">` + getListeTrie(e.planHebdo, e.priorites || [], e).map((a, idx) => {
             let fait = e.valides && e.valides[a.id], st = (e.suivi && e.suivi[a.id]) ? e.suivi[a.id].statut : "";
             let iconeLien = (a.lienExterne && a.lienExterne.trim()) ? ` <a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" title="Ouvrir sur Anton" style="text-decoration:none;">🔗</a>` : '';
             let isRec = e.recurrents && e.recurrents.includes(a.id);
@@ -2210,10 +2417,114 @@ function rafraichirDashboard() {
 }
 
 // ==========================================
-// 7. ONGLET 4 : BASE DE DONNÉES, TAGS MULTI-COMPÉTENCES (AVEC RECHERCHE MOT-CLÉ), COPIER L1 & SÉQUENCES
+// 7. ONGLET 4 : BASE DE DONNÉES, TAGS MULTI-SÉQUENCES & MULTI-COMPÉTENCES, CHANGEMENT DE MATIÈRE D'UNE SÉQUENCE
 // ==========================================
 
-// --- Système de pastilles (Tags) de compétences en Saisie Simple ---
+// --- Pastilles (Tags) de SÉQUENCES en Saisie Simple ---
+function renderTagsSequencesSimple() {
+    let cont = document.getElementById('tagsSequencesSimple');
+    let hidden = document.getElementById('inputSequence');
+    let picker = document.getElementById('inputSequencePickerSimple');
+    if (!cont || !hidden) return;
+
+    cont.innerHTML = sequencesSelectionneesSimple.map((s, idx) => `
+        <span class="seq-tag-pill">
+            📑 ${escHTML(s)}
+            <span class="comp-tag-remove" title="Retirer cette séquence" onclick="retirerTagSequenceSimple(${idx})">✖</span>
+        </span>
+    `).join('');
+
+    let textePicker = picker ? picker.value.trim() : "";
+    let toutes = [...sequencesSelectionneesSimple];
+    if (textePicker && !toutes.includes(textePicker)) toutes.push(textePicker);
+    hidden.value = toutes.join(' ; ');
+}
+
+function ajouterTagSequenceSimple(valForcee) {
+    let picker = document.getElementById('inputSequencePickerSimple');
+    let val = (valForcee !== undefined ? valForcee : (picker ? picker.value : "")).trim();
+    if (!val) return;
+    extraireListeSequences(val).forEach(item => {
+        if (!sequencesSelectionneesSimple.includes(item)) {
+            sequencesSelectionneesSimple.push(item);
+        }
+    });
+    if (picker) picker.value = "";
+    renderTagsSequencesSimple();
+}
+
+function retirerTagSequenceSimple(idx) {
+    sequencesSelectionneesSimple.splice(idx, 1);
+    renderTagsSequencesSimple();
+}
+
+function verifierSelectionDatalistSeqSimple(inputElem) {
+    let val = inputElem.value.trim();
+    if (!val) {
+        renderTagsSequencesSimple();
+        return;
+    }
+    let dl = document.getElementById('listeSequencesConnues');
+    if (dl && Array.from(dl.options).some(opt => opt.value === val)) {
+        ajouterTagSequenceSimple(val);
+        return;
+    }
+    renderTagsSequencesSimple();
+}
+
+// --- Pastilles (Tags) de SÉQUENCES communes en Saisie Multiple ---
+function renderTagsSequencesMulti() {
+    let cont = document.getElementById('tagsSequencesMulti');
+    let hidden = document.getElementById('multiSequence');
+    let picker = document.getElementById('multiSequencePicker');
+    if (!cont || !hidden) return;
+
+    cont.innerHTML = sequencesSelectionneesMulti.map((s, idx) => `
+        <span class="seq-tag-pill">
+            📑 ${escHTML(s)}
+            <span class="comp-tag-remove" title="Retirer cette séquence" onclick="retirerTagSequenceMulti(${idx})">✖</span>
+        </span>
+    `).join('');
+
+    let textePicker = picker ? picker.value.trim() : "";
+    let toutes = [...sequencesSelectionneesMulti];
+    if (textePicker && !toutes.includes(textePicker)) toutes.push(textePicker);
+    hidden.value = toutes.join(' ; ');
+}
+
+function ajouterTagSequenceMulti(valForcee) {
+    let picker = document.getElementById('multiSequencePicker');
+    let val = (valForcee !== undefined ? valForcee : (picker ? picker.value : "")).trim();
+    if (!val) return;
+    extraireListeSequences(val).forEach(item => {
+        if (!sequencesSelectionneesMulti.includes(item)) {
+            sequencesSelectionneesMulti.push(item);
+        }
+    });
+    if (picker) picker.value = "";
+    renderTagsSequencesMulti();
+}
+
+function retirerTagSequenceMulti(idx) {
+    sequencesSelectionneesMulti.splice(idx, 1);
+    renderTagsSequencesMulti();
+}
+
+function verifierSelectionDatalistSeqMulti(inputElem) {
+    let val = inputElem.value.trim();
+    if (!val) {
+        renderTagsSequencesMulti();
+        return;
+    }
+    let dl = document.getElementById('listeSequencesConnues');
+    if (dl && Array.from(dl.options).some(opt => opt.value === val)) {
+        ajouterTagSequenceMulti(val);
+        return;
+    }
+    renderTagsSequencesMulti();
+}
+
+// --- Pastilles (Tags) de COMPÉTENCES en Saisie Simple ---
 function renderTagsCompetencesSimple() {
     let cont = document.getElementById('tagsCompetencesSimple');
     let hidden = document.getElementById('inputCompetence');
@@ -2253,7 +2564,6 @@ function retirerTagCompetenceSimple(idx) {
     renderTagsCompetencesSimple();
 }
 
-// Dès qu'on clique sur une suggestion existante dans la liste déroulante (datalist), elle s'ajoute en pastille et vide le champ pour chercher la suivante
 function verifierSelectionDatalistCompSimple(inputElem) {
     let val = inputElem.value.trim();
     if (!val) {
@@ -2271,7 +2581,7 @@ function verifierSelectionDatalistCompSimple(inputElem) {
     renderTagsCompetencesSimple();
 }
 
-// --- Système de pastilles (Tags) de compétences par ligne en Saisie Multiple ---
+// --- Pastilles (Tags) de COMPÉTENCES par ligne en Saisie Multiple ---
 function getTagsLigneMulti(tr) {
     try {
         return JSON.parse(tr.dataset.compTags || "[]");
@@ -2469,6 +2779,7 @@ function toggleModeSaisieMultiple() {
         let tbody = document.getElementById('tbodySaisieMultiple');
         if (tbody && tbody.children.length === 0) ajouterLigneSaisieMultiple(4);
         verifierNiveauxCMMulti();
+        renderTagsSequencesMulti();
     } else {
         if (bSimple) bSimple.style.display = 'block';
         if (bMulti) bMulti.style.display = 'none';
@@ -2539,6 +2850,7 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
 }
 
 function enregistrerSaisieMultiple() {
+    renderTagsSequencesMulti();
     let nivArr = getNiveauxCochesFormulaire('.cb-niveau-multi');
     let niveauStr = nivArr.length > 0 ? nivArr.join(', ') : 'CP';
     let isCM = nivArr.includes('CM1') || nivArr.includes('CM2');
@@ -2609,7 +2921,9 @@ function enregistrerSaisieMultiple() {
         nbAjoutes++;
     });
 
-    if (sequence && !sequencesCustom.includes(sequence)) sequencesCustom.push(sequence);
+    extraireListeSequences(sequence).forEach(sq => {
+        if (sq && !sequencesCustom.includes(sq)) sequencesCustom.push(sq);
+    });
     sauvegarderProgrammations(); postEditGlobal();
     document.getElementById('tbodySaisieMultiple').innerHTML = '';
     ajouterLigneSaisieMultiple(4);
@@ -2631,9 +2945,12 @@ function sauvegarderToutesMatieres() {
 }
 function supprimerMatiereModal(m) { if (confirm(`Supprimer toutes les activités de la matière "${m}" ?`)) { baseDonnees = baseDonnees.filter(b => (b.matiere || "").trim() !== m); postEditGlobal(); afficherListeMatieresModal(); } }
 
+// ==========================================
+// MODALE SÉQUENCES : RENOMMER + CHANGER LA MATIÈRE D'UNE SÉQUENCE COMPLÈTE + RÉASSIGNER
+// ==========================================
 function ouvrirModalGestionSequences() {
     let sel = document.getElementById('filtreMatiereModalSeq');
-    let mats = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))];
+    let mats = ['Toutes', ...new Set([...MATIERES_DEFAUT_LISTE, ...baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean)])];
     if (sel) sel.innerHTML = mats.map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
     afficherListeSequencesModal();
     ouvrirModal('modalSequences');
@@ -2689,13 +3006,14 @@ function afficherListeSequencesModal() {
 
     let seqMap = new Map();
     actsFiltrees.forEach(b => {
-        let s = (b.sequence || "").trim();
-        if (!s) return;
-        if (!seqMap.has(s)) seqMap.set(s, { count: 0, niveaux: new Set(), matieres: new Set() });
-        let info = seqMap.get(s);
-        info.count++;
-        (b.niveau || "").split(/[,/]+/).map(x => x.trim()).filter(Boolean).forEach(n => info.niveaux.add(n));
-        if (b.matiere) info.matieres.add(b.matiere);
+        let seqs = extraireListeSequences(b.sequence);
+        seqs.forEach(s => {
+            if (!seqMap.has(s)) seqMap.set(s, { count: 0, niveaux: new Set(), matieres: new Set() });
+            let info = seqMap.get(s);
+            info.count++;
+            (b.niveau || "").split(/[,/]+/).map(x => x.trim()).filter(Boolean).forEach(n => info.niveaux.add(n));
+            if (b.matiere) info.matieres.add(b.matiere.trim());
+        });
     });
 
     if (nivFiltre === 'Tous' && matFiltre === 'Toutes') {
@@ -2703,6 +3021,8 @@ function afficherListeSequencesModal() {
             if (s && !seqMap.has(s)) seqMap.set(s, { count: 0, niveaux: new Set(), matieres: new Set() });
         });
     }
+
+    let toutesMatieresDispo = [...new Set([...MATIERES_DEFAUT_LISTE, ...baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean)])].sort((a, b) => nettoyerNomPourTri(a).localeCompare(nettoyerNomPourTri(b), 'fr'));
 
     let seqKeys = Array.from(seqMap.keys()).sort((a, b) => a.localeCompare(b, 'fr'));
     let cont = document.getElementById('listeSequencesModalContainer');
@@ -2713,11 +3033,19 @@ function afficherListeSequencesModal() {
             cont.innerHTML = seqKeys.map(s => {
                 let info = seqMap.get(s);
                 let nivTxt = Array.from(info.niveaux).join(', ') || 'Nouvelle';
-                let matTxt = Array.from(info.matieres).join(' / ') || '';
-                return `<div style="display:flex; gap:8px; align-items:center; margin-bottom:7px; padding-bottom:6px; border-bottom:1px solid #f1f5f9;">
+                let matsArray = Array.from(info.matieres);
+                let matUnique = matsArray.length === 1 ? matsArray[0] : "";
+                let labelMat = matsArray.length > 1 ? `Mixte (${matsArray.join(' / ')})` : (matUnique || "Sans matière");
+
+                let optionsMatHtml = `<option value="">-- Matière actuelle : ${escHTML(labelMat)} --</option>` +
+                    toutesMatieresDispo.map(m => `<option value="${escHTML(m)}" ${m === matUnique ? 'selected' : ''}>📚 Mettre dans : ${escHTML(m)}</option>`).join('');
+
+                return `<div class="ligne-seq-modal" style="display:flex; gap:8px; align-items:center; margin-bottom:7px; padding-bottom:6px; border-bottom:1px solid #f1f5f9; flex-wrap:wrap;">
                     <span class="filter-btn" style="font-size:11px; padding:2px 6px; white-space:nowrap;">${escHTML(nivTxt)} • ${info.count} act.</span>
-                    <small style="color:#555; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escHTML(matTxt)}">${escHTML(matTxt)}</small>
-                    <input type="text" class="input-rename-seq" data-old="${escHTML(s)}" value="${escHTML(s)}" style="flex:1;">
+                    <input type="text" class="input-rename-seq" data-old="${escHTML(s)}" value="${escHTML(s)}" style="flex:1; min-width:170px;" title="Renommer cette séquence">
+                    <select class="select-matiere-seq" data-seq="${escHTML(s)}" data-old-mat="${escHTML(matUnique)}" style="width:240px; padding:5px; font-size:12px; background:#f8fbff; border:1px solid #2980b9; border-radius:5px; font-weight:600;" title="Changer la matière de tous les ateliers de cette séquence">
+                        ${optionsMatHtml}
+                    </select>
                     <button type="button" class="btn-remove" style="padding:4px 8px;" title="Retirer cette séquence (les activités passeront en 'Sans séquence')" onclick="supprimerSequenceModal('${escJS(s)}')">🗑️</button>
                 </div>`;
             }).join('');
@@ -2725,7 +3053,7 @@ function afficherListeSequencesModal() {
     }
 
     let orphelines = baseDonnees.filter(b => {
-        if (!b || (b.sequence && b.sequence.trim() !== "")) return false;
+        if (!b || extraireListeSequences(b.sequence).length > 0) return false;
         if (nivFiltre !== 'Tous' && !(b.niveau || "").toUpperCase().includes(nivFiltre)) return false;
         if (matFiltre !== 'Toutes' && (b.matiere || "").trim() !== matFiltre) return false;
         return true;
@@ -2759,7 +3087,7 @@ function reassignerToutesOrphelinesModal() {
 
     let count = 0;
     baseDonnees.forEach(b => {
-        if (!b || (b.sequence && b.sequence.trim() !== "")) return;
+        if (!b || extraireListeSequences(b.sequence).length > 0) return;
         if (nivFiltre !== 'Tous' && !(b.niveau || "").toUpperCase().includes(nivFiltre)) return;
         if (matFiltre !== 'Toutes' && (b.matiere || "").trim() !== matFiltre) return;
         b.sequence = nouvSeq;
@@ -2771,13 +3099,44 @@ function reassignerToutesOrphelinesModal() {
     showToast(`✅ ${count} activité(s) réassignée(s) dans "${nouvSeq}" !`, "success");
 }
 
+// Sauvegarde à la fois les renommages de séquences ET les changements de matière d'une séquence entière
 function sauvegarderToutesSequences() {
+    let nivFiltre = document.getElementById('filtreNiveauModalSeq') ? document.getElementById('filtreNiveauModalSeq').value : 'Tous';
+    let matFiltre = document.getElementById('filtreMatiereModalSeq') ? document.getElementById('filtreMatiereModalSeq').value : 'Toutes';
+
+    // 1. Appliquer d'abord les changements de matière sur les séquences concernées
+    document.querySelectorAll('.select-matiere-seq').forEach(sel => {
+        let seqName = sel.getAttribute('data-seq');
+        let oldMat = sel.getAttribute('data-old-mat') || "";
+        let newMat = sel.value.trim();
+        if (seqName && newMat && newMat !== oldMat) {
+            baseDonnees.forEach(b => {
+                if (!b) return;
+                if (nivFiltre !== 'Tous' && !(b.niveau || "").toUpperCase().includes(nivFiltre)) return;
+                if (matFiltre !== 'Toutes' && (b.matiere || "").trim() !== matFiltre) return;
+                if (activiteAppartientASequence(b, seqName)) {
+                    b.matiere = newMat;
+                    b.visuel = calculerCouleurAutomatique(b.matiere, b.niveau, b.typeRes);
+                }
+            });
+        }
+    });
+
+    // 2. Appliquer ensuite les renommages de séquences (en préservant les ateliers multi-séquences)
     document.querySelectorAll('.input-rename-seq').forEach(inp => {
         let oldV = inp.getAttribute('data-old');
         let newV = inp.value.trim();
         if (oldV && oldV !== newV) {
             baseDonnees.forEach(b => {
-                if ((b.sequence || "").trim() === oldV) b.sequence = newV;
+                if (!b) return;
+                let list = extraireListeSequences(b.sequence);
+                if (list.some(s => s.toLowerCase() === oldV.toLowerCase())) {
+                    if (newV) {
+                        b.sequence = [...new Set(list.map(s => s.toLowerCase() === oldV.toLowerCase() ? newV : s))].join(' ; ');
+                    } else {
+                        b.sequence = list.filter(s => s.toLowerCase() !== oldV.toLowerCase()).join(' ; ');
+                    }
+                }
             });
             if (newV) {
                 sequencesCustom = sequencesCustom.map(s => s === oldV ? newV : s);
@@ -2786,25 +3145,30 @@ function sauvegarderToutesSequences() {
             }
         }
     });
+
     postEditGlobal();
     fermerModal('modalSequences');
-    showToast("Séquences mises à jour !", "success");
+    showToast("✅ Séquences et matières mises à jour !", "success");
 }
 
 function supprimerSequenceModal(s) {
-    if (confirm(`Retirer la séquence "${s}" ?\n\n✅ AUCUNE activité ne sera supprimée : elles seront toutes placées en attente ("⚠️ Sans séquence") juste en dessous pour être réassignées.`)) {
+    if (confirm(`Retirer la séquence "${s}" ?\n\n✅ AUCUNE activité ne sera supprimée : si une activité n'avait que cette séquence, elle passera en attente ("⚠️ Sans séquence") juste en dessous pour être réassignée.`)) {
         let nbTouch = 0;
         baseDonnees.forEach(b => {
-            if ((b.sequence || "").trim() === s) {
-                b.sequence = "";
+            if (!b) return;
+            let list = extraireListeSequences(b.sequence);
+            if (list.some(item => item.toLowerCase() === s.toLowerCase())) {
+                b.sequence = list.filter(item => item.toLowerCase() !== s.toLowerCase()).join(' ; ');
                 nbTouch++;
             }
         });
         sequencesCustom = sequencesCustom.filter(seq => seq !== s);
-        filtreCourantSequenceDB = 'SANS_SEQUENCE';
+        if (baseDonnees.some(b => extraireListeSequences(b.sequence).length === 0)) {
+            filtreCourantSequenceDB = 'SANS_SEQUENCE';
+        }
         postEditGlobal();
         afficherListeSequencesModal();
-        showToast(`Séquence retirée : ${nbTouch} activité(s) en attente de réassignation.`, "success");
+        showToast(`Séquence retirée sur ${nbTouch} activité(s).`, "success");
     }
 }
 
@@ -2897,6 +3261,7 @@ function changerImageDB(idAct) { let a = baseDonnees.find(b => b.id === idAct); 
 function viderBase() { if (confirm("⚠️ Vider l'intégralité de la base de données d'ateliers ?")) { baseDonnees = []; postEditGlobal(); showToast("Base de données vidée.", "success"); } }
 
 function enregistrerActiviteBase() {
+    renderTagsSequencesSimple();
     renderTagsCompetencesSimple();
     let matiere = document.getElementById('inputMatiere').value.trim();
     let sequence = document.getElementById('inputSequence').value.trim();
@@ -2949,7 +3314,9 @@ function enregistrerActiviteBase() {
         if (periode) programmations[newId] = periode;
         showToast("Nouvelle activité ajoutée !", "success");
     }
-    if (sequence && !sequencesCustom.includes(sequence)) sequencesCustom.push(sequence);
+    extraireListeSequences(sequence).forEach(sq => {
+        if (sq && !sequencesCustom.includes(sq)) sequencesCustom.push(sq);
+    });
     sauvegarderProgrammations(); postEditGlobal();
     document.getElementById('inputRessource').value = '';
     if (document.getElementById('inputSymbole')) document.getElementById('inputSymbole').value = '';
@@ -2958,6 +3325,7 @@ function enregistrerActiviteBase() {
     document.getElementById('inputVarianteJaune').value = '';
     if (document.getElementById('inputLienExterne')) document.getElementById('inputLienExterne').value = '';
     if (document.getElementById('inputCompetencePickerSimple')) document.getElementById('inputCompetencePickerSimple').value = '';
+    if (document.getElementById('inputSequencePickerSimple')) document.getElementById('inputSequencePickerSimple').value = '';
 }
 
 function editerActiviteBase(idAct) {
@@ -2965,11 +3333,15 @@ function editerActiviteBase(idAct) {
     let a = baseDonnees.find(b => b.id === idAct); if (!a) return;
     idEnCoursEdition = idAct;
     document.getElementById('inputMatiere').value = a.matiere || '';
-    document.getElementById('inputSequence').value = a.sequence || '';
+    sequencesSelectionneesSimple = extraireListeSequences(a.sequence);
+    if (document.getElementById('inputSequencePickerSimple')) document.getElementById('inputSequencePickerSimple').value = '';
+    renderTagsSequencesSimple();
+
     document.getElementById('inputLecon').value = a.lecon || '';
     competencesSelectionneesSimple = extraireListeCompetences(a.competence);
     if (document.getElementById('inputCompetencePickerSimple')) document.getElementById('inputCompetencePickerSimple').value = '';
     renderTagsCompetencesSimple();
+
     document.getElementById('inputRessource').value = a.ressource || '';
     document.getElementById('selectTypeRessource').value = a.typeRes || '';
     if (document.getElementById('inputSymbole')) document.getElementById('inputSymbole').value = a.symbole || '';
@@ -2993,8 +3365,11 @@ function editerActiviteBase(idAct) {
 function annulerEditionBase() {
     idEnCoursEdition = null;
     competencesSelectionneesSimple = [];
+    sequencesSelectionneesSimple = [];
     if (document.getElementById('inputCompetencePickerSimple')) document.getElementById('inputCompetencePickerSimple').value = '';
+    if (document.getElementById('inputSequencePickerSimple')) document.getElementById('inputSequencePickerSimple').value = '';
     renderTagsCompetencesSimple();
+    renderTagsSequencesSimple();
     document.getElementById('titreFormulaireBase').innerText = "➕ Ajouter ou modifier une activité";
     document.getElementById('btnAnnulerEditBase').style.display = 'none';
 }
@@ -3036,11 +3411,12 @@ function appliquerModificationGroupeeBase() {
     let nouvType = document.getElementById('bulkSelectType')?.value || "";
     let nouvMat = document.getElementById('bulkInputMatiere')?.value.trim() || "";
     let nouvSeq = document.getElementById('bulkInputSequence')?.value.trim() || "";
+    let addSeq = document.getElementById('bulkInputAddSequence')?.value.trim() || "";
     let nouvPer = document.getElementById('bulkSelectPeriode')?.value || "";
     let nouvEt = document.getElementById('bulkSelectEtoiles')?.value ?? "";
     let nouvPers = document.getElementById('bulkInputPersonnes')?.value.trim() || "";
 
-    if (!nouvType && !nouvMat && !nouvSeq && !nouvPer && nouvEt === "" && !nouvPers) {
+    if (!nouvType && !nouvMat && !nouvSeq && !addSeq && !nouvPer && nouvEt === "" && !nouvPers) {
         showToast("Choisissez au moins un élément à appliquer aux activités cochées.", "error");
         return;
     }
@@ -3051,6 +3427,13 @@ function appliquerModificationGroupeeBase() {
             if (nouvType) a.typeRes = nouvType;
             if (nouvMat) a.matiere = nouvMat;
             if (nouvSeq) a.sequence = nouvSeq;
+            if (addSeq) {
+                let list = extraireListeSequences(a.sequence);
+                extraireListeSequences(addSeq).forEach(s => {
+                    if (!list.some(ex => ex.toLowerCase() === s.toLowerCase())) list.push(s);
+                });
+                a.sequence = list.join(' ; ');
+            }
             if (nouvPer === "VIDER") {
                 a.periode = "";
                 delete programmations[a.id];
@@ -3065,10 +3448,16 @@ function appliquerModificationGroupeeBase() {
         }
     });
 
-    if (nouvSeq && !sequencesCustom.includes(nouvSeq)) sequencesCustom.push(nouvSeq);
+    [nouvSeq, addSeq].forEach(raw => {
+        extraireListeSequences(raw).forEach(sq => {
+            if (sq && !sequencesCustom.includes(sq)) sequencesCustom.push(sq);
+        });
+    });
+
     document.getElementById('bulkSelectType').value = "";
     document.getElementById('bulkInputMatiere').value = "";
     document.getElementById('bulkInputSequence').value = "";
+    if (document.getElementById('bulkInputAddSequence')) document.getElementById('bulkInputAddSequence').value = "";
     document.getElementById('bulkSelectPeriode').value = "";
     document.getElementById('bulkSelectEtoiles').value = "";
     document.getElementById('bulkInputPersonnes').value = "";
@@ -3100,8 +3489,12 @@ function initNiveaux() {
     if (selMat) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}" ${filtreCourantMatiere === m ? 'selected' : ''}>Matière : ${escHTML(m)}</option>`).join('');
     const selSeq = document.getElementById('selectFiltreSequenceBase');
     if (selSeq) {
-        let seqsDispo = [...new Set(baseDonnees.filter(b => (filtreCourantDB === 'Tous' || (b.niveau || '').toUpperCase().includes(filtreCourantDB)) && (filtreCourantMatiere === 'Toutes' || (b.matiere || '').trim() === filtreCourantMatiere)).map(b => (b.sequence || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
-        let nbSansSeq = baseDonnees.filter(b => !b.sequence || !b.sequence.trim()).length;
+        let toutesSeqs = [];
+        baseDonnees.filter(b => (filtreCourantDB === 'Tous' || (b.niveau || '').toUpperCase().includes(filtreCourantDB)) && (filtreCourantMatiere === 'Toutes' || (b.matiere || '').trim() === filtreCourantMatiere)).forEach(b => {
+            extraireListeSequences(b.sequence).forEach(s => toutesSeqs.push(s));
+        });
+        let seqsDispo = [...new Set(toutesSeqs.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+        let nbSansSeq = baseDonnees.filter(b => extraireListeSequences(b.sequence).length === 0).length;
         selSeq.innerHTML = `<option value="Toutes" ${filtreCourantSequenceDB === 'Toutes' ? 'selected' : ''}>Séquence : Toutes</option>`
             + (nbSansSeq > 0 ? `<option value="SANS_SEQUENCE" ${filtreCourantSequenceDB === 'SANS_SEQUENCE' ? 'selected' : ''}>⚠️ Sans séquence (${nbSansSeq})</option>` : '')
             + seqsDispo.map(s => `<option value="${escHTML(s)}" ${filtreCourantSequenceDB === s ? 'selected' : ''}>Séquence : ${escHTML(s)}</option>`).join('');
@@ -3122,8 +3515,8 @@ function afficherBase() {
         if (!a) return false;
         if (filtreCourantDB !== 'Tous' && !(a.niveau || "").toUpperCase().includes(filtreCourantDB)) return false;
         if (filtreCourantMatiere !== 'Toutes' && (a.matiere || "").trim() !== filtreCourantMatiere) return false;
-        if (filtreCourantSequenceDB === 'SANS_SEQUENCE' && (a.sequence || "").trim() !== "") return false;
-        if (filtreCourantSequenceDB !== 'Toutes' && filtreCourantSequenceDB !== 'SANS_SEQUENCE' && (a.sequence || "").trim() !== filtreCourantSequenceDB) return false;
+        if (filtreCourantSequenceDB === 'SANS_SEQUENCE' && extraireListeSequences(a.sequence).length > 0) return false;
+        if (filtreCourantSequenceDB !== 'Toutes' && filtreCourantSequenceDB !== 'SANS_SEQUENCE' && !activiteAppartientASequence(a, filtreCourantSequenceDB)) return false;
         if (filtreCourantTypeDB !== 'Tous' && (a.typeRes || "").trim() !== filtreCourantTypeDB) return false;
         if (q && !`${a.matiere} ${a.sequence} ${a.lecon} ${a.competence} ${a.ressource} ${a.symbole || ''} ${a.pageManuel} ${a.pageOrange || ''}`.toLowerCase().includes(q)) return false;
         return true;
@@ -3148,15 +3541,15 @@ function afficherBase() {
         let rep = getRepereAtelierHtml(a, null, 26);
         let coulVisuel = rep.bg;
         let isChecked = selectionGroupeeBase.has(a.id);
-        let seqHtml = (a.sequence && a.sequence.trim())
-            ? escHTML(a.sequence)
+        let seqHtml = extraireListeSequences(a.sequence).length > 0
+            ? formaterAffichageSequences(a.sequence)
             : `<span style="color:#e67e22; font-weight:bold; cursor:pointer;" onclick="ouvrirModalGestionSequences()" title="Cliquez pour réassigner">⚠️ Sans séquence</span>`;
 
         html += `<tr>
             <td style="text-align:center;"><input type="checkbox" class="cb-select-base" value="${a.id}" ${isChecked ? 'checked' : ''} onchange="toggleCheckActiviteBase('${a.id}', this.checked)" style="transform:scale(1.2); cursor:pointer;"></td>
             <td><strong>${escHTML(a.niveau)}</strong></td>
             <td><span class="filter-btn" style="padding:2px 6px; font-size:11px;">${escHTML(per)}</span></td>
-            <td><span style="display:inline-block; padding:2px 7px; border-radius:4px; background:${coul.bg}; color:${coul.text}; font-size:11.5px; font-weight:bold;">${escHTML(a.matiere)}</span><br>${seqHtml} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
+            <td><span style="display:inline-block; padding:2px 7px; border-radius:4px; background:${coul.bg}; color:${coul.text}; font-size:11.5px; font-weight:bold; margin-bottom:2px;">${escHTML(a.matiere)}</span><br>${seqHtml} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
             <td>${formaterAffichageCompetences(a.competence)}</td>
             <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${detailsLivres}${badgeLien}${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}</td>
             <td>${escHTML(a.typeRes || '')}</td>
@@ -3212,10 +3605,10 @@ function afficherProgrammation() {
         return true;
     });
     if (liste.length === 0) { cont.innerHTML = `<div class="empty-state"><p>Aucune activité pour ce filtre.</p></div>`; return; }
-    cont.innerHTML = `<table class="table-classique"><thead><tr><th style="width:70px;">Niveau</th><th style="width:180px;">Matière / Séquence</th><th>Compétence(s)</th><th>Ressource</th><th style="width:230px; text-align:center;">Périodes (P1 à P5)</th></tr></thead><tbody>` + liste.map(a => {
+    cont.innerHTML = `<table class="table-classique"><thead><tr><th style="width:70px;">Niveau</th><th style="width:180px;">Matière / Séquence(s)</th><th>Compétence(s)</th><th>Ressource</th><th style="width:230px; text-align:center;">Périodes (P1 à P5)</th></tr></thead><tbody>` + liste.map(a => {
         let p = programmations[a.id] || a.periode || "", coul = getCouleurMatiereBandeau(a.matiere);
         let btns = ['P1', 'P2', 'P3', 'P4', 'P5'].map(per => `<button type="button" class="prog-pill ${p === per ? 'active' : ''}" onclick="toggleProg('${a.id}', '${per}')">${per}</button>`).join('');
-        return `<tr><td><strong>${escHTML(a.niveau)}</strong></td><td><span style="background:${coul.bg}; color:#fff; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold;">${escHTML(a.matiere)}</span><br>${escHTML(a.sequence)}</td><td>${formaterAffichageCompetences(a.competence)}</td><td><strong>${escHTML(a.ressource)}</strong></td><td style="text-align:center;">${btns}</td></tr>`;
+        return `<tr><td><strong>${escHTML(a.niveau)}</strong></td><td><span style="background:${coul.bg}; color:#fff; padding:2px 6px; border-radius:4px; font-size:11px; font-weight:bold;">${escHTML(a.matiere)}</span><br>${formaterAffichageSequences(a.sequence)}</td><td>${formaterAffichageCompetences(a.competence)}</td><td><strong>${escHTML(a.ressource)}</strong></td><td style="text-align:center;">${btns}</td></tr>`;
     }).join('') + `</tbody></table>`;
 }
 
@@ -3235,7 +3628,6 @@ function afficherChoixEtiquettes() {
 
 function cocherToutesEtiquettes(etat) { document.querySelectorAll('.cb-etiq-item').forEach(cb => cb.checked = etat); genererApercuEtiquettes(); }
 
-// Studio Étiquettes 100% personnalisables au format exact 66mm x 33,8mm (planches 3x8 sans espacement)
 function genererApercuEtiquettes() {
     const zone = document.getElementById('printEtiquettesContainer'); if (!zone) return;
     let wMm = parseFloat(document.getElementById('etiqLargeurInput')?.value) || 66;
@@ -3346,13 +3738,13 @@ function genererBilanEleve() {
     if (hist.length === 0) { cont.innerHTML = `<div class="empty-state"><p>Aucune activité validée pour ${escHTML(e.nom)}.</p></div>`; return; }
 
     let parMat = {};
-    hist.forEach(h => { let a = baseDonnees.find(b => b.id === h.idActivite); if (!a) return; let m = a.matiere || "Autres"; if (!parMat[m]) parMat[m] = []; parMat[m].push({ act: a, date: h.date }); });
+    hist.forEach(h => { let a = baseDonnees.find(b => b.id === h.idActivite); if (!a) return; let m = a.matiere || "Autres"; if (!parMat[m]) parMat[m] = []; parMat[m].push({ act: a, date: h.date, sequence: h.sequence || a.sequence }); });
     let html = `<div class="card-panel"><h3>📋 Bilan des acquisitions de ${escHTML(e.nom)} (${escHTML(e.niveau)}) — ${hist.length} activités validées</h3>`;
     Object.keys(parMat).forEach(m => {
         let coul = getCouleurMatiereBandeau(m);
         html += `<div class="bandeau-matiere-print" style="background:${coul.bg}; color:${coul.text}; margin-top:15px;">${escHTML(m.toUpperCase())}</div><table class="table-classique"><thead><tr><th style="width:90px;">Date</th><th style="width:160px;">Séquence</th><th>Compétence(s)</th><th>Atelier validé</th><th style="width:170px;">Maîtrise (LSU)</th></tr></thead><tbody>` + parMat[m].map(it => {
             let cleComp = `${it.act.matiere}||${it.act.competence || it.act.ressource}`, nivMaitrise = e.bilanEvaluations[cleComp] || "Atteint";
-            return `<tr><td>${escHTML(it.date)}</td><td>${escHTML(it.act.sequence)}</td><td><strong>${formaterAffichageCompetences(it.act.competence)}</strong></td><td>${escHTML(it.act.ressource)}</td><td><select onchange="changerBilanEval('${e.id}', '${escJS(cleComp)}', this.value)" style="width:100%; font-weight:bold;"><option value="Dépassé" ${nivMaitrise === 'Dépassé' ? 'selected' : ''}>✨ Dépassé</option><option value="Atteint" ${nivMaitrise === 'Atteint' ? 'selected' : ''}>✅ Atteint</option><option value="Partiellement atteint" ${nivMaitrise === 'Partiellement atteint' ? 'selected' : ''}>🟠 Partiellement atteint</option><option value="Non atteint" ${nivMaitrise === 'Non atteint' ? 'selected' : ''}>🔴 Non atteint</option></select></td></tr>`;
+            return `<tr><td>${escHTML(it.date)}</td><td>${escHTML(it.sequence)}</td><td><strong>${formaterAffichageCompetences(it.act.competence)}</strong></td><td>${escHTML(it.act.ressource)}</td><td><select onchange="changerBilanEval('${e.id}', '${escJS(cleComp)}', this.value)" style="width:100%; font-weight:bold;"><option value="Dépassé" ${nivMaitrise === 'Dépassé' ? 'selected' : ''}>✨ Dépassé</option><option value="Atteint" ${nivMaitrise === 'Atteint' ? 'selected' : ''}>✅ Atteint</option><option value="Partiellement atteint" ${nivMaitrise === 'Partiellement atteint' ? 'selected' : ''}>🟠 Partiellement atteint</option><option value="Non atteint" ${nivMaitrise === 'Non atteint' ? 'selected' : ''}>🔴 Non atteint</option></select></td></tr>`;
         }).join('') + `</tbody></table>`;
     });
     cont.innerHTML = html + `</div>`;
@@ -3365,7 +3757,7 @@ function exporterBilanEdulivret() {
         let a = baseDonnees.find(b => b.id === h.idActivite); if (!a) return;
         let m = a.matiere || "Autres"; if (!parMat[m]) parMat[m] = new Set();
         let cleComp = `${a.matiere}||${a.competence || a.ressource}`, niv = (e.bilanEvaluations && e.bilanEvaluations[cleComp]) ? e.bilanEvaluations[cleComp] : "Atteint";
-        parMat[m].add(`- ${a.competence || a.ressource} (${a.sequence}) : ${niv}`);
+        parMat[m].add(`- ${a.competence || a.ressource} (${h.sequence || a.sequence}) : ${niv}`);
     });
     let lignes = [`BILAN DES COMPÉTENCES — ${e.nom.toUpperCase()} (${e.niveau})\n`];
     Object.keys(parMat).forEach(m => { lignes.push(`=== ${m.toUpperCase()} ===`); parMat[m].forEach(it => lignes.push(it)); lignes.push(''); });
@@ -3401,6 +3793,7 @@ document.addEventListener("DOMContentLoaded", function() {
     let selType = document.getElementById('selectTypeRessource');
     if (selType) selType.addEventListener('change', majCouleurAutoFormSimple);
     verifierNiveauxCMFormSimple();
+    renderTagsSequencesSimple();
     renderTagsCompetencesSimple();
     rafraichirToutApresImport();
     tenterConnexionAutoFirebase();
