@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GestionClasse - Plans de Travail & Suivi</title>
-    <link rel="stylesheet" href="style.css?v=20261031">
+    <link rel="stylesheet" href="style.css?v=20261101">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
 </head>
@@ -110,6 +110,14 @@
                         </div>
                     </div>
 
+                    <!-- Encadré Rituels / Activités récurrentes de l'élève -->
+                    <div id="blocRecurrentsEleve" class="card-panel" style="margin-bottom:16px; background:#f4ecf7; border:1px solid #d7bde2; display:none;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                            <strong style="color:#6c3483; font-size:13.5px;">🔄 Rituels hebdomadaires de <span class="nomEleveAffiche"></span> (reviennent automatiquement chaque semaine) :</strong>
+                            <div id="listeBadgesRecurrentsEleve" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+                        </div>
+                    </div>
+
                     <!-- Sélecteur de ressources pour ajouter au plan -->
                     <div class="card-panel" style="margin-bottom:20px;">
                         <h3 style="margin-bottom:12px; color:#1b4f72;">➕ Choisir des activités pour <span class="nomEleveAffiche"></span></h3>
@@ -146,7 +154,7 @@
                                         <th>Ressource & Support</th>
                                         <th style="width:75px; text-align:center;">N° Atelier</th>
                                         <th style="width:105px;">Jour imposé</th>
-                                        <th style="width:175px;">Actions</th>
+                                        <th style="width:205px;">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tableRessourcesDispo">
@@ -176,7 +184,7 @@
                                 <th>Ressource & Suivi</th>
                                 <th style="width:85px; text-align:center;">N° Atelier</th>
                                 <th style="width:110px;">Jour imposé</th>
-                                <th style="width:120px;">Actions</th>
+                                <th style="width:135px;">Actions</th>
                             </tr>
                         </thead>
                         <tbody id="tableApercuPlan"></tbody>
@@ -365,11 +373,13 @@
                             <input type="text" id="inputLecon" placeholder="Ex: N1, G2...">
                         </div>
                         <div style="grid-column: span 2;">
-                            <label>Compétence(s) * <small style="font-weight:normal; color:#666;">(Pour une 🎯 Évaluation multi-compétences, séparez-les par <strong>;</strong> ou cliquez sur ➕)</small> :</label>
+                            <label>Compétence(s) * <small style="font-weight:normal; color:#666;">(Tapez un mot-clé pour chercher une compétence existante ou en créer une nouvelle, puis cliquez sur ➕)</small> :</label>
+                            <div id="tagsCompetencesSimple" class="comp-tags-container"></div>
                             <div style="display:flex; gap:6px;">
-                                <input type="text" id="inputCompetence" list="listeCompetencesConnues" placeholder="Ex: Repérer le verbe ; Repérer le sujet" style="flex:1;">
-                                <button type="button" class="filter-btn" onclick="ajouterCompetenceSupplementaireSimple()" title="Ajouter une autre compétence existante à la suite">➕ Comp.</button>
+                                <input type="text" id="inputCompetencePickerSimple" list="listeCompetencesConnues" placeholder="🔍 Rechercher par mot-clé ou créer une compétence..." style="flex:1;" onchange="verifierSelectionDatalistCompSimple(this)" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterTagCompetenceSimple();}">
+                                <button type="button" class="btn-action" onclick="ajouterTagCompetenceSimple()" title="Ajouter cette compétence à l'activité">➕ Ajouter</button>
                             </div>
+                            <input type="hidden" id="inputCompetence">
                             <datalist id="listeCompetencesConnues"></datalist>
                         </div>
                         <div>
@@ -444,7 +454,7 @@
                             <label><input type="checkbox" class="cb-niveau-form" value="CM1" onchange="verifierNiveauxCMFormSimple()"> CM1</label>
                             <label><input type="checkbox" class="cb-niveau-form" value="CM2" onchange="verifierNiveauxCMFormSimple()"> CM2</label>
                             <label style="margin-left:15px; background:#fcf3cf; padding:4px 8px; border-radius:4px; border:1px solid #f1c40f; cursor:pointer;">
-                                <input type="checkbox" id="cbEstEvaluation"> 🎯 Est une Évaluation (valide les compétences liées)
+                                <input type="checkbox" id="cbEstEvaluation"> 🎯 Est une Évaluation (valide toute la séquence quand toutes ses évaluations sont faites)
                             </label>
                         </div>
                         <div style="display:flex; gap:8px;">
@@ -458,7 +468,7 @@
                 <div id="blocSaisieMultipleBase" class="card-panel" style="margin-bottom:20px; display:none; border:2px solid #2980b9; background:#f8fbff;">
                     <h3 style="color:#1b4f72; margin-bottom:6px;">⚡ Saisie multiple d'exercices pour une même séquence</h3>
                     <p style="font-size:12.5px; color:#555; margin-bottom:12px;">
-                        💡 <strong>Astuce :</strong> Cochez <strong>« 📋 Copier L1 »</strong> en haut d'une colonne si vous souhaitez que la valeur de la 1<sup>re</sup> ligne se duplique automatiquement sur toute la colonne (la colonne <strong>Leçon</strong> est cochée par défaut). Vous pouvez toujours modifier chaque ligne individuellement !
+                        💡 <strong>Astuce :</strong> Cochez <strong>« 📋 Copier L1 »</strong> en haut d'une colonne si vous souhaitez que la valeur de la 1<sup>re</sup> ligne se duplique automatiquement sur toute la colonne (la colonne <strong>Leçon</strong> est cochée par défaut). Pour ajouter plusieurs compétences sur une ligne, cherchez-les par mot-clé et cliquez sur <code>➕</code>.
                     </p>
 
                     <div class="form-grid-base" style="margin-bottom:14px; padding-bottom:12px; border-bottom:1px dashed #bdc3c7;">
@@ -501,8 +511,8 @@
                                         Leçon<br>
                                         <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_lecon" checked onchange="toggleDuplicationColonneMulti('lecon', this.checked)"> 📋 Copier L1</label>
                                     </th>
-                                    <th>
-                                        Compétence(s) * <small>(; si plusieurs)</small><br>
+                                    <th style="min-width:230px;">
+                                        Compétence(s) * <small>(chercher ou créer + ➕)</small><br>
                                         <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_comp" onchange="toggleDuplicationColonneMulti('comp', this.checked)"> 📋 Copier L1</label>
                                     </th>
                                     <th>Nom de l'exercice *</th>
@@ -931,7 +941,7 @@
     <div id="modalAssigner" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>📌 Assigner l'activité : <span id="nomActiviteAssign"></span></h3>
-            <div style="margin:10px 0;">
+            <div style="margin:10px 0; display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
                 <label>Jour imposé (optionnel) :
                     <select id="selectJourAssignMultiple" style="padding:6px; border-radius:4px;">
                         <option value="">-- Libre --</option>
@@ -940,6 +950,9 @@
                         <option value="Jeudi">Jeudi</option>
                         <option value="Vendredi">Vendredi</option>
                     </select>
+                </label>
+                <label style="cursor:pointer; background:#f4ecf7; color:#6c3483; padding:5px 10px; border-radius:6px; border:1px solid #d7bde2; font-weight:bold; font-size:12.5px;">
+                    <input type="checkbox" id="cbAssignRecurrentMultiple"> 🔄 Épingler en rituel hebdomadaire (chaque semaine)
                 </label>
             </div>
             <div id="listeElevesAssign" style="max-height:260px; overflow-y:auto; margin:15px 0; border:1px solid #ddd; padding:10px; display:flex; flex-direction:column; gap:6px;"></div>
@@ -987,6 +1000,6 @@
 
     <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" style="display:none; position:fixed; bottom:20px; right:20px; z-index:99; background:#1b4f72; color:#fff; border:none; padding:12px 16px; border-radius:50%; cursor:pointer; font-size:16px; box-shadow:0 3px 8px rgba(0,0,0,0.2);">⬆️</button>
 
-    <script src="script.js?v=20261031"></script>
+    <script src="script.js?v=20261101"></script>
 </body>
 </html>
