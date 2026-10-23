@@ -64,6 +64,7 @@ if (!imagesParType) {
         "Atelier": { img: "", emoji: "", remplacerNum: false, appliquerCouleur: true, isTablette: false },
         "Jeu": { img: "", emoji: "🎲", remplacerNum: false, appliquerCouleur: true, isTablette: false },
         "Fichier jaune": { img: "", emoji: "📒", remplacerNum: false, appliquerCouleur: false, isTablette: false },
+        "Leçon": { img: "", emoji: "👩‍🏫", remplacerNum: true, appliquerCouleur: false, isTablette: false },
         "Vidéo": { img: "", emoji: "💻", remplacerNum: true, appliquerCouleur: false, isTablette: false },
         "Anton": { img: "", emoji: "📱", remplacerNum: true, appliquerCouleur: false, isTablette: true },
         "Scratch": { img: "", emoji: "🤖", remplacerNum: true, appliquerCouleur: false, isTablette: true }
@@ -71,6 +72,9 @@ if (!imagesParType) {
 } else {
     if (!imagesParType["Fichier jaune"]) {
         imagesParType["Fichier jaune"] = { img: "", emoji: "📒", remplacerNum: false, appliquerCouleur: false, isTablette: false };
+    }
+    if (!imagesParType["Leçon"]) {
+        imagesParType["Leçon"] = { img: "", emoji: "👩‍🏫", remplacerNum: true, appliquerCouleur: false, isTablette: false };
     }
     Object.keys(imagesParType).forEach(k => {
         if (typeof imagesParType[k] === 'object') {
@@ -90,7 +94,14 @@ if (!baseDonnees || !Array.isArray(baseDonnees)) baseDonnees = [];
 let eleves = JSON.parse(localStorage.getItem(KEY_ELEVES));
 if (!eleves || typeof eleves !== 'object') eleves = {};
 
-// Émojis exacts par matière renseignés dans la base
+// Indique si un élément de la base de données est une Leçon explicite (réservée au Tableau de bord prof, masquée dans le plan élève)
+function estLeconProf(act) {
+    if (!act) return false;
+    if (act.estLecon) return true;
+    let t = (act.typeRes || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return t === "lecon" || t === "lecon explicite";
+}
+
 function getEmojiMatiere(matiere, sequence = "") {
     let matRaw = (matiere || "").trim();
     if (matRaw.startsWith("🧑‍🎓")) return "🧑‍🎓";
@@ -173,7 +184,6 @@ function formaterAffichageSequences(seqStr) {
     return list.map(s => `<span style="display:inline-block; background:#fef9e7; color:#7d6608; border:1px solid #f5b041; border-radius:6px; padding:1px 6px; margin:1px 2px; font-size:11.5px; font-weight:600;">📑 ${escHTML(s)}</span>`).join(' ');
 }
 
-// Clé de programmation propre à une séquence (Matière + Séquence)
 function getCleProgSequence(matiere, sequence) {
     return `SEQ||${(matiere || "").trim()}||${(sequence || "").trim()}`;
 }
@@ -185,14 +195,12 @@ function extrairePeriodesArray(perRaw) {
     return PERIODES_LISTE.filter(p => str.includes(p));
 }
 
-// Récupère la liste des périodes (ex: ['P1', 'P3']) d'une séquence donnée
 function getPeriodesSequence(matiere, sequence) {
     if (!sequence || !sequence.trim()) return [];
     let cle = getCleProgSequence(matiere, sequence);
     if (programmations[cle] !== undefined) {
         return extrairePeriodesArray(programmations[cle]);
     }
-    // Rétrocompatibilité : si des ateliers de cette séquence avaient déjà une période enregistrée, on les récupère automatiquement
     let setP = new Set();
     baseDonnees.forEach(a => {
         if (!a) return;
@@ -205,7 +213,6 @@ function getPeriodesSequence(matiere, sequence) {
     return PERIODES_LISTE.filter(p => setP.has(p));
 }
 
-// Récupère les périodes effectives d'une activité (à partir de ses séquences programmées ou de sa période propre)
 function getPeriodesActivite(act) {
     if (!act) return [];
     let setP = new Set();
@@ -322,7 +329,7 @@ function extraireNumeroAtelierPropre(symboleBrut, emojiType, emojiMat) {
     if (!s) return "";
     if (emojiType && s.startsWith(emojiType)) s = s.slice(emojiType.length).trim();
     if (emojiMat && s.startsWith(emojiMat)) s = s.slice(emojiMat.length).trim();
-    const emojisConnus = ["🎲", "🧩", "📒", "💻", "📱", "🤖", "🧑‍🎓", "✅", "✏️", "➗", "📏", "📚", "🔤", "🔷", "🧮"];
+    const emojisConnus = ["🎲", "🧩", "📒", "💻", "📱", "🤖", "🧑‍🎓", "✅", "✏️", "➗", "📏", "📚", "🔤", "🔷", "🧮", "👩‍🏫"];
     let modifie = true;
     while (modifie) {
         modifie = false;
@@ -360,6 +367,7 @@ function getRepereAtelierHtml(act, eleve, tailleMaxImg = 28) {
 
     let emojiType = (typeCfg && typeCfg.emoji) ? typeCfg.emoji.trim() : "";
     if (!emojiType && typeKey.toLowerCase() === "jeu") emojiType = "🎲";
+    if (!emojiType && estLeconProf(act)) emojiType = "👩‍🏫";
 
     let emojiMat = getEmojiMatiere(act ? act.matiere : "", act ? act.sequence : "");
     let symBrut = (act && act.symbole) ? act.symbole.trim() : "";
@@ -448,7 +456,7 @@ function assurerStructureSemaines(e) {
     if (!e.dateFin) e.dateFin = "";
 
     e.recurrents.forEach(idRec => {
-        if (baseDonnees.some(b => b.id === idRec) && !e.planHebdo.includes(idRec)) {
+        if (baseDonnees.some(b => b.id === idRec && !estLeconProf(b)) && !e.planHebdo.includes(idRec)) {
             e.planHebdo.push(idRec);
         }
     });
@@ -491,7 +499,7 @@ function chargerSemaineDepuisIndex(e, nouvelIndex) {
     let s = e.semaines[idx];
     e.planHebdo = [...(s.planHebdo || [])];
     (e.recurrents || []).forEach(idRec => {
-        if (baseDonnees.some(b => b.id === idRec) && !e.planHebdo.includes(idRec)) {
+        if (baseDonnees.some(b => b.id === idRec && !estLeconProf(b)) && !e.planHebdo.includes(idRec)) {
             e.planHebdo.push(idRec);
         }
     });
@@ -560,6 +568,9 @@ function importerDonneesUniversel(rawData) {
     }
     if (nouvImages && typeof nouvImages === 'object') {
         imagesParType = nouvImages;
+        if (!imagesParType["Leçon"]) {
+            imagesParType["Leçon"] = { img: "", emoji: "👩‍🏫", remplacerNum: true, appliquerCouleur: false, isTablette: false };
+        }
         Object.keys(imagesParType).forEach(k => {
             if (typeof imagesParType[k] === 'object' && imagesParType[k].emoji === undefined) {
                 imagesParType[k].emoji = (k.toLowerCase() === 'jeu' ? '🎲' : '');
@@ -575,7 +586,7 @@ function importerDonneesUniversel(rawData) {
     if (data.theme) appliquerThemeVisuel(data.theme);
 
     rafraichirToutApresImport();
-    showToast(`✅ Restauration réussie (${baseDonnees.length} ateliers, ${Object.keys(eleves).length} élèves) !`, "success");
+    showToast(`✅ Restauration réussie (${baseDonnees.length} éléments, ${Object.keys(eleves).length} élèves) !`, "success");
     return true;
 }
 
@@ -671,7 +682,7 @@ async function sauvegarderVersFirebase(forcerManuellement = false) {
         let res = await fetch(`${URL_FIREBASE_FIXE}/classe_data.json`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         let statut = document.getElementById('statutFirebase');
-        if (statut) { statut.innerText = `🔥 Synchro Cloud OK (${new Date().toLocaleTimeString()} — ${baseDonnees.length} ateliers, ${Object.keys(eleves).length} élèves)`; statut.style.color = "#27ae60"; }
+        if (statut) { statut.innerText = `🔥 Synchro Cloud OK (${new Date().toLocaleTimeString()} — ${baseDonnees.length} éléments, ${Object.keys(eleves).length} élèves)`; statut.style.color = "#27ae60"; }
         if (forcerManuellement) showToast("⬆️ Données envoyées sur Firebase !", "success");
     } catch (e) {
         if (forcerManuellement) showToast("Erreur Firebase : " + e.message, "error");
@@ -690,10 +701,10 @@ async function chargerDepuisFirebase(forcer = false) {
 
         if (data && (nbBaseCloud > 0 || nbElevesCloud > 0)) {
             let localEstVide = (baseDonnees.length === 0 && Object.keys(eleves).length === 0);
-            if (forcer || localEstVide || confirm(`Cloud Firebase trouvé (${nbBaseCloud} ateliers, ${nbElevesCloud} élèves). Charger ces données ?`)) {
+            if (forcer || localEstVide || confirm(`Cloud Firebase trouvé (${nbBaseCloud} éléments, ${nbElevesCloud} élèves). Charger ces données ?`)) {
                 importerDonneesUniversel(data);
             }
-            if (statut) { statut.innerText = `🔥 Cloud Firebase connecté (${nbBaseCloud} ateliers, ${nbElevesCloud} élèves)`; statut.style.color = "#27ae60"; }
+            if (statut) { statut.innerText = `🔥 Cloud Firebase connecté (${nbBaseCloud} éléments, ${nbElevesCloud} élèves)`; statut.style.color = "#27ae60"; }
         } else {
             if (statut) { statut.innerText = "ℹ️ Cloud prêt. Vos données locales sont conservées."; statut.style.color = "#2980b9"; }
             if (baseDonnees.length > 0 || Object.keys(eleves).length > 0) sauvegarderVersFirebase(false);
@@ -793,7 +804,7 @@ let idEnCoursEdition = null;
 
 function getListeTrie(idsArray, priosArray = [], eleveContext = null) {
     if (!idsArray) return [];
-    let planObjects = idsArray.map(id => baseDonnees.find(b => b.id === id)).filter(Boolean);
+    let planObjects = idsArray.map(id => baseDonnees.find(b => b.id === id && !estLeconProf(b))).filter(Boolean);
     planObjects.sort((a, b) => {
         let prioA = (priosArray && priosArray.includes(a.id)) ? 1 : 0;
         let prioB = (priosArray && priosArray.includes(b.id)) ? 1 : 0;
@@ -885,12 +896,12 @@ function calculTailleStockage() {
     let _lsTotal = 0, _xLen, _x;
     for (_x in localStorage) { if (!localStorage.hasOwnProperty(_x)) continue; _xLen = ((localStorage[_x].length + _x.length) * 2); _lsTotal += _xLen; }
     let megaBytes = (_lsTotal / (1024 * 1024)).toFixed(2), pct = Math.min(100, (megaBytes / 5) * 100);
-    let texteSto = document.getElementById('texteStockage'); if (texteSto) texteSto.innerText = `${megaBytes} Mo utilisés sur environ 5.00 Mo (${baseDonnees.length} ateliers, ${Object.keys(eleves).length} élèves en mémoire)`;
+    let texteSto = document.getElementById('texteStockage'); if (texteSto) texteSto.innerText = `${megaBytes} Mo utilisés sur environ 5.00 Mo (${baseDonnees.length} éléments, ${Object.keys(eleves).length} élèves en mémoire)`;
     let jauge = document.getElementById('jaugeStockageFill');
     if (jauge) { jauge.style.width = pct + "%"; jauge.style.backgroundColor = pct > 80 ? "#e74c3c" : (pct > 50 ? "#f39c12" : "#27ae60"); }
 }
 // ==========================================
-// 4. ONGLET 1 : PLAN & SUIVI ÉLÈVES (ADAPTATION AUTO PARCOURS, MULTI-SÉQUENCES & RITUELS)
+// 4. ONGLET 1 : PLAN & SUIVI ÉLÈVES (SANS LES LEÇONS PROF, AVEC RITUELS & ADAPTATION PARCOURS)
 // ==========================================
 function majVisibiliteParcoursCreation(niveau) {
     let selParc = document.getElementById('nouvelEleveParcours');
@@ -960,7 +971,7 @@ function afficherBandeauRecurrentsEleve() {
     let cont = document.getElementById('listeBadgesRecurrentsEleve');
     if (!bloc || !cont || !idEleveCourant || !eleves[idEleveCourant]) return;
     let e = eleves[idEleveCourant];
-    let recs = (e.recurrents || []).map(id => baseDonnees.find(b => b.id === id)).filter(Boolean);
+    let recs = (e.recurrents || []).map(id => baseDonnees.find(b => b.id === id && !estLeconProf(b))).filter(Boolean);
     if (recs.length === 0) {
         bloc.style.display = 'none';
         return;
@@ -1203,7 +1214,7 @@ function changementMatiereSelection() {
     if (!selMat || !selSeq) return;
     let mat = selMat.value;
     let toutesSeqs = [];
-    baseDonnees.filter(b => !mat || mat === 'TOUTES_MATIERES' || (b.matiere || "").trim() === mat).forEach(b => {
+    baseDonnees.filter(b => !estLeconProf(b) && (!mat || mat === 'TOUTES_MATIERES' || (b.matiere || "").trim() === mat)).forEach(b => {
         extraireListeSequences(b.sequence).forEach(s => toutesSeqs.push(s));
     });
     let sequences = [...new Set(toutesSeqs.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
@@ -1230,12 +1241,14 @@ function afficherRessourcesDisponibles() {
     let nivEleve = (eleve.niveau || "CP").toUpperCase();
     let liste = baseDonnees.filter(a => {
         if (!a) return false;
+        // Les leçons explicites (réservées au tableau de bord prof) n'apparaissent jamais dans le plan élève
+        if (estLeconProf(a)) return false;
+
         let nivAct = (a.niveau || "").toUpperCase();
         if (nivAct && !nivAct.includes(nivEleve) && nivAct !== "TOUS") return false;
         if (mat !== 'TOUTES_MATIERES' && (a.matiere || "").trim() !== mat) return false;
         if (seq && seq !== 'TOUTES_SEQUENCES' && !activiteAppartientASequence(a, seq)) return false;
 
-        // Filtrage par période (basé sur les périodes de la séquence ou de l'atelier)
         if (per !== 'Toutes') {
             let periodesAct = (seq && seq !== 'TOUTES_SEQUENCES')
                 ? getPeriodesSequence(a.matiere, seq)
@@ -1417,7 +1430,7 @@ function trouverActiviteAdapteePourEleve(actSource, eleveSource, eleveTarget, se
     let compSrc = (actSource.competence || "").trim().toLowerCase();
 
     let candidats = baseDonnees.filter(b => {
-        if (!b || b.id === actSource.id) return false;
+        if (!b || b.id === actSource.id || estLeconProf(b)) return false;
         if ((b.matiere || "").trim().toLowerCase() !== matSrc) return false;
         if (Boolean(b.estEvaluation) !== Boolean(actSource.estEvaluation)) return false;
 
@@ -1493,7 +1506,7 @@ function validerDuplication() {
 
         planSource.forEach(idActSrc => {
             let actOrigine = baseDonnees.find(b => b.id === idActSrc);
-            if (!actOrigine) return;
+            if (!actOrigine || estLeconProf(actOrigine)) return;
 
             let seqCible = seqsSource[idActSrc] || getSequenceActivePourEleve(srcEl, actOrigine);
             let actAdaptee = trouverActiviteAdapteePourEleve(actOrigine, srcEl, target, seqCible);
@@ -1523,7 +1536,12 @@ function validerDuplication() {
 
 let activiteAssignationEnCours = null;
 function assignerActivite(idActivite) {
-    activiteAssignationEnCours = idActivite; let act = baseDonnees.find(a => a.id === idActivite); if (!act) return;
+    let act = baseDonnees.find(a => a.id === idActivite); if (!act) return;
+    if (estLeconProf(act)) {
+        showToast("👩‍🏫 Cet élément est une Leçon explicite (enseignante) : elle s'utilise directement dans le Tableau de bord.", "error");
+        return;
+    }
+    activiteAssignationEnCours = idActivite;
     document.getElementById('nomActiviteAssign').innerText = act.ressource;
     let selJour = document.getElementById('selectJourAssignMultiple'); if (selJour) selJour.value = "";
     let cbRec = document.getElementById('cbAssignRecurrentMultiple'); if (cbRec) cbRec.checked = false;
@@ -1653,7 +1671,7 @@ function validerSelectionPlan() {
 }
 
 function estActiviteTablette(act) {
-    if (!act || !act.typeRes) return false; let tName = act.typeRes.trim().toLowerCase();
+    if (!act || !act.typeRes || estLeconProf(act)) return false; let tName = act.typeRes.trim().toLowerCase();
     for (let k in imagesParType) { if (k.trim().toLowerCase() === tName) return Boolean(imagesParType[k] && imagesParType[k].isTablette); } return false;
 }
 
@@ -1684,7 +1702,7 @@ function marquerCommeValideSansRafraichir(idActivite, eleve, seqForcee = null) {
         let nivEleve = (eleve.niveau || "CP").toUpperCase();
 
         let activitesMemeSequence = baseDonnees.filter(b => {
-            if (!b) return false;
+            if (!b || estLeconProf(b)) return false;
             if ((b.matiere || "").trim().toLowerCase() !== matAct) return false;
             if (!activiteAppartientASequence(b, seqCible)) return false;
             let nivB = (b.niveau || "").toUpperCase();
@@ -1823,11 +1841,11 @@ function desarchiverActivite(idActivite, seqSpecifique = "") {
 function afficherPlanHebdo() {
     const eleve = eleves[idEleveCourant], tbodyApercu = document.getElementById('tableApercuPlan'); if (!tbodyApercu || !eleve) return; tbodyApercu.innerHTML = '';
     afficherBandeauRecurrentsEleve();
-    document.getElementById('compteurAteliersEleve').innerText = eleve.planHebdo.length; document.getElementById('maxAteliersAffiche').innerText = eleve.maxAteliers || 15;
-    let nbTabCount = eleve.planHebdo.map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length;
+    let planObjects = getListeTrie(eleve.planHebdo, eleve.priorites || [], eleve);
+    document.getElementById('compteurAteliersEleve').innerText = planObjects.length; document.getElementById('maxAteliersAffiche').innerText = eleve.maxAteliers || 15;
+    let nbTabCount = planObjects.filter(b => b && estActiviteTablette(b)).length;
     let compteurTabElem = document.getElementById('compteurTablettesEleve'); if (compteurTabElem) compteurTabElem.innerText = `${nbTabCount}/${eleve.maxTablettes ?? 2}`;
 
-    let planObjects = getListeTrie(eleve.planHebdo, eleve.priorites || [], eleve);
     planObjects.forEach((a, index) => {
         const num = index + 1;
         let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
@@ -1878,11 +1896,11 @@ function afficherPlanHebdo() {
             <td>${actionHtml}</td>
         </tr>`;
     });
-    if (eleve.planHebdo.length === 0) tbodyApercu.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#7f8c8d; padding:20px;">Plan vide.</td></tr>';
+    if (planObjects.length === 0) tbodyApercu.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#7f8c8d; padding:20px;">Plan vide.</td></tr>';
 
     const blocAtt = document.getElementById('blocEnAttenteEleve'), tbodyAtt = document.getElementById('tableEnAttente'), cptAtt = document.getElementById('compteurAttenteEleve');
     if (blocAtt && tbodyAtt) {
-        let attList = (eleve.enAttente || []).map(id => baseDonnees.find(b => b.id === id)).filter(Boolean);
+        let attList = (eleve.enAttente || []).map(id => baseDonnees.find(b => b.id === id && !estLeconProf(b))).filter(Boolean);
         if (cptAtt) cptAtt.innerText = attList.length;
         if (attList.length > 0) {
             blocAtt.style.display = 'block';
@@ -1904,14 +1922,14 @@ function afficherPlanHebdo() {
 function afficherHistorique() {
     const eleve = eleves[idEleveCourant], tbodyHist = document.getElementById('tableHistorique'), tbodyMasq = document.getElementById('tableMasquees'); if (!tbodyHist || !tbodyMasq || !eleve) return; tbodyHist.innerHTML = ''; tbodyMasq.innerHTML = '';
     [...eleve.historique].reverse().forEach(hist => {
-        const a = baseDonnees.find(b => b.id === hist.idActivite);
+        const a = baseDonnees.find(b => b.id === hist.idActivite && !estLeconProf(b));
         if (a) {
             let seqHist = hist.sequence || a.sequence || "";
             tbodyHist.innerHTML += `<tr><td><strong>${escHTML(hist.date)}</strong></td><td>${escHTML(a.niveau)}</td><td><strong>${escHTML(a.matiere)}</strong><br>${escHTML(seqHist)}</td><td>${formaterAffichageCompetences(a.competence)}</td><td>${formaterEtoiles(a.difficulte)}${escHTML(a.ressource)}</td><td style="text-align:center;"><button type="button" class="filter-btn" onclick="desarchiverActivite('${a.id}', '${escJS(hist.sequence || '')}')">↩️</button></td></tr>`;
         }
     });
     if (eleve.historique.length === 0) tbodyHist.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#7f8c8d;">Aucun.</td></tr>';
-    eleve.masquees.forEach(idAct => { const a = baseDonnees.find(b => b.id === idAct); if (a) tbodyMasq.innerHTML += `<tr><td>${escHTML(a.niveau)}</td><td><strong>${escHTML(a.matiere)}</strong><br>${formaterAffichageSequences(a.sequence)}</td><td>${formaterAffichageCompetences(a.competence)}</td><td>${escHTML(a.ressource)}</td><td style="text-align:center;"><button type="button" class="filter-btn" onclick="demasquerActivite('${a.id}')">↩️</button></td></tr>`; });
+    eleve.masquees.forEach(idAct => { const a = baseDonnees.find(b => b.id === idAct && !estLeconProf(b)); if (a) tbodyMasq.innerHTML += `<tr><td>${escHTML(a.niveau)}</td><td><strong>${escHTML(a.matiere)}</strong><br>${formaterAffichageSequences(a.sequence)}</td><td>${formaterAffichageCompetences(a.competence)}</td><td>${escHTML(a.ressource)}</td><td style="text-align:center;"><button type="button" class="filter-btn" onclick="demasquerActivite('${a.id}')">↩️</button></td></tr>`; });
     if (eleve.masquees.length === 0) tbodyMasq.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#7f8c8d;">Aucune.</td></tr>';
 }
 
@@ -2123,20 +2141,26 @@ function rafraichirFicheImpression() {
 }
 
 // ==========================================
-// 6. ONGLET 3 : TABLEAU DE BORD & PLAN DE TRAVAIL ENSEIGNANTE (ORDRE DE HAUT EN BAS + IMPRESSION ÉLÈVES)
+// 6. ONGLET 3 : TABLEAU DE BORD & PLAN DE TRAVAIL ENSEIGNANTE (5 PASSAGES : CP / CE1 / CE2 / CM1 / CM2 + LIENS PDF / PPT)
 // ==========================================
 const JOURS_SEMAINE_PROF = ["Lundi", "Mardi", "Jeudi", "Vendredi"];
-const GROUPES_NIVEAUX_PROF = ["CP", "CE1", "CE2", "CM1-CM2"];
+const GROUPES_NIVEAUX_PROF = ["CP", "CE1", "CE2", "CM1", "CM2"];
+const OPTIONS_NIVEAUX_PROF_SELECT = ["CP", "CE1", "CE2", "CM1", "CM2", "CM1-CM2"];
+const NB_SLOTS_PASSAGES_PROF = 5;
 
 function getStyleNiveauProf(pole, niv) {
     if (pole === 'francais') {
         if (niv === 'CP') return { bg: '#d5a6bd', text: '#2c3e50' };
-        if (niv === 'CE1' || niv === 'CE2') return { bg: '#b6d7a8', text: '#1b4332' };
-        if (niv === 'CM1-CM2') return { bg: '#9fc5e8', text: '#154360' };
+        if (niv === 'CE1') return { bg: '#b6d7a8', text: '#1b4332' };
+        if (niv === 'CE2') return { bg: '#a3e4d7', text: '#0e6251' };
+        if (niv === 'CM1') return { bg: '#9fc5e8', text: '#154360' };
+        if (niv === 'CM2' || niv === 'CM1-CM2') return { bg: '#7fb3d5', text: '#154360' };
     } else {
         if (niv === 'CP') return { bg: '#ffe599', text: '#7c2d12' };
-        if (niv === 'CE1' || niv === 'CE2') return { bg: '#f6b26b', text: '#784212' };
-        if (niv === 'CM1-CM2') return { bg: '#ea9999', text: '#641e16' };
+        if (niv === 'CE1') return { bg: '#f6b26b', text: '#784212' };
+        if (niv === 'CE2') return { bg: '#f5cba7', text: '#784212' };
+        if (niv === 'CM1') return { bg: '#ea9999', text: '#641e16' };
+        if (niv === 'CM2' || niv === 'CM1-CM2') return { bg: '#e67e73', text: '#641e16' };
     }
     return { bg: '#ecf0f1', text: '#2c3e50' };
 }
@@ -2148,6 +2172,7 @@ function creerSemaineProfVide(dateDebutISO = "", dateDebut = "", dateFin = "") {
             grilles[mat][j] = GROUPES_NIVEAUX_PROF.map(niv => ({
                 niveau: niv,
                 texte: "",
+                lien: "",
                 fait: false
             }));
         });
@@ -2183,22 +2208,27 @@ function assurerStructurePlanningProf() {
                 JOURS_SEMAINE_PROF.forEach(j => {
                     let temp = [];
                     GROUPES_NIVEAUX_PROF.forEach((niv, idx) => {
-                        let oldCell = (ancien[niv] && ancien[niv][j]) ? ancien[niv][j] : { texte: "", ordre: "", fait: false };
+                        let oldCell = (ancien[niv] && ancien[niv][j]) ? ancien[niv][j] : { texte: "", lien: "", ordre: "", fait: false };
                         let rang = parseInt(oldCell.ordre) || (idx + 1);
-                        temp.push({ niveau: niv, texte: oldCell.texte || "", fait: Boolean(oldCell.fait), rang: rang });
+                        temp.push({ niveau: niv, texte: oldCell.texte || "", lien: oldCell.lien || "", fait: Boolean(oldCell.fait), rang: rang });
                     });
                     temp.sort((a, b) => a.rang - b.rang);
-                    nouvMat[j] = temp.map(x => ({ niveau: x.niveau, texte: x.texte, fait: x.fait }));
+                    nouvMat[j] = temp.map(x => ({ niveau: x.niveau, texte: x.texte, lien: x.lien || "", fait: x.fait }));
                 });
                 s[mat] = nouvMat;
             }
             JOURS_SEMAINE_PROF.forEach(j => {
-                if (!Array.isArray(s[mat][j]) || s[mat][j].length < 4) {
-                    s[mat][j] = GROUPES_NIVEAUX_PROF.map((niv, idx) => {
-                        let exist = (Array.isArray(s[mat][j]) && s[mat][j][idx]) ? s[mat][j][idx] : null;
-                        return exist ? { niveau: exist.niveau ?? niv, texte: exist.texte || "", fait: Boolean(exist.fait) } : { niveau: niv, texte: "", fait: false };
-                    });
+                if (!Array.isArray(s[mat][j])) s[mat][j] = [];
+                while (s[mat][j].length < NB_SLOTS_PASSAGES_PROF) {
+                    let idx = s[mat][j].length;
+                    let defNiv = GROUPES_NIVEAUX_PROF[idx] || "CM2";
+                    s[mat][j].push({ niveau: defNiv, texte: "", lien: "", fait: false });
                 }
+                s[mat][j].forEach(slot => {
+                    if (slot.lien === undefined) slot.lien = "";
+                    // Si une ancienne case vide était sur CM1-CM2 et que la 5e case vient d'être ajoutée, séparer proprement CM1 et CM2
+                    if (slot.niveau === "CM1-CM2" && !slot.texte) slot.niveau = "CM1";
+                });
             });
         });
     });
@@ -2265,7 +2295,7 @@ function cloreSemaineProfActive() {
     assurerStructurePlanningProf();
     let idx = planningLeconsProf.semaineIndex;
     let semActuelle = planningLeconsProf.semaines[idx];
-    if (!confirm(`Clôturer la Semaine ${idx + 1} de vos leçons explicites ?\n\n💡 Les leçons non cochées (non faites) seront automatiquement reportées sur la semaine suivante en conservant leur ordre de passage.`)) return;
+    if (!confirm(`Clôturer la Semaine ${idx + 1} de vos leçons explicites ?\n\n💡 Les leçons non cochées (non faites) seront automatiquement reportées sur la semaine suivante avec leur lien PDF/PPT et leur ordre de passage.`)) return;
 
     let cibleSem = null;
     if (planningLeconsProf.semaines.length > 1 && idx < planningLeconsProf.semaines.length - 1) {
@@ -2287,12 +2317,13 @@ function cloreSemaineProfActive() {
 
     ["francais", "maths"].forEach(mat => {
         JOURS_SEMAINE_PROF.forEach(j => {
-            for (let slot = 0; slot < 4; slot++) {
+            for (let slot = 0; slot < NB_SLOTS_PASSAGES_PROF; slot++) {
                 let cellOld = semActuelle[mat][j][slot];
                 if (cellOld && cellOld.texte.trim() !== "" && !cellOld.fait) {
                     if (!cibleSem[mat][j][slot].texte) {
                         cibleSem[mat][j][slot].niveau = cellOld.niveau;
                         cibleSem[mat][j][slot].texte = cellOld.texte;
+                        cibleSem[mat][j][slot].lien = cellOld.lien || "";
                     }
                 }
             }
@@ -2306,17 +2337,71 @@ function cloreSemaineProfActive() {
     showToast("✅ Semaine de leçons clôturée (non faites reportées) !", "success");
 }
 
+// Recherche si une leçon de la base de données correspond au texte saisi et possède un lien PDF / PowerPoint à projeter
+function trouverLienDepuisBaseLecon(pole, niveauGroupe, texteSaisi) {
+    if (!texteSaisi || !texteSaisi.trim()) return "";
+    let txtNorm = texteSaisi.trim().toLowerCase();
+    let nivCibles = niveauGroupe === "CM1-CM2" ? ["CM1", "CM2"] : (niveauGroupe ? [niveauGroupe] : ["CP", "CE1", "CE2", "CM1", "CM2"]);
+
+    // Priorité aux éléments cochés "Leçon explicite" dans la base
+    let candidats = baseDonnees.filter(a => {
+        if (!a || !a.lienExterne || !a.lienExterne.trim()) return false;
+        let matNorm = (a.matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        let estBonPole = (pole === 'francais')
+            ? (matNorm.includes('francais') || matNorm.includes('grammaire') || matNorm.includes('conjugaison') || matNorm.includes('orthographe') || matNorm.includes('lexique') || matNorm.includes('vocabulaire') || matNorm.includes('ecriture'))
+            : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('programmation'));
+        if (!estBonPole) return false;
+        let nivAct = (a.niveau || "").toUpperCase();
+        if (nivAct && !nivCibles.some(n => nivAct.includes(n))) return false;
+
+        let prefix = a.lecon ? `${a.lecon} - `.toLowerCase() : "";
+        let titre1 = `${prefix}${a.ressource || ''}`.trim().toLowerCase();
+        let titre2 = (a.ressource || '').trim().toLowerCase();
+        let titre3 = `${prefix}${a.sequence || ''}`.trim().toLowerCase();
+        let titre4 = `${prefix}${a.competence || ''}`.trim().toLowerCase();
+        return txtNorm === titre1 || txtNorm === titre2 || txtNorm === titre3 || txtNorm === titre4;
+    });
+
+    let leconPrio = candidats.find(a => estLeconProf(a)) || candidats[0];
+    return leconPrio ? leconPrio.lienExterne.trim() : "";
+}
+
 function majSlotLeconProf(pole, jour, slotIdx, champ, valeur) {
     assurerStructurePlanningProf();
     let sem = planningLeconsProf.semaines[planningLeconsProf.semaineIndex];
     if (!sem || !sem[pole] || !sem[pole][jour] || !sem[pole][jour][slotIdx]) return;
-    sem[pole][jour][slotIdx][champ] = valeur;
-    sauvegarderPlanningProf();
-    if (champ !== 'texte') {
-        rafraichirDashboard();
-    } else {
+    let slotObj = sem[pole][jour][slotIdx];
+    slotObj[champ] = valeur;
+
+    if (champ === 'texte') {
+        // Si la leçon choisie correspond à une leçon de la base ayant un lien PDF/PPT, on l'associe automatiquement !
+        let lienAuto = trouverLienDepuisBaseLecon(pole, slotObj.niveau, valeur);
+        if (lienAuto && (!slotObj.lien || slotObj.lien !== lienAuto)) {
+            slotObj.lien = lienAuto;
+            sauvegarderPlanningProf();
+            rafraichirDashboard();
+            return;
+        }
+        sauvegarderPlanningProf();
         let spanPrint = document.getElementById(`print_txt_${pole}_${jour}_${slotIdx}`);
         if (spanPrint) spanPrint.innerText = valeur || "—";
+    } else {
+        sauvegarderPlanningProf();
+        rafraichirDashboard();
+    }
+}
+
+function definirLienSlotLeconProf(pole, jour, slotIdx) {
+    assurerStructurePlanningProf();
+    let sem = planningLeconsProf.semaines[planningLeconsProf.semaineIndex];
+    if (!sem || !sem[pole] || !sem[pole][jour] || !sem[pole][jour][slotIdx]) return;
+    let slotObj = sem[pole][jour][slotIdx];
+    let url = prompt(`Collez ici le lien vers votre PDF, PowerPoint, Google Slides ou Canva à projeter pour "${slotObj.texte || slotObj.niveau}" :`, slotObj.lien || "");
+    if (url !== null) {
+        slotObj.lien = url.trim();
+        sauvegarderPlanningProf();
+        rafraichirDashboard();
+        showToast(slotObj.lien ? "📽️ Lien du document à projeter enregistré !" : "Lien retiré.", "success");
     }
 }
 
@@ -2324,7 +2409,7 @@ function deplacerSlotLeconProf(pole, jour, slotIdx, direction) {
     assurerStructurePlanningProf();
     let sem = planningLeconsProf.semaines[planningLeconsProf.semaineIndex];
     let nouvIdx = slotIdx + direction;
-    if (nouvIdx < 0 || nouvIdx >= 4) return;
+    if (nouvIdx < 0 || nouvIdx >= NB_SLOTS_PASSAGES_PROF) return;
     let temp = sem[pole][jour][slotIdx];
     sem[pole][jour][slotIdx] = sem[pole][jour][nouvIdx];
     sem[pole][jour][nouvIdx] = temp;
@@ -2340,9 +2425,12 @@ function imprimerPlanningLeconsProf() {
     }, 600);
 }
 
+// Génère la liste de suggestions de leçons depuis la base de données (en mettant en priorité les Leçons explicites 👩‍🏫 enregistrées dans la base)
 function genererDatalistSuggestionsLecons(pole, niveauGroupe) {
-    let suggestions = new Set();
+    let suggestionsLeconsProf = new Set();
+    let suggestionsAutres = new Set();
     let nivCibles = niveauGroupe === "CM1-CM2" ? ["CM1", "CM2"] : (niveauGroupe ? [niveauGroupe] : ["CP", "CE1", "CE2", "CM1", "CM2"]);
+
     baseDonnees.forEach(a => {
         if (!a) return;
         let matNorm = (a.matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -2354,31 +2442,51 @@ function genererDatalistSuggestionsLecons(pole, niveauGroupe) {
         if (!nivCibles.some(n => nivAct.includes(n))) return;
 
         let prefixLecon = a.lecon ? `${a.lecon} - ` : "";
-        extraireListeCompetences(a.competence).forEach(c => suggestions.add(`${prefixLecon}${c}`));
-        extraireListeSequences(a.sequence).forEach(s => suggestions.add(`${prefixLecon}${s}`));
+        if (estLeconProf(a)) {
+            if (a.ressource) suggestionsLeconsProf.add(`${prefixLecon}${a.ressource}`);
+            extraireListeCompetences(a.competence).forEach(c => suggestionsLeconsProf.add(`${prefixLecon}${c}`));
+            extraireListeSequences(a.sequence).forEach(s => suggestionsLeconsProf.add(`${prefixLecon}${s}`));
+        } else {
+            extraireListeCompetences(a.competence).forEach(c => suggestionsAutres.add(`${prefixLecon}${c}`));
+            extraireListeSequences(a.sequence).forEach(s => suggestionsAutres.add(`${prefixLecon}${s}`));
+        }
     });
-    return Array.from(suggestions).sort((a, b) => a.localeCompare(b, 'fr'));
+
+    let tab1 = Array.from(suggestionsLeconsProf).sort((a, b) => a.localeCompare(b, 'fr'));
+    let tab2 = Array.from(suggestionsAutres).filter(x => !suggestionsLeconsProf.has(x)).sort((a, b) => a.localeCompare(b, 'fr'));
+    return [...tab1, ...tab2];
 }
 
 function genererTableauLeconsPoleHtml(pole, titre, couleurBandeau, sem) {
     let datalistsHtml = "";
-    GROUPES_NIVEAUX_PROF.forEach(niv => {
+    OPTIONS_NIVEAUX_PROF_SELECT.forEach(niv => {
         let idDl = `dl_prof_${pole}_${niv.replace('-', '_')}`;
         let suggs = genererDatalistSuggestionsLecons(pole, niv);
         datalistsHtml += `<datalist id="${idDl}">${suggs.map(s => `<option value="${escHTML(s)}">`).join('')}</datalist>`;
     });
 
-    const labelsOrdre = ["1er passage", "2e passage", "3e passage", "4e passage"];
+    const labelsOrdre = ["1er passage", "2e passage", "3e passage", "4e passage", "5e passage"];
 
-    let rowsHtml = [0, 1, 2, 3].map(slotIdx => {
+    let rowsHtml = [0, 1, 2, 3, 4].map(slotIdx => {
         let cellsHtml = JOURS_SEMAINE_PROF.map(jour => {
-            let cell = (sem[pole][jour] && sem[pole][jour][slotIdx]) ? sem[pole][jour][slotIdx] : { niveau: GROUPES_NIVEAUX_PROF[slotIdx], texte: "", fait: false };
+            let cell = (sem[pole][jour] && sem[pole][jour][slotIdx]) ? sem[pole][jour][slotIdx] : { niveau: GROUPES_NIVEAUX_PROF[slotIdx], texte: "", lien: "", fait: false };
             let stNiv = getStyleNiveauProf(pole, cell.niveau);
             let idDl = cell.niveau ? `dl_prof_${pole}_${cell.niveau.replace('-', '_')}` : '';
             let bgCell = cell.fait ? "#d4efdf" : "#ffffff";
 
             let optionsNiv = `<option value="" ${!cell.niveau ? 'selected' : ''}>-- Pause / Libre --</option>` +
-                GROUPES_NIVEAUX_PROF.map(n => `<option value="${n}" ${cell.niveau === n ? 'selected' : ''}>Groupe ${n}</option>`).join('');
+                OPTIONS_NIVEAUX_PROF_SELECT.map(n => `<option value="${n}" ${cell.niveau === n ? 'selected' : ''}>${n}</option>`).join('');
+
+            // Lien PDF / PowerPoint (soit stocké sur le créneau, soit hérité automatiquement de la leçon dans la base)
+            let lienDoc = (cell.lien && cell.lien.trim()) ? cell.lien.trim() : trouverLienDepuisBaseLecon(pole, cell.niveau, cell.texte);
+            let btnDocHtml = lienDoc
+                ? `<div style="display:flex; gap:3px; align-items:center; margin-top:4px;">
+                       <a href="${escHTML(lienDoc)}" target="_blank" rel="noopener noreferrer" class="btn-action" style="flex:1; text-align:center; text-decoration:none; padding:2px 6px; font-size:11px; background:#8e44ad !important; color:#fff !important; border-radius:4px;" title="Ouvrir le PDF ou PowerPoint à projeter dans un nouvel onglet">📽️ Projeter PDF/PPT ↗</a>
+                       <button type="button" class="filter-btn" style="padding:2px 5px; font-size:10px;" title="Modifier ou supprimer le lien du document" onclick="definirLienSlotLeconProf('${pole}', '${jour}', ${slotIdx})">✏️</button>
+                   </div>`
+                : `<div style="margin-top:3px; text-align:right;">
+                       <button type="button" class="filter-btn" style="padding:1px 5px; font-size:10px; opacity:0.8;" title="Ajouter un lien PDF ou PowerPoint à projeter pour cette leçon" onclick="definirLienSlotLeconProf('${pole}', '${jour}', ${slotIdx})">➕📎 PDF/PPT</button>
+                   </div>`;
 
             return `<td style="background:${bgCell}; padding:6px; vertical-align:top; border:1px solid #cbd5e1;">
                 <div class="no-print">
@@ -2388,7 +2496,7 @@ function genererTableauLeconsPoleHtml(pole, titre, couleurBandeau, sem) {
                         </select>
                         <div style="display:flex; align-items:center; gap:2px;">
                             ${slotIdx > 0 ? `<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Monter ce groupe plus tôt" onclick="deplacerSlotLeconProf('${pole}', '${jour}', ${slotIdx}, -1)">▲</button>` : ''}
-                            ${slotIdx < 3 ? `<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Descendre ce groupe plus tard" onclick="deplacerSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 1)">▼</button>` : ''}
+                            ${slotIdx < (NB_SLOTS_PASSAGES_PROF - 1) ? `<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Descendre ce groupe plus tard" onclick="deplacerSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 1)">▼</button>` : ''}
                             <label style="font-size:11px; font-weight:bold; color:${cell.fait ? '#1e8449' : '#7f8c8d'}; cursor:pointer; margin-left:3px; display:flex; align-items:center; gap:2px;" title="Cocher quand la leçon a été donnée">
                                 <input type="checkbox" ${cell.fait ? 'checked' : ''} onchange="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'fait', this.checked)" style="cursor:pointer;">
                                 ${cell.fait ? '✅' : ''}
@@ -2396,6 +2504,7 @@ function genererTableauLeconsPoleHtml(pole, titre, couleurBandeau, sem) {
                         </div>
                     </div>
                     <input type="text" list="${idDl}" value="${escHTML(cell.texte || '')}" placeholder="Leçon / notion..." oninput="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'texte', this.value)" style="width:100%; padding:5px 7px; font-size:12.5px; font-weight:${cell.texte ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:5px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;'}">
+                    ${btnDocHtml}
                 </div>
 
                 <div class="only-print-lecons" style="text-align:center; padding:3px 2px;">
@@ -2419,7 +2528,7 @@ function genererTableauLeconsPoleHtml(pole, titre, couleurBandeau, sem) {
     return `<div class="card-panel card-pole-lecon" style="border-top:4px solid ${couleurBandeau}; padding:12px 14px;">
         <div style="background:${couleurBandeau} !important; color:#ffffff !important; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:14px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
             <span>${titre}</span>
-            <small style="font-weight:normal; opacity:0.95;">⬇ Ordre de passage de haut en bas (1er ➔ 4e)</small>
+            <small style="font-weight:normal; opacity:0.95;">⬇ Ordre de passage de haut en bas (1er ➔ 5e)</small>
         </div>
         ${datalistsHtml}
         <div style="overflow-x:auto;">
@@ -2462,13 +2571,14 @@ function ouvrirEleveDepuisDashboard(idEl) { idEleveCourant = idEl; let sel = doc
 function definirLienRapideDepuisDash(idAct) {
     let a = baseDonnees.find(b => b.id === idAct);
     if (!a) return;
-    let url = prompt(`Collez ici le lien direct Anton pour "${a.ressource}" :`, a.lienExterne || "");
+    let label = estLeconProf(a) ? "PDF / PowerPoint à projeter" : "Anton / activité en ligne";
+    let url = prompt(`Collez ici le lien direct (${label}) pour "${a.ressource}" :`, a.lienExterne || "");
     if (url !== null) {
         a.lienExterne = url.trim();
         sauvegarderBase();
         rafraichirDashboard();
         afficherBase();
-        showToast("🔗 Lien Anton enregistré !", "success");
+        showToast("🔗 Lien enregistré !", "success");
     }
 }
 
@@ -2488,12 +2598,12 @@ function rafraichirDashboard() {
     <div id="blocPlanningLeconsPrint" class="card-panel" style="margin-bottom:22px; background:#f8fbff; border:2px solid #1b4f72;">
         <div class="only-print-lecons" style="text-align:center; border-bottom:3px solid #1b4f72; padding-bottom:8px; margin-bottom:12px;">
             <h1 style="margin:0; font-size:20pt; color:#1b4f72;">👩‍🏫 PLANNING DES LEÇONS AVEC LA MAÎTRESSE — ${escHTML(titreDatesAffiche)}</h1>
-            <p style="margin:4px 0 0 0; font-size:11pt; color:#333;">Ordre de passage des groupes de haut en bas (1<sup>er</sup> passage ➔ 4<sup>e</sup> passage)</p>
+            <p style="margin:4px 0 0 0; font-size:11pt; color:#333;">Ordre de passage des groupes de haut en bas (1<sup>er</sup> passage ➔ 5<sup>e</sup> passage)</p>
         </div>
 
         <div class="semaines-flex no-print" style="margin-bottom:14px; padding-bottom:10px; border-bottom:1px dashed #bdc3c7;">
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                <h3 style="margin:0; color:#1b4f72;">👩‍🏫 Planning des Leçons Explicites (Ordre de haut en bas)</h3>
+                <h3 style="margin:0; color:#1b4f72;">👩‍🏫 Planning des Leçons Explicites (CP / CE1 / CE2 / CM1 / CM2)</h3>
                 <select onchange="changerSemaineProf(this.value)" style="font-weight:bold; padding:6px 10px; border-radius:6px; border:1px solid #1b4f72;">
                     ${optionsSemProf}
                 </select>
@@ -2526,7 +2636,7 @@ function rafraichirDashboard() {
     listeEl.forEach(e => {
         assurerStructureSemaines(e);
         (e.planHebdo || []).forEach(idAct => {
-            let act = baseDonnees.find(b => b.id === idAct); if (!act) return;
+            let act = baseDonnees.find(b => b.id === idAct && !estLeconProf(b)); if (!act) return;
             let estVal = e.valides && e.valides[idAct], s = e.suivi && e.suivi[idAct] ? e.suivi[idAct] : null;
             if (s && (s.statut === 'a_revoir' || s.statut === 'a_refaire')) {
                 let cleRem = `${e.id}_${idAct}`, estArch = dashboardArchives.includes(cleRem);
@@ -2563,11 +2673,12 @@ function rafraichirDashboard() {
     </div><div class="dashboard-grid no-print-lecons">`;
 
     listeEl.forEach(e => {
-        let total = (e.planHebdo || []).length, nbValides = (e.planHebdo || []).filter(id => e.valides && e.valides[id]).length;
+        let planEl = getListeTrie(e.planHebdo, e.priorites || [], e);
+        let total = planEl.length, nbValides = planEl.filter(a => e.valides && e.valides[a.id]).length;
         let pct = total > 0 ? Math.round((nbValides / total) * 100) : 0;
-        let nbTab = (e.planHebdo || []).map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length;
+        let nbTab = planEl.filter(b => b && estActiviteTablette(b)).length;
         let isExp = dashboardExpanded.has(e.id), badgeParc = estEleveCM(e) ? ((e.parcours === 'orange') ? ' 🟠' : ' 🟡') : '';
-        let detailsPlanHtml = isExp ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed #ccc; font-size:12.5px;">` + getListeTrie(e.planHebdo, e.priorites || [], e).map((a, idx) => {
+        let detailsPlanHtml = isExp ? `<div style="margin-top:10px; padding-top:8px; border-top:1px dashed #ccc; font-size:12.5px;">` + planEl.map((a, idx) => {
             let fait = e.valides && e.valides[a.id], st = (e.suivi && e.suivi[a.id]) ? e.suivi[a.id].statut : "";
             let iconeLien = (a.lienExterne && a.lienExterne.trim()) ? ` <a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" title="Ouvrir sur Anton" style="text-decoration:none;">🔗</a>` : '';
             let isRec = e.recurrents && e.recurrents.includes(a.id);
@@ -2587,11 +2698,11 @@ function rafraichirDashboard() {
     });
     cont.innerHTML = html + `</div>`;
 }
-
 // ==========================================
-// 7. ONGLET 4 : BASE DE DONNÉES, TAGS MULTI-SÉQUENCES & MULTI-COMPÉTENCES, CHANGEMENT DE MATIÈRE D'UNE SÉQUENCE
+// 7. ONGLET 4 : BASE DE DONNÉES, TAGS MULTI-SÉQUENCES & MULTI-COMPÉTENCES (SANS AUTO-VALIDATION), LEÇONS PROF & SÉQUENCES
 // ==========================================
 
+// --- Pastilles (Tags) de SÉQUENCES en Saisie Simple (Validation manuelle via Entrée ou bouton ➕) ---
 function renderTagsSequencesSimple() {
     let cont = document.getElementById('tagsSequencesSimple');
     let hidden = document.getElementById('inputSequence');
@@ -2629,20 +2740,7 @@ function retirerTagSequenceSimple(idx) {
     renderTagsSequencesSimple();
 }
 
-function verifierSelectionDatalistSeqSimple(inputElem) {
-    let val = inputElem.value.trim();
-    if (!val) {
-        renderTagsSequencesSimple();
-        return;
-    }
-    let dl = document.getElementById('listeSequencesConnues');
-    if (dl && Array.from(dl.options).some(opt => opt.value === val)) {
-        ajouterTagSequenceSimple(val);
-        return;
-    }
-    renderTagsSequencesSimple();
-}
-
+// --- Pastilles (Tags) de SÉQUENCES communes en Saisie Multiple ---
 function renderTagsSequencesMulti() {
     let cont = document.getElementById('tagsSequencesMulti');
     let hidden = document.getElementById('multiSequence');
@@ -2680,20 +2778,7 @@ function retirerTagSequenceMulti(idx) {
     renderTagsSequencesMulti();
 }
 
-function verifierSelectionDatalistSeqMulti(inputElem) {
-    let val = inputElem.value.trim();
-    if (!val) {
-        renderTagsSequencesMulti();
-        return;
-    }
-    let dl = document.getElementById('listeSequencesConnues');
-    if (dl && Array.from(dl.options).some(opt => opt.value === val)) {
-        ajouterTagSequenceMulti(val);
-        return;
-    }
-    renderTagsSequencesMulti();
-}
-
+// --- Pastilles (Tags) de COMPÉTENCES en Saisie Simple (Validation uniquement via Entrée ou ➕, jamais au fil de la frappe) ---
 function renderTagsCompetencesSimple() {
     let cont = document.getElementById('tagsCompetencesSimple');
     let hidden = document.getElementById('inputCompetence');
@@ -2733,23 +2818,7 @@ function retirerTagCompetenceSimple(idx) {
     renderTagsCompetencesSimple();
 }
 
-function verifierSelectionDatalistCompSimple(inputElem) {
-    let val = inputElem.value.trim();
-    if (!val) {
-        renderTagsCompetencesSimple();
-        return;
-    }
-    let dl = document.getElementById('listeCompetencesConnues');
-    if (dl) {
-        let existeDansListe = Array.from(dl.options).some(opt => opt.value === val);
-        if (existeDansListe) {
-            ajouterTagCompetenceSimple(val);
-            return;
-        }
-    }
-    renderTagsCompetencesSimple();
-}
-
+// --- Pastilles (Tags) de COMPÉTENCES par ligne en Saisie Multiple (Validation uniquement via Entrée ou ➕) ---
 function getTagsLigneMulti(tr) {
     try {
         return JSON.parse(tr.dataset.compTags || "[]");
@@ -2807,19 +2876,23 @@ function retirerTagCompetenceMulti(spanElem, idx) {
     gererSaisieChampMulti(tr.querySelector('.m-comp'), 'comp');
 }
 
-function verifierSelectionDatalistCompMulti(inputElem) {
+function mettreAJourSaisieCompMulti(inputElem) {
     let tr = inputElem.closest('tr');
     if (!tr) return;
-    let val = inputElem.value.trim();
-    if (val) {
-        let dl = document.getElementById('listeCompetencesConnues');
-        if (dl && Array.from(dl.options).some(opt => opt.value === val)) {
-            ajouterTagCompetenceMulti(inputElem, val);
-            return;
-        }
-    }
     renderTagsCompetencesLigneMulti(tr);
     gererSaisieChampMulti(tr.querySelector('.m-comp'), 'comp');
+}
+
+// Quand on coche "👩‍🏫 Est une Leçon explicite" en saisie simple, pré-remplit Support="Leçon" et Étoiles="0" si vides
+function gererCocheEstLeconSimple(isChecked) {
+    if (isChecked) {
+        let cbEval = document.getElementById('cbEstEvaluation');
+        if (cbEval) cbEval.checked = false;
+        let selType = document.getElementById('selectTypeRessource');
+        if (selType && !selType.value && imagesParType["Leçon"]) selType.value = "Leçon";
+        let selDiff = document.getElementById('selectDifficulte');
+        if (selDiff && selDiff.value === "") selDiff.value = "0";
+    }
 }
 
 function estCMSelectionneFormSimple() {
@@ -2951,7 +3024,20 @@ function toggleModeSaisieMultiple() {
     } else {
         if (bSimple) bSimple.style.display = 'block';
         if (bMulti) bMulti.style.display = 'none';
-        if (btn) btn.innerText = "⚡ Passer en mode Saisie Multiple (plusieurs exercices d'un coup)";
+        if (btn) btn.innerText = "⚡ Passer en mode Saisie Multiple (plusieurs éléments d'un coup)";
+    }
+}
+
+function gererCocheLeconLigneMulti(cbElem) {
+    let tr = cbElem.closest('tr');
+    if (!tr) return;
+    if (cbElem.checked) {
+        let cbEval = tr.querySelector('.m-eval');
+        if (cbEval) cbEval.checked = false;
+        let selType = tr.querySelector('.m-type');
+        if (selType && !selType.value && imagesParType["Leçon"]) selType.value = "Leçon";
+        let selDiff = tr.querySelector('.m-diff');
+        if (selDiff && selDiff.value === "") selDiff.value = "0";
     }
 }
 
@@ -2985,19 +3071,19 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
             <td>
                 <div class="m-comp-tags comp-tags-container"></div>
                 <div style="display:flex; gap:4px;">
-                    <input type="text" class="m-comp-picker" list="listeCompetencesConnues" value="${escHTML(defPickerComp)}" placeholder="🔍 Mot-clé ou nouvelle..." oninput="verifierSelectionDatalistCompMulti(this)" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterTagCompetenceMulti(this);}" style="flex:1;">
-                    <button type="button" class="filter-btn" style="padding:3px 7px;" title="Ajouter cette compétence" onclick="ajouterTagCompetenceMulti(this)">➕</button>
+                    <input type="text" class="m-comp-picker" list="listeCompetencesConnues" value="${escHTML(defPickerComp)}" placeholder="🔍 Mot-clé ou nouvelle..." oninput="mettreAJourSaisieCompMulti(this)" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterTagCompetenceMulti(this);}" style="flex:1;">
+                    <button type="button" class="filter-btn" style="padding:3px 7px;" title="Ajouter cette compétence en pastille" onclick="ajouterTagCompetenceMulti(this)">➕</button>
                 </div>
                 <input type="hidden" class="m-comp" value="">
             </td>
-            <td><input type="text" class="m-res" placeholder="Ex: Ex 1" style="width:100%;"></td>
+            <td><input type="text" class="m-res" placeholder="Ex: Ex 1 ou Leçon G1" style="width:100%;"></td>
             <td><select class="m-type" onchange="gererSaisieChampMulti(this, 'type')" style="width:100%;">${optsTypes}</select></td>
             <td><input type="text" class="m-symbole" placeholder="1" style="width:100%;"></td>
             <td><input type="text" class="m-pers" value="${escHTML(defPers)}" placeholder="👤" oninput="gererSaisieChampMulti(this, 'pers')" style="width:100%;"></td>
             <td><input type="text" class="m-page" value="${escHTML(defPage)}" placeholder="p9" oninput="gererSaisieChampMulti(this, 'page')" style="width:100%;"></td>
             <td><input type="text" class="m-orange" value="${escHTML(defOrange)}" placeholder="p10" ${isCM ? '' : 'disabled'} oninput="gererSaisieChampMulti(this, 'orange')" style="width:100%;"></td>
             <td><input type="text" class="m-jaune" value="${escHTML(defJaune)}" placeholder="1 p4" oninput="gererSaisieChampMulti(this, 'jaune')" style="width:100%;"></td>
-            <td><input type="text" class="m-lien" placeholder="https://anton.app/..." style="width:100%;"></td>
+            <td><input type="text" class="m-lien" placeholder="URL Anton / PDF / PPT..." style="width:100%;"></td>
             <td>
                 <select class="m-diff" onchange="gererSaisieChampMulti(this, 'diff')" style="width:100%;">
                     <option value="">-- Étoiles --</option>
@@ -3007,7 +3093,8 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
                     <option value="3">⭐⭐⭐ (3)</option>
                 </select>
             </td>
-            <td style="text-align:center;"><input type="checkbox" class="m-eval" style="transform:scale(1.2);"></td>
+            <td style="text-align:center;"><input type="checkbox" class="m-eval" title="Est une Évaluation" onchange="if(this.checked){let l=this.closest('tr').querySelector('.m-islecon'); if(l) l.checked=false;}" style="transform:scale(1.2);"></td>
+            <td style="text-align:center;"><input type="checkbox" class="m-islecon" title="Est une Leçon explicite (Tableau de bord prof uniquement)" onchange="gererCocheLeconLigneMulti(this)" style="transform:scale(1.2);"></td>
             <td style="text-align:center;"><button type="button" class="btn-remove" style="padding:3px 7px;" onclick="this.closest('tr').remove()">✖</button></td>
         `;
         if (defType) tr.querySelector('.m-type').value = defType;
@@ -3030,11 +3117,11 @@ function enregistrerSaisieMultiple() {
     lignes.forEach(tr => renderTagsCompetencesLigneMulti(tr));
 
     let lignesActives = lignes.filter(tr => {
-        return tr.querySelector('.m-res').value.trim() !== "" || tr.querySelector('.m-comp').value.trim() !== "";
+        return tr.querySelector('.m-res').value.trim() !== "" || tr.querySelector('.m-comp').value.trim() !== "" || tr.querySelector('.m-lecon').value.trim() !== "";
     });
 
     if (lignesActives.length === 0) {
-        showToast("Aucune ligne d'exercice renseignée dans le tableau.", "error");
+        showToast("Aucune ligne renseignée dans le tableau.", "error");
         return;
     }
 
@@ -3044,31 +3131,34 @@ function enregistrerSaisieMultiple() {
 
     lignesActives.forEach((tr, idx) => {
         let numL = idx + 1;
+        let isLeconRow = Boolean(tr.querySelector('.m-islecon')?.checked);
         let comp = tr.querySelector('.m-comp').value.trim();
         let res = tr.querySelector('.m-res').value.trim();
         let typeR = tr.querySelector('.m-type').value.trim();
         let diffVal = tr.querySelector('.m-diff').value;
         let oublisLigne = [];
         if (!comp) oublisLigne.push("Compétence");
-        if (!res) oublisLigne.push("Nom de l'exercice");
-        if (!typeR) oublisLigne.push("Type de matériel (Support)");
-        if (diffVal === "") oublisLigne.push("Étoiles (Difficulté)");
+        if (!res) oublisLigne.push(isLeconRow ? "Titre de la leçon" : "Nom de l'exercice");
+        if (!isLeconRow && !typeR) oublisLigne.push("Type de matériel (Support)");
+        if (!isLeconRow && diffVal === "") oublisLigne.push("Étoiles (Difficulté)");
         if (oublisLigne.length > 0) {
             champsManquants.push(`• Ligne ${numL} : ${oublisLigne.join(', ')}`);
         }
     });
 
     if (champsManquants.length > 0) {
-        let msg = "⚠️ Attention, certaines cases importantes ne sont pas remplies :\n\n" + champsManquants.join("\n") + "\n\nVoulez-vous quand même enregistrer ces exercices ?";
+        let msg = "⚠️ Attention, certaines cases importantes ne sont pas remplies :\n\n" + champsManquants.join("\n") + "\n\nVoulez-vous quand même enregistrer ces éléments ?";
         if (!confirm(msg)) return;
     }
 
     let nbAjoutes = 0;
     lignesActives.forEach(tr => {
-        let ressource = tr.querySelector('.m-res').value.trim() || "Exercice";
+        let estLecon = Boolean(tr.querySelector('.m-islecon')?.checked);
+        let ressource = tr.querySelector('.m-res').value.trim() || (estLecon ? "Leçon" : "Exercice");
         let lecon = tr.querySelector('.m-lecon').value.trim();
         let competence = tr.querySelector('.m-comp').value.trim();
-        let typeRes = tr.querySelector('.m-type').value;
+        let typeRes = tr.querySelector('.m-type').value || (estLecon ? "Leçon" : "");
+        if ((typeRes || "").toLowerCase() === "leçon" || (typeRes || "").toLowerCase() === "lecon") estLecon = true;
         let symbole = tr.querySelector('.m-symbole') ? tr.querySelector('.m-symbole').value.trim() : "";
         let personnes = tr.querySelector('.m-pers') ? tr.querySelector('.m-pers').value.trim() : "";
         let pageManuel = tr.querySelector('.m-page').value.trim();
@@ -3076,14 +3166,14 @@ function enregistrerSaisieMultiple() {
         let varianteJaune = tr.querySelector('.m-jaune').value.trim();
         let lienExterne = tr.querySelector('.m-lien') ? tr.querySelector('.m-lien').value.trim() : "";
         let difficulte = parseInt(tr.querySelector('.m-diff').value) || 0;
-        let estEval = tr.querySelector('.m-eval').checked;
+        let estEval = !estLecon && tr.querySelector('.m-eval').checked;
         let couleur = calculerCouleurAutomatique(matiere, niveauStr, typeRes);
         let newId = 'act_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
 
         baseDonnees.push({
             id: newId, matiere, sequence, lecon, competence, ressource, typeRes,
             symbole, personnes, pageManuel, pageOrange, varianteJaune, lienExterne, periode,
-            difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: "", estEvaluation: estEval
+            difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: "", estEvaluation: estEval, estLecon: estLecon
         });
         if (periode) programmations[newId] = periode;
         nbAjoutes++;
@@ -3098,7 +3188,7 @@ function enregistrerSaisieMultiple() {
     sauvegarderProgrammations(); postEditGlobal();
     document.getElementById('tbodySaisieMultiple').innerHTML = '';
     ajouterLigneSaisieMultiple(4);
-    showToast(`✅ ${nbAjoutes} exercice(s) ajouté(s) d'un coup !`, "success");
+    showToast(`✅ ${nbAjoutes} élément(s) ajouté(s) d'un coup !`, "success");
 }
 
 function ouvrirModalGestionMatieres() { afficherListeMatieresModal(); ouvrirModal('modalMatieres'); }
@@ -3212,9 +3302,9 @@ function afficherListeSequencesModal() {
                     toutesMatieresDispo.map(m => `<option value="${escHTML(m)}" ${m === matUnique ? 'selected' : ''}>📚 Mettre dans : ${escHTML(m)}</option>`).join('');
 
                 return `<div class="ligne-seq-modal" style="display:flex; gap:8px; align-items:center; margin-bottom:7px; padding-bottom:6px; border-bottom:1px solid #f1f5f9; flex-wrap:wrap;">
-                    <span class="filter-btn" style="font-size:11px; padding:2px 6px; white-space:nowrap;">${escHTML(nivTxt)} • ${info.count} act.</span>
+                    <span class="filter-btn" style="font-size:11px; padding:2px 6px; white-space:nowrap;">${escHTML(nivTxt)} • ${info.count} élém.</span>
                     <input type="text" class="input-rename-seq" data-old="${escHTML(s)}" value="${escHTML(s)}" style="flex:1; min-width:170px;" title="Renommer cette séquence">
-                    <select class="select-matiere-seq" data-seq="${escHTML(s)}" data-old-mat="${escHTML(matUnique)}" style="width:240px; padding:5px; font-size:12px; background:#f8fbff; border:1px solid #2980b9; border-radius:5px; font-weight:600;" title="Changer la matière de tous les ateliers de cette séquence">
+                    <select class="select-matiere-seq" data-seq="${escHTML(s)}" data-old-mat="${escHTML(matUnique)}" style="width:240px; padding:5px; font-size:12px; background:#f8fbff; border:1px solid #2980b9; border-radius:5px; font-weight:600;" title="Changer la matière de tous les éléments de cette séquence">
                         ${optionsMatHtml}
                     </select>
                     <button type="button" class="btn-remove" style="padding:4px 8px;" title="Retirer cette séquence (les activités passeront en 'Sans séquence')" onclick="supprimerSequenceModal('${escJS(s)}')">🗑️</button>
@@ -3245,7 +3335,7 @@ function reassignerActiviteSequence(idAct, nouvSeq) {
         if (!sequencesCustom.includes(cleanSeq)) sequencesCustom.push(cleanSeq);
         postEditGlobal();
         afficherListeSequencesModal();
-        showToast(`Activité réassignée à "${cleanSeq}" !`, "success");
+        showToast(`Élément réassigné à "${cleanSeq}" !`, "success");
     }
 }
 
@@ -3267,7 +3357,7 @@ function reassignerToutesOrphelinesModal() {
     if (!sequencesCustom.includes(nouvSeq)) sequencesCustom.push(nouvSeq);
     postEditGlobal();
     afficherListeSequencesModal();
-    showToast(`✅ ${count} activité(s) réassignée(s) dans "${nouvSeq}" !`, "success");
+    showToast(`✅ ${count} élément(s) réassigné(s) dans "${nouvSeq}" !`, "success");
 }
 
 function sauvegarderToutesSequences() {
@@ -3354,7 +3444,7 @@ function supprimerSequenceModal(s) {
         }
         postEditGlobal();
         afficherListeSequencesModal();
-        showToast(`Séquence retirée sur ${nbTouch} activité(s).`, "success");
+        showToast(`Séquence retirée sur ${nbTouch} élément(s).`, "success");
     }
 }
 
@@ -3444,7 +3534,7 @@ function ajouterOuModifierType() {
 function supprimerTypeRessource(nom) { if (confirm(`Supprimer le type "${nom}" ?`)) { delete imagesParType[nom]; localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType)); majListeTypesSelect(); afficherListeTypesModal(); } }
 function changerCouleurDB(idAct, nouvCouleur) { let a = baseDonnees.find(b => b.id === idAct); if (a) { a.visuel = nouvCouleur; sauvegarderBase(); afficherBase(); } }
 function changerImageDB(idAct) { let a = baseDonnees.find(b => b.id === idAct); if (!a) return; let url = prompt("URL de l'image spécifique :", a.imageSpecifique || ""); if (url !== null) { a.imageSpecifique = url.trim(); sauvegarderBase(); afficherBase(); } }
-function viderBase() { if (confirm("⚠️ Vider l'intégralité de la base de données d'ateliers ?")) { baseDonnees = []; postEditGlobal(); showToast("Base de données vidée.", "success"); } }
+function viderBase() { if (confirm("⚠️ Vider l'intégralité de la base de données ?")) { baseDonnees = []; postEditGlobal(); showToast("Base de données vidée.", "success"); } }
 
 function enregistrerActiviteBase() {
     renderTagsSequencesSimple();
@@ -3454,7 +3544,10 @@ function enregistrerActiviteBase() {
     let lecon = document.getElementById('inputLecon').value.trim();
     let competence = document.getElementById('inputCompetence').value.trim();
     let ressource = document.getElementById('inputRessource').value.trim();
-    let typeRes = document.getElementById('selectTypeRessource').value;
+    let estLecon = document.getElementById('cbEstLecon') ? document.getElementById('cbEstLecon').checked : false;
+    let typeRes = document.getElementById('selectTypeRessource').value || (estLecon ? "Leçon" : "");
+    if ((typeRes || "").toLowerCase() === "leçon" || (typeRes || "").toLowerCase() === "lecon") estLecon = true;
+
     let symbole = document.getElementById('inputSymbole') ? document.getElementById('inputSymbole').value.trim() : "";
     let personnes = document.getElementById('inputPersonnes') ? document.getElementById('inputPersonnes').value.trim() : "";
     let pageManuel = document.getElementById('inputPageManuel').value.trim();
@@ -3469,36 +3562,36 @@ function enregistrerActiviteBase() {
     let couleur = document.getElementById('selectCouleurRapide').value || calculerCouleurAutomatique(matiere, niveauStr, typeRes);
     let imgAct = document.getElementById('inputImageAct').value.trim();
     let lienExterne = document.getElementById('inputLienExterne') ? document.getElementById('inputLienExterne').value.trim() : "";
-    let estEval = document.getElementById('cbEstEvaluation').checked;
+    let estEval = !estLecon && document.getElementById('cbEstEvaluation').checked;
 
     let oublis = [];
     if (!matiere) oublis.push("• La matière");
     if (!sequence) oublis.push("• Le nom de la séquence");
     if (!competence) oublis.push("• La compétence");
-    if (!ressource) oublis.push("• Le nom de l'exercice");
-    if (!typeRes) oublis.push("• Le type de matériel (Support)");
-    if (diffRaw === "") oublis.push("• Les étoiles (Difficulté)");
+    if (!ressource) oublis.push(estLecon ? "• Le titre de la leçon" : "• Le nom de l'exercice");
+    if (!estLecon && !typeRes) oublis.push("• Le type de matériel (Support)");
+    if (!estLecon && diffRaw === "") oublis.push("• Les étoiles (Difficulté)");
 
     if (oublis.length > 0) {
-        let msg = "⚠️ Attention, les cases suivantes ne sont pas remplies :\n\n" + oublis.join("\n") + "\n\nVoulez-vous quand même enregistrer cette activité ?";
+        let msg = "⚠️ Attention, les cases suivantes ne sont pas remplies :\n\n" + oublis.join("\n") + "\n\nVoulez-vous quand même enregistrer ?";
         if (!confirm(msg)) return;
     }
 
     if (idEnCoursEdition) {
         let act = baseDonnees.find(b => b.id === idEnCoursEdition);
         if (act) {
-            Object.assign(act, { matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, lienExterne, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval });
+            Object.assign(act, { matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, lienExterne, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval, estLecon: estLecon });
             if (periode) programmations[act.id] = periode;
         }
         idEnCoursEdition = null;
         document.getElementById('btnAnnulerEditBase').style.display = 'none';
-        document.getElementById('titreFormulaireBase').innerText = "➕ Ajouter ou modifier une activité";
-        showToast("Activité modifiée !", "success");
+        document.getElementById('titreFormulaireBase').innerText = "➕ Ajouter ou modifier une activité / une leçon";
+        showToast("Élément modifié !", "success");
     } else {
         let newId = 'act_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
-        baseDonnees.push({ id: newId, matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, lienExterne, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval });
+        baseDonnees.push({ id: newId, matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, lienExterne, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval, estLecon: estLecon });
         if (periode) programmations[newId] = periode;
-        showToast("Nouvelle activité ajoutée !", "success");
+        showToast(estLecon ? "👩‍🏫 Nouvelle leçon enregistrée !" : "Nouvelle activité ajoutée !", "success");
     }
     extraireListeSequences(sequence).forEach(sq => {
         if (sq && !sequencesCustom.includes(sq)) sequencesCustom.push(sq);
@@ -3506,7 +3599,7 @@ function enregistrerActiviteBase() {
             programmations[getCleProgSequence(matiere, sq)] = periode;
         }
     });
-    sauvegarderProgrammations(); postEditGlobal();
+    sauvegarderProgrammations(); postEditGlobal(); rafraichirDashboard();
     document.getElementById('inputRessource').value = '';
     if (document.getElementById('inputSymbole')) document.getElementById('inputSymbole').value = '';
     document.getElementById('inputPageManuel').value = '';
@@ -3544,6 +3637,7 @@ function editerActiviteBase(idAct) {
     document.getElementById('selectCouleurRapide').value = (a.visuel && a.visuel.startsWith('#')) ? a.visuel : calculerCouleurAutomatique(a.matiere, a.niveau, a.typeRes);
     document.getElementById('inputImageAct').value = a.imageSpecifique || '';
     document.getElementById('cbEstEvaluation').checked = Boolean(a.estEvaluation);
+    if (document.getElementById('cbEstLecon')) document.getElementById('cbEstLecon').checked = estLeconProf(a);
     document.querySelectorAll('.cb-niveau-form').forEach(cb => { cb.checked = (a.niveau || "").toUpperCase().includes(cb.value); });
     verifierNiveauxCMFormSimple();
     document.getElementById('titreFormulaireBase').innerText = "✏️ Modification de : " + a.ressource;
@@ -3557,18 +3651,19 @@ function annulerEditionBase() {
     sequencesSelectionneesSimple = [];
     if (document.getElementById('inputCompetencePickerSimple')) document.getElementById('inputCompetencePickerSimple').value = '';
     if (document.getElementById('inputSequencePickerSimple')) document.getElementById('inputSequencePickerSimple').value = '';
+    if (document.getElementById('cbEstLecon')) document.getElementById('cbEstLecon').checked = false;
     renderTagsCompetencesSimple();
     renderTagsSequencesSimple();
-    document.getElementById('titreFormulaireBase').innerText = "➕ Ajouter ou modifier une activité";
+    document.getElementById('titreFormulaireBase').innerText = "➕ Ajouter ou modifier une activité / une leçon";
     document.getElementById('btnAnnulerEditBase').style.display = 'none';
 }
 
 function supprimerActiviteBase(idAct) {
-    if (confirm("Supprimer cette activité de la base de données ?")) {
+    if (confirm("Supprimer cet élément de la base de données ?")) {
         baseDonnees = baseDonnees.filter(b => b.id !== idAct);
         selectionGroupeeBase.delete(idAct);
         postEditGlobal();
-        showToast("Activité supprimée.", "success");
+        showToast("Élément supprimé.", "success");
     }
 }
 
@@ -3603,10 +3698,11 @@ function appliquerModificationGroupeeBase() {
     let addSeq = document.getElementById('bulkInputAddSequence')?.value.trim() || "";
     let nouvPer = document.getElementById('bulkSelectPeriode')?.value || "";
     let nouvEt = document.getElementById('bulkSelectEtoiles')?.value ?? "";
+    let nouvRole = document.getElementById('bulkSelectRole')?.value || "";
     let nouvPers = document.getElementById('bulkInputPersonnes')?.value.trim() || "";
 
-    if (!nouvType && !nouvMat && !nouvSeq && !addSeq && !nouvPer && nouvEt === "" && !nouvPers) {
-        showToast("Choisissez au moins un élément à appliquer aux activités cochées.", "error");
+    if (!nouvType && !nouvMat && !nouvSeq && !addSeq && !nouvPer && nouvEt === "" && !nouvRole && !nouvPers) {
+        showToast("Choisissez au moins un élément à appliquer aux éléments cochés.", "error");
         return;
     }
 
@@ -3634,6 +3730,17 @@ function appliquerModificationGroupeeBase() {
                 });
             }
             if (nouvEt !== "") a.difficulte = parseInt(nouvEt) || 0;
+            if (nouvRole === "lecon") {
+                a.estLecon = true;
+                a.estEvaluation = false;
+                if (!a.typeRes) a.typeRes = "Leçon";
+            } else if (nouvRole === "eval") {
+                a.estEvaluation = true;
+                a.estLecon = false;
+            } else if (nouvRole === "atelier") {
+                a.estLecon = false;
+                a.estEvaluation = false;
+            }
             if (nouvPers) a.personnes = nouvPers;
             a.visuel = calculerCouleurAutomatique(a.matiere, a.niveau, a.typeRes);
             count++;
@@ -3652,6 +3759,7 @@ function appliquerModificationGroupeeBase() {
     if (document.getElementById('bulkInputAddSequence')) document.getElementById('bulkInputAddSequence').value = "";
     document.getElementById('bulkSelectPeriode').value = "";
     document.getElementById('bulkSelectEtoiles').value = "";
+    if (document.getElementById('bulkSelectRole')) document.getElementById('bulkSelectRole').value = "";
     document.getElementById('bulkInputPersonnes').value = "";
 
     selectionGroupeeBase.clear();
@@ -3659,18 +3767,18 @@ function appliquerModificationGroupeeBase() {
     majBarreActionGroupeeBase();
     sauvegarderProgrammations();
     postEditGlobal();
-    showToast(`✅ ${count} activité(s) modifiée(s) en lot !`, "success");
+    showToast(`✅ ${count} élément(s) modifié(s) en lot !`, "success");
 }
 
 function supprimerSelectionGroupeeBase() {
     if (selectionGroupeeBase.size === 0) return;
-    if (confirm(`Supprimer définitivement les ${selectionGroupeeBase.size} activité(s) cochée(s) ?`)) {
+    if (confirm(`Supprimer définitivement les ${selectionGroupeeBase.size} élément(s) coché(s) ?`)) {
         baseDonnees = baseDonnees.filter(a => !selectionGroupeeBase.has(a.id));
         selectionGroupeeBase.clear();
         let cbAll = document.getElementById('cbToutCocherBase'); if (cbAll) cbAll.checked = false;
         majBarreActionGroupeeBase();
         postEditGlobal();
-        showToast("Activités cochées supprimées.", "success");
+        showToast("Éléments cochés supprimés.", "success");
     }
 }
 
@@ -3703,8 +3811,13 @@ function filtrerBaseType(t) { filtreCourantTypeDB = t; afficherBase(); }
 function afficherBase() {
     const tbody = document.getElementById('tableBaseDonnees'); if (!tbody) return;
     let q = (document.getElementById('inputRechercheBase') ? document.getElementById('inputRechercheBase').value : "").toLowerCase().trim();
+    let statutFiltre = document.getElementById('selectFiltreStatutBase') ? document.getElementById('selectFiltreStatutBase').value : 'Tous';
+
     let liste = baseDonnees.filter(a => {
         if (!a) return false;
+        if (statutFiltre === 'Ateliers' && estLeconProf(a)) return false;
+        if (statutFiltre === 'Lecons' && !estLeconProf(a)) return false;
+        if (statutFiltre === 'Evaluations' && !a.estEvaluation) return false;
         if (filtreCourantDB !== 'Tous' && !(a.niveau || "").toUpperCase().includes(filtreCourantDB)) return false;
         if (filtreCourantMatiere !== 'Toutes' && (a.matiere || "").trim() !== filtreCourantMatiere) return false;
         if (filtreCourantSequenceDB === 'SANS_SEQUENCE' && extraireListeSequences(a.sequence).length > 0) return false;
@@ -3715,11 +3828,12 @@ function afficherBase() {
     });
 
     let cpt = document.getElementById('compteurBaseAffichee'); if (cpt) cpt.innerText = liste.length;
-    if (liste.length === 0) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:#7f8c8d; padding:20px;">Aucune activité trouvée.</td></tr>'; return; }
+    if (liste.length === 0) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:#7f8c8d; padding:20px;">Aucun élément trouvé.</td></tr>'; return; }
 
     let html = '';
     liste.forEach(a => {
         let coul = getCouleurMatiereBandeau(a.matiere), per = getPeriodesActiviteTexte(a);
+        let isLecon = estLeconProf(a);
         let badgePages = '';
         if (a.pageManuel && a.pageOrange) {
             badgePages = `<span style="background:#fef9e7; color:#7d6608; padding:1px 5px; border-radius:4px; font-size:11px; border:1px solid #f1c40f;">🟡 ${escHTML(a.pageManuel)}</span> <span style="background:#fdebd0; color:#9c640c; padding:1px 5px; border-radius:4px; font-size:11px; border:1px solid #f39c12;">🟠 ${escHTML(a.pageOrange)}</span> `;
@@ -3729,9 +3843,14 @@ function afficherBase() {
             badgePages = `<span style="background:#fdebd0; color:#9c640c; padding:1px 5px; border-radius:4px; font-size:11px; border:1px solid #f39c12;">🟠 ${escHTML(a.pageOrange)}</span> `;
         }
         let detailsLivres = `${badgePages}${a.varianteJaune ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 5px; border-radius:4px; font-size:11px;">📒 ${escHTML(a.varianteJaune)}</span> ` : ''}`;
+        let labelBtnLien = isLecon ? "📽️ PDF/PPT ↗" : "🔗 Anton ↗";
         let badgeLien = (a.lienExterne && a.lienExterne.trim())
-            ? `<a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir sur Anton">🔗 Anton ↗</a> `
+            ? `<a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir le lien">${labelBtnLien}</a> `
             : '';
+        let badgeRoleHtml = isLecon
+            ? ` <span class="badge-lecon-prof" title="Leçon explicite : visible uniquement dans votre Tableau de bord enseignante">👩‍🏫 Leçon Prof</span>`
+            : (a.estEvaluation ? ` <span class="badge-eval">🎯 Éval</span>` : '');
+
         let rep = getRepereAtelierHtml(a, null, 26);
         let coulVisuel = rep.bg;
         let isChecked = selectionGroupeeBase.has(a.id);
@@ -3739,26 +3858,26 @@ function afficherBase() {
             ? formaterAffichageSequences(a.sequence)
             : `<span style="color:#e67e22; font-weight:bold; cursor:pointer;" onclick="ouvrirModalGestionSequences()" title="Cliquez pour réassigner">⚠️ Sans séquence</span>`;
 
-        html += `<tr>
+        html += `<tr style="${isLecon ? 'background:#f4fbf9;' : ''}">
             <td style="text-align:center;"><input type="checkbox" class="cb-select-base" value="${a.id}" ${isChecked ? 'checked' : ''} onchange="toggleCheckActiviteBase('${a.id}', this.checked)" style="transform:scale(1.2); cursor:pointer;"></td>
             <td><strong>${escHTML(a.niveau)}</strong></td>
             <td><span class="filter-btn" style="padding:2px 6px; font-size:11px;">${escHTML(per)}</span></td>
             <td><span style="display:inline-block; padding:2px 7px; border-radius:4px; background:${coul.bg}; color:${coul.text}; font-size:11.5px; font-weight:bold; margin-bottom:2px;">${escHTML(a.matiere)}</span><br>${seqHtml} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
             <td>${formaterAffichageCompetences(a.competence)}</td>
-            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${detailsLivres}${badgeLien}${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}</td>
-            <td>${escHTML(a.typeRes || '')}</td>
+            <td>${isLecon ? '' : formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${detailsLivres}${badgeLien}${badgeRoleHtml}</td>
+            <td>${escHTML(a.typeRes || (isLecon ? 'Leçon' : ''))}</td>
             <td style="text-align:center;">${escHTML(a.personnes || '')}</td>
             <td style="text-align:center; background:${coulVisuel};">
                 ${rep.html}
                 <div style="margin-top:3px;">
                     <input type="color" value="${coulVisuel.startsWith('#') ? coulVisuel : '#ffffff'}" onchange="changerCouleurDB('${a.id}', this.value)" style="width:22px; height:18px; border:none; cursor:pointer; vertical-align:middle;">
                     <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" onclick="changerImageDB('${a.id}')">${a.imageSpecifique ? '🖼️' : '➕🖼️'}</button>
-                    <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Ajouter ou modifier le lien direct Anton" onclick="definirLienRapideDepuisDash('${a.id}')">${a.lienExterne ? '🔗' : '➕🔗'}</button>
+                    <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Ajouter ou modifier le lien direct (Anton / PDF / PowerPoint)" onclick="definirLienRapideDepuisDash('${a.id}')">${a.lienExterne ? '🔗' : '➕🔗'}</button>
                 </div>
             </td>
             <td>
                 <div style="display:flex; gap:4px; flex-wrap:wrap;">
-                    <button type="button" class="btn-action" style="padding:4px 8px;" onclick="assignerActivite('${a.id}')">📌</button>
+                    ${!isLecon ? `<button type="button" class="btn-action" style="padding:4px 8px;" title="Assigner aux élèves" onclick="assignerActivite('${a.id}')">📌</button>` : ''}
                     <button type="button" class="filter-btn" onclick="editerActiviteBase('${a.id}')">✏️</button>
                     <button type="button" class="btn-remove" style="padding:4px 8px;" onclick="supprimerActiviteBase('${a.id}')">🗑️</button>
                 </div>
@@ -3779,8 +3898,6 @@ function initProgFilters() {
     selMat.value = val;
 }
 
-// Permet de cocher/décocher une période (P1 à P5) ou TOUTES les périodes ("TOUTES") sur une séquence entière,
-// et répercute automatiquement ces périodes sur tous les ateliers appartenant à cette séquence !
 function toggleProgSequence(matiere, sequence, per) {
     let actuelles = getPeriodesSequence(matiere, sequence);
     let nouvelles = [];
@@ -3806,7 +3923,6 @@ function toggleProgSequence(matiere, sequence, per) {
         programmations[cleSeq] = nouvelles.join(', ');
     }
 
-    // Met à jour la période sur chaque atelier lié à cette séquence
     baseDonnees.forEach(a => {
         if (!a) return;
         if ((a.matiere || "").trim() === (matiere || "").trim() && activiteAppartientASequence(a, sequence)) {
@@ -3833,7 +3949,6 @@ function afficherProgrammation() {
     let mat = document.getElementById('selectMatiereProg') ? document.getElementById('selectMatiereProg').value : 'Toutes';
     let perFiltre = document.getElementById('selectPeriodeProg') ? document.getElementById('selectPeriodeProg').value : 'Toutes';
 
-    // Regrouper la base de données par (Matière + Séquence)
     let groupesSeqMap = new Map();
     baseDonnees.forEach(a => {
         if (!a) return;
@@ -3853,11 +3968,13 @@ function afficherProgrammation() {
                     niveaux: new Set(),
                     competences: new Set(),
                     nbAteliers: 0,
+                    nbLecons: 0,
                     nbEvals: 0
                 });
             }
             let g = groupesSeqMap.get(cleGroupe);
-            g.nbAteliers++;
+            if (estLeconProf(a)) g.nbLecons++;
+            else g.nbAteliers++;
             if (a.estEvaluation) g.nbEvals++;
             (a.niveau || "").split(/[,/]+/).map(x => x.trim()).filter(Boolean).forEach(n => g.niveaux.add(n));
             extraireListeCompetences(a.competence).forEach(c => g.competences.add(c));
@@ -3888,7 +4005,7 @@ function afficherProgrammation() {
                 <th style="width:90px;">Niveau(x)</th>
                 <th style="width:200px;">Matière</th>
                 <th style="width:230px;">Séquence</th>
-                <th>Compétence(s) & Ateliers inclus</th>
+                <th>Compétence(s) & Contenu</th>
                 <th style="width:310px; text-align:center;">Périodes (multi-sélection possible)</th>
             </tr>
         </thead>
@@ -3904,10 +4021,12 @@ function afficherProgrammation() {
             ).join('') +
             `<button type="button" class="prog-pill all-periods ${toutesCochees ? 'active' : ''}" onclick="toggleProgSequence('${escJS(g.matiere)}', '${escJS(g.sequence)}', 'TOUTES')" title="Sélectionner ou désélectionner toutes les périodes (P1 à P5)">🌟 Année</button>`;
 
+            let resumeNb = `${g.nbAteliers} atelier(s)${g.nbLecons > 0 ? ` • ${g.nbLecons} 👩‍🏫 leçon(s)` : ''}${g.nbEvals > 0 ? ` • ${g.nbEvals} 🎯 éval.` : ''}`;
+
             return `<tr>
                 <td><strong>${escHTML(nivTxt)}</strong></td>
                 <td><span style="background:${coul.bg}; color:#fff; padding:3px 8px; border-radius:4px; font-size:11.5px; font-weight:bold; display:inline-block;">${escHTML(g.matiere)}</span></td>
-                <td><strong style="font-size:13.5px; color:#1b4f72;">📑 ${escHTML(g.sequence)}</strong><br><small style="color:#666;">${g.nbAteliers} activité(s)${g.nbEvals > 0 ? ` dont ${g.nbEvals} 🎯 éval.` : ''}</small></td>
+                <td><strong style="font-size:13.5px; color:#1b4f72;">📑 ${escHTML(g.sequence)}</strong><br><small style="color:#666;">${resumeNb}</small></td>
                 <td>${compsHtml || '<em style="color:#999;">Aucune compétence renseignée</em>'}</td>
                 <td style="text-align:center;">${btnsPeriodes}</td>
             </tr>`;
@@ -3920,7 +4039,7 @@ function afficherChoixEtiquettes() {
     const niv = document.getElementById('selectNiveauEtiquettes') ? document.getElementById('selectNiveauEtiquettes').value : 'Tous';
     const mat = selMat ? selMat.value : 'Toutes', typeF = document.getElementById('selectTypeEtiquettes') ? document.getElementById('selectTypeEtiquettes').value : 'Tous';
     const cont = document.getElementById('listeChoixEtiquettes'); if (!cont) return;
-    let liste = baseDonnees.filter(a => a && (niv === 'Tous' || (a.niveau || "").toUpperCase().includes(niv)) && (mat === 'Toutes' || (a.matiere || "").trim() === mat) && (typeF === 'Tous' || (a.typeRes || "").trim() === typeF));
+    let liste = baseDonnees.filter(a => a && !estLeconProf(a) && (niv === 'Tous' || (a.niveau || "").toUpperCase().includes(niv)) && (mat === 'Toutes' || (a.matiere || "").trim() === mat) && (typeF === 'Tous' || (a.typeRes || "").trim() === typeF));
     cont.innerHTML = liste.map(a => {
         let rep = getRepereAtelierHtml(a, null, 18);
         return `<label style="display:inline-block; width:280px; margin:3px 6px; font-size:13px; cursor:pointer;"><input type="checkbox" class="cb-etiq-item" value="${a.id}" checked onchange="genererApercuEtiquettes()"> [${escHTML(a.niveau)}] ${rep.codeTexte ? '<strong>'+escHTML(rep.codeTexte)+'</strong> — ' : ''}${escHTML(a.ressource)}</label>`;
@@ -4004,7 +4123,7 @@ function genererMatriceCompetences() {
 
     let elevesNiv = getElevesTries().filter(e => (e.niveau || 'CP').toUpperCase() === niv);
     let acts = baseDonnees.filter(a => {
-        if (!a || !(a.niveau || "").toUpperCase().includes(niv)) return false;
+        if (!a || estLeconProf(a) || !(a.niveau || "").toUpperCase().includes(niv)) return false;
         if (mat !== 'Toutes' && (a.matiere || "").trim() !== mat) return false;
         let pArr = getPeriodesActivite(a);
         if (per === 'Non_affecte' && pArr.length > 0) return false;
@@ -4040,7 +4159,7 @@ function genererBilanEleve() {
     if (hist.length === 0) { cont.innerHTML = `<div class="empty-state"><p>Aucune activité validée pour ${escHTML(e.nom)}.</p></div>`; return; }
 
     let parMat = {};
-    hist.forEach(h => { let a = baseDonnees.find(b => b.id === h.idActivite); if (!a) return; let m = a.matiere || "Autres"; if (!parMat[m]) parMat[m] = []; parMat[m].push({ act: a, date: h.date, sequence: h.sequence || a.sequence }); });
+    hist.forEach(h => { let a = baseDonnees.find(b => b.id === h.idActivite && !estLeconProf(b)); if (!a) return; let m = a.matiere || "Autres"; if (!parMat[m]) parMat[m] = []; parMat[m].push({ act: a, date: h.date, sequence: h.sequence || a.sequence }); });
     let html = `<div class="card-panel"><h3>📋 Bilan des acquisitions de ${escHTML(e.nom)} (${escHTML(e.niveau)}) — ${hist.length} activités validées</h3>`;
     Object.keys(parMat).forEach(m => {
         let coul = getCouleurMatiereBandeau(m);
@@ -4056,7 +4175,7 @@ function exporterBilanEdulivret() {
     if (!idEl || !eleves[idEl]) { showToast("Sélectionnez d'abord un élève.", "error"); return; }
     let e = eleves[idEl], parMat = {};
     (e.historique || []).forEach(h => {
-        let a = baseDonnees.find(b => b.id === h.idActivite); if (!a) return;
+        let a = baseDonnees.find(b => b.id === h.idActivite && !estLeconProf(b)); if (!a) return;
         let m = a.matiere || "Autres"; if (!parMat[m]) parMat[m] = new Set();
         let cleComp = `${a.matiere}||${a.competence || a.ressource}`, niv = (e.bilanEvaluations && e.bilanEvaluations[cleComp]) ? e.bilanEvaluations[cleComp] : "Atteint";
         parMat[m].add(`- ${a.competence || a.ressource} (${h.sequence || a.sequence}) : ${niv}`);
