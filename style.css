@@ -379,11 +379,20 @@ input[type="text"], input[type="number"], input[type="date"], select {
     transform: scale(1.15);
 }
 
-/* Badge rituel récurrent */
+/* Badges rituels récurrents et leçons explicites */
 .badge-recurrent {
     background: #f4ecf7;
     color: #6c3483;
     border: 1px solid #d7bde2;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+}
+.badge-lecon-prof {
+    background: #d1f2eb;
+    color: #0e6251;
+    border: 1px solid #48c9b0;
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 11px;
