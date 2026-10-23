@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GestionClasse - Plans de Travail & Suivi</title>
-    <link rel="stylesheet" href="style.css?v=20261104">
+    <link rel="stylesheet" href="style.css?v=20261105">
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2c3e50">
 </head>
@@ -333,12 +333,12 @@
         </div>
 
         <!-- ========================================== -->
-        <!-- 4. BASE DE DONNÉES DES ATELIERS            -->
+        <!-- 4. BASE DE DONNÉES DES ATELIERS & LEÇONS   -->
         <!-- ========================================== -->
         <div id="pageBase" class="page">
             <div class="panel">
                 <div class="page-header-flex">
-                    <h2>📁 4. Base de données des activités et ateliers</h2>
+                    <h2>📁 4. Base de données des activités, ateliers et leçons</h2>
                     <div style="display:flex; gap:8px; flex-wrap:wrap;">
                         <button type="button" class="filter-btn" onclick="ouvrirModalGestionMatieres()">⚙️ Matières</button>
                         <button type="button" class="filter-btn" onclick="ouvrirModalGestionSequences()">⚙️ Séquences & Matières liées</button>
@@ -349,14 +349,14 @@
 
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
                     <div style="display:flex; gap:8px;">
-                        <button type="button" class="btn-action" id="btnToggleSaisieMulti" onclick="toggleModeSaisieMultiple()">⚡ Passer en mode Saisie Multiple (plusieurs exercices d'un coup)</button>
+                        <button type="button" class="btn-action" id="btnToggleSaisieMulti" onclick="toggleModeSaisieMultiple()">⚡ Passer en mode Saisie Multiple (plusieurs éléments d'un coup)</button>
                     </div>
                     <button type="button" class="btn-danger" onclick="viderBase()" style="font-size:12px;">🗑️ Vider toute la base</button>
                 </div>
 
                 <!-- MODE 1 : SAISIE SIMPLE -->
                 <div id="blocSaisieSimpleBase" class="card-panel" style="margin-bottom:20px;">
-                    <h2 id="titreFormulaireBase" style="font-size:16px; margin-bottom:12px; color:#1b4f72; border:none; padding:0;">➕ Ajouter ou modifier une activité</h2>
+                    <h2 id="titreFormulaireBase" style="font-size:16px; margin-bottom:12px; color:#1b4f72; border:none; padding:0;">➕ Ajouter ou modifier une activité / une leçon</h2>
                     <div class="form-grid-base">
                         <div>
                             <label>Matière * :</label>
@@ -364,32 +364,32 @@
                             <datalist id="listeMatieresConnues"></datalist>
                         </div>
                         <div style="grid-column: span 2;">
-                            <label>Séquence(s) / Sous-matière(s) * <small style="font-weight:normal; color:#666;">(Vous pouvez rattacher cet atelier à une ou plusieurs séquences : cherchez ou créez puis cliquez sur ➕)</small> :</label>
+                            <label>Séquence(s) / Sous-matière(s) * <small style="font-weight:normal; color:#666;">(Tapez ou choisissez puis appuyez sur <strong>Entrée</strong> ou cliquez sur <strong>➕ Séq.</strong>)</small> :</label>
                             <div id="tagsSequencesSimple" class="comp-tags-container"></div>
                             <div style="display:flex; gap:6px;">
-                                <input type="text" id="inputSequencePickerSimple" list="listeSequencesConnues" placeholder="🔍 Rechercher ou créer une séquence..." style="flex:1;" onchange="verifierSelectionDatalistSeqSimple(this)" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterTagSequenceSimple();}">
-                                <button type="button" class="btn-action" onclick="ajouterTagSequenceSimple()" title="Rattacher cette séquence à l'atelier">➕ Séq.</button>
+                                <input type="text" id="inputSequencePickerSimple" list="listeSequencesConnues" placeholder="🔍 Rechercher ou créer une séquence..." style="flex:1;" oninput="renderTagsSequencesSimple()" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterTagSequenceSimple();}">
+                                <button type="button" class="btn-action" onclick="ajouterTagSequenceSimple()" title="Rattacher cette séquence">➕ Séq.</button>
                             </div>
                             <input type="hidden" id="inputSequence">
                             <datalist id="listeSequencesConnues"></datalist>
                         </div>
                         <div>
-                            <label>Leçon (optionnel) :</label>
+                            <label>Code Leçon (optionnel) :</label>
                             <input type="text" id="inputLecon" placeholder="Ex: N1, G2...">
                         </div>
                         <div style="grid-column: span 2;">
-                            <label>Compétence(s) * <small style="font-weight:normal; color:#666;">(Tapez un mot-clé pour chercher une compétence existante ou en créer une nouvelle, puis cliquez sur ➕)</small> :</label>
+                            <label>Compétence(s) * <small style="font-weight:normal; color:#666;">(Tapez un mot-clé ou une nouvelle compétence puis appuyez sur <strong>Entrée</strong> ou cliquez sur <strong>➕ Comp.</strong>)</small> :</label>
                             <div id="tagsCompetencesSimple" class="comp-tags-container"></div>
                             <div style="display:flex; gap:6px;">
-                                <input type="text" id="inputCompetencePickerSimple" list="listeCompetencesConnues" placeholder="🔍 Rechercher par mot-clé ou créer une compétence..." style="flex:1;" onchange="verifierSelectionDatalistCompSimple(this)" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterTagCompetenceSimple();}">
-                                <button type="button" class="btn-action" onclick="ajouterTagCompetenceSimple()" title="Ajouter cette compétence à l'activité">➕ Comp.</button>
+                                <input type="text" id="inputCompetencePickerSimple" list="listeCompetencesConnues" placeholder="🔍 Rechercher par mot-clé ou écrire une nouvelle compétence..." style="flex:1;" oninput="renderTagsCompetencesSimple()" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterTagCompetenceSimple();}">
+                                <button type="button" class="btn-action" onclick="ajouterTagCompetenceSimple()" title="Ajouter cette compétence">➕ Comp.</button>
                             </div>
                             <input type="hidden" id="inputCompetence">
                             <datalist id="listeCompetencesConnues"></datalist>
                         </div>
                         <div>
-                            <label>Nom de la ressource / Exercice * :</label>
-                            <input type="text" id="inputRessource" placeholder="Ex: Ex 1 ou Cartes N1">
+                            <label>Nom de la ressource / Exercice / Titre Leçon * :</label>
+                            <input type="text" id="inputRessource" placeholder="Ex: Ex 1 ou Leçon : La phrase">
                         </div>
                         <div>
                             <label>Type de matériel (Support) * :</label>
@@ -446,35 +446,38 @@
                             <input type="text" id="inputImageAct" placeholder="URL image ou lien Google Drive">
                         </div>
                         <div>
-                            <label>🔗 Lien direct Anton / URL activité :</label>
-                            <input type="text" id="inputLienExterne" placeholder="https://anton.app/fr/...">
+                            <label>🔗 Lien Anton / 📽️ Lien PDF ou PowerPoint à projeter :</label>
+                            <input type="text" id="inputLienExterne" placeholder="URL Anton, PDF, PowerPoint, Drive, Canva...">
                         </div>
                     </div>
 
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px; margin-top:15px; padding-top:12px; border-top:1px dashed #ccc;">
-                        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
                             <strong>Niveaux :</strong>
                             <label><input type="checkbox" class="cb-niveau-form" value="CP" checked onchange="verifierNiveauxCMFormSimple()"> CP</label>
                             <label><input type="checkbox" class="cb-niveau-form" value="CE1" onchange="verifierNiveauxCMFormSimple()"> CE1</label>
                             <label><input type="checkbox" class="cb-niveau-form" value="CE2" onchange="verifierNiveauxCMFormSimple()"> CE2</label>
                             <label><input type="checkbox" class="cb-niveau-form" value="CM1" onchange="verifierNiveauxCMFormSimple()"> CM1</label>
                             <label><input type="checkbox" class="cb-niveau-form" value="CM2" onchange="verifierNiveauxCMFormSimple()"> CM2</label>
-                            <label style="margin-left:15px; background:#fcf3cf; padding:4px 8px; border-radius:4px; border:1px solid #f1c40f; cursor:pointer;">
-                                <input type="checkbox" id="cbEstEvaluation"> 🎯 Est une Évaluation (valide toute la séquence quand toutes ses évaluations sont faites)
+                            <label style="margin-left:8px; background:#fcf3cf; padding:4px 8px; border-radius:4px; border:1px solid #f1c40f; cursor:pointer; font-size:12.5px;">
+                                <input type="checkbox" id="cbEstEvaluation" onchange="if(this.checked) document.getElementById('cbEstLecon').checked=false;"> 🎯 Est une Évaluation
+                            </label>
+                            <label style="background:#e8f8f5; color:#117864; padding:4px 8px; border-radius:4px; border:1px solid #48c9b0; cursor:pointer; font-weight:bold; font-size:12.5px;" title="N'apparaît pas dans le plan des élèves : sert uniquement à remplir votre tableau des leçons à donner (avec lien PDF/PPT)">
+                                <input type="checkbox" id="cbEstLecon" onchange="gererCocheEstLeconSimple(this.checked)"> 👩‍🏫 Est une Leçon explicite (Tableau de bord prof uniquement)
                             </label>
                         </div>
                         <div style="display:flex; gap:8px;">
                             <button type="button" class="btn-remove" id="btnAnnulerEditBase" style="display:none;" onclick="annulerEditionBase()">Annuler</button>
-                            <button type="button" class="btn-valid" id="btnSubmitBase" onclick="enregistrerActiviteBase()">💾 Enregistrer l'activité</button>
+                            <button type="button" class="btn-valid" id="btnSubmitBase" onclick="enregistrerActiviteBase()">💾 Enregistrer</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- MODE 2 : SAISIE MULTIPLE D'EXERCICES POUR UNE OU PLUSIEURS SÉQUENCES -->
+                <!-- MODE 2 : SAISIE MULTIPLE D'EXERCICES OU DE LEÇONS -->
                 <div id="blocSaisieMultipleBase" class="card-panel" style="margin-bottom:20px; display:none; border:2px solid #2980b9; background:#f8fbff;">
-                    <h3 style="color:#1b4f72; margin-bottom:6px;">⚡ Saisie multiple d'exercices</h3>
+                    <h3 style="color:#1b4f72; margin-bottom:6px;">⚡ Saisie multiple d'exercices ou de leçons</h3>
                     <p style="font-size:12.5px; color:#555; margin-bottom:12px;">
-                        💡 <strong>Astuce :</strong> Cochez <strong>« 📋 Copier L1 »</strong> en haut d'une colonne si vous souhaitez que la valeur de la 1<sup>re</sup> ligne se duplique automatiquement sur toute la colonne (la colonne <strong>Leçon</strong> est cochée par défaut). Vous pouvez associer une ou plusieurs séquences communes en haut !
+                        💡 <strong>Astuce :</strong> Cochez <strong>« 📋 Copier L1 »</strong> en haut d'une colonne pour dupliquer la 1<sup>re</sup> ligne sur toute la colonne. Cochez la colonne <strong>👩‍🏫</strong> si la ligne est une leçon pour votre tableau de bord (invisible dans le plan des élèves). Pour valider une compétence en pastille, cliquez sur <code>➕</code> ou appuyez sur <code>Entrée</code>.
                     </p>
 
                     <div class="form-grid-base" style="margin-bottom:14px; padding-bottom:12px; border-bottom:1px dashed #bdc3c7;">
@@ -496,7 +499,7 @@
                             <label><strong>3. Séquence(s) commune(s) * :</strong></label>
                             <div id="tagsSequencesMulti" class="comp-tags-container"></div>
                             <div style="display:flex; gap:4px;">
-                                <input type="text" id="multiSequencePicker" list="listeSequencesConnues" placeholder="🔍 Séquence..." style="flex:1;" onchange="verifierSelectionDatalistSeqMulti(this)" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterTagSequenceMulti();}">
+                                <input type="text" id="multiSequencePicker" list="listeSequencesConnues" placeholder="🔍 Séquence..." style="flex:1;" oninput="renderTagsSequencesMulti()" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterTagSequenceMulti();}">
                                 <button type="button" class="btn-action" style="padding:4px 8px;" onclick="ajouterTagSequenceMulti()">➕</button>
                             </div>
                             <input type="hidden" id="multiSequence">
@@ -519,43 +522,44 @@
                         <table class="table-classique">
                             <thead>
                                 <tr>
-                                    <th style="width:72px;">
+                                    <th style="width:70px;">
                                         Leçon<br>
                                         <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_lecon" checked onchange="toggleDuplicationColonneMulti('lecon', this.checked)"> 📋 Copier L1</label>
                                     </th>
-                                    <th style="min-width:230px;">
-                                        Compétence(s) * <small>(chercher ou créer + ➕)</small><br>
+                                    <th style="min-width:225px;">
+                                        Compétence(s) * <small>(écrire puis ➕)</small><br>
                                         <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_comp" onchange="toggleDuplicationColonneMulti('comp', this.checked)"> 📋 Copier L1</label>
                                     </th>
-                                    <th>Nom de l'exercice *</th>
-                                    <th style="width:115px;">
+                                    <th>Nom de l'exercice / Titre Leçon *</th>
+                                    <th style="width:110px;">
                                         Support *<br>
                                         <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_type" onchange="toggleDuplicationColonneMulti('type', this.checked)"> 📋 Copier L1</label>
                                     </th>
-                                    <th style="width:65px;">N° Atel.</th>
-                                    <th style="width:68px;">
+                                    <th style="width:60px;">N° Atel.</th>
+                                    <th style="width:65px;">
                                         Nb Pers.<br>
                                         <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_pers" onchange="toggleDuplicationColonneMulti('pers', this.checked)"> 📋 Copier L1</label>
                                     </th>
-                                    <th style="width:88px;">
+                                    <th style="width:82px;">
                                         📘/🟡 Page<br>
                                         <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_page" onchange="toggleDuplicationColonneMulti('page', this.checked)"> 📋 Copier L1</label>
                                     </th>
-                                    <th style="width:88px;">
+                                    <th style="width:82px;">
                                         🟠 Page CM<br>
                                         <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_orange" onchange="toggleDuplicationColonneMulti('orange', this.checked)"> 📋 Copier L1</label>
                                     </th>
-                                    <th style="width:88px;">
+                                    <th style="width:82px;">
                                         📒 Var. Jaune<br>
                                         <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_jaune" onchange="toggleDuplicationColonneMulti('jaune', this.checked)"> 📋 Copier L1</label>
                                     </th>
-                                    <th style="width:110px;">🔗 Lien Anton</th>
-                                    <th style="width:88px;">
+                                    <th style="width:115px;">🔗 Lien Anton / PDF / PPT</th>
+                                    <th style="width:85px;">
                                         Étoiles *<br>
                                         <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_diff" onchange="toggleDuplicationColonneMulti('diff', this.checked)"> 📋 Copier L1</label>
                                     </th>
-                                    <th style="width:42px; text-align:center;">🎯</th>
-                                    <th style="width:36px;"></th>
+                                    <th style="width:38px; text-align:center;" title="Est une Évaluation">🎯</th>
+                                    <th style="width:38px; text-align:center;" title="Est une Leçon explicite (Tableau de bord prof uniquement)">👩‍🏫</th>
+                                    <th style="width:34px;"></th>
                                 </tr>
                             </thead>
                             <tbody id="tbodySaisieMultiple"></tbody>
@@ -567,7 +571,7 @@
                             <button type="button" class="btn-action" onclick="ajouterLigneSaisieMultiple(1)">➕ Ajouter 1 ligne</button>
                             <button type="button" class="filter-btn" onclick="ajouterLigneSaisieMultiple(5)">➕ Ajouter 5 lignes</button>
                         </div>
-                        <button type="button" class="btn-valid" onclick="enregistrerSaisieMultiple()" style="padding:10px 20px; font-size:14px;">💾 Enregistrer tous ces exercices d'un coup</button>
+                        <button type="button" class="btn-valid" onclick="enregistrerSaisieMultiple()" style="padding:10px 20px; font-size:14px;">💾 Enregistrer tous ces éléments d'un coup</button>
                     </div>
                 </div>
 
@@ -576,6 +580,12 @@
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
                         <div id="barreFiltresNiveauxBase" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
                         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                            <select id="selectFiltreStatutBase" onchange="afficherBase()">
+                                <option value="Tous">Tout afficher (Ateliers + Évals + Leçons 👩‍🏫)</option>
+                                <option value="Ateliers">📌 Ateliers & Exercices élèves uniquement</option>
+                                <option value="Lecons">👩‍🏫 Leçons explicites (Prof) uniquement</option>
+                                <option value="Evaluations">🎯 Évaluations uniquement</option>
+                            </select>
                             <select id="selectFiltreMatiereBase" onchange="filtrerBaseMatiere(this.value)"></select>
                             <select id="selectFiltreSequenceBase" onchange="filtrerBaseSequence(this.value)"></select>
                             <select id="selectFiltreTypeBase" onchange="filtrerBaseType(this.value)"></select>
@@ -587,12 +597,12 @@
                 <!-- BARRE DE MODIFICATION GROUPÉE D'ATELIERS COCHÉS -->
                 <div id="barreActionGroupeeBase" class="card-panel" style="display:none; margin-bottom:15px; background:#fef9e7; border:2px solid #f39c12;">
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                        <strong style="color:#d35400;">☑️ <span id="nbAteliersCochesBase">0</span> activité(s) sélectionnée(s) — Modifier en lot :</strong>
+                        <strong style="color:#d35400;">☑️ <span id="nbAteliersCochesBase">0</span> élément(s) sélectionné(s) — Modifier en lot :</strong>
                         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
                             <select id="bulkSelectType"><option value="">-- Changer Support --</option></select>
-                            <input type="text" id="bulkInputMatiere" list="listeMatieresConnues" placeholder="Changer Matière..." style="width:145px;">
-                            <input type="text" id="bulkInputSequence" list="listeSequencesConnues" placeholder="Remplacer Séq..." style="width:140px;" title="Remplace la séquence des ateliers cochés">
-                            <input type="text" id="bulkInputAddSequence" list="listeSequencesConnues" placeholder="➕ Ajouter Séq..." style="width:140px;" title="Ajoute une séquence supplémentaire sans effacer celles existantes">
+                            <input type="text" id="bulkInputMatiere" list="listeMatieresConnues" placeholder="Changer Matière..." style="width:140px;">
+                            <input type="text" id="bulkInputSequence" list="listeSequencesConnues" placeholder="Remplacer Séq..." style="width:135px;" title="Remplace la séquence des éléments cochés">
+                            <input type="text" id="bulkInputAddSequence" list="listeSequencesConnues" placeholder="➕ Ajouter Séq..." style="width:135px;" title="Ajoute une séquence supplémentaire sans effacer celles existantes">
                             <select id="bulkSelectPeriode">
                                 <option value="">-- Changer Période --</option>
                                 <option value="VIDER">🚫 Sans période</option>
@@ -610,14 +620,20 @@
                                 <option value="2">⭐⭐ (2)</option>
                                 <option value="3">⭐⭐⭐ (3)</option>
                             </select>
-                            <input type="text" id="bulkInputPersonnes" placeholder="Nb Pers (👤)..." style="width:95px;">
+                            <select id="bulkSelectRole">
+                                <option value="">-- Statut Élève / Prof --</option>
+                                <option value="atelier">📌 Atelier Élève</option>
+                                <option value="lecon">👩‍🏫 Leçon explicite (Prof)</option>
+                                <option value="eval">🎯 Évaluation</option>
+                            </select>
+                            <input type="text" id="bulkInputPersonnes" placeholder="Nb Pers (👤)..." style="width:90px;">
                             <button type="button" class="btn-valid" onclick="appliquerModificationGroupeeBase()">✅ Appliquer aux cochés</button>
-                            <button type="button" class="btn-danger" onclick="supprimerSelectionGroupeeBase()" title="Supprimer les activités cochées">🗑️</button>
+                            <button type="button" class="btn-danger" onclick="supprimerSelectionGroupeeBase()" title="Supprimer les éléments cochés">🗑️</button>
                         </div>
                     </div>
                 </div>
 
-                <p style="margin-bottom:8px; font-size:13px; color:#555;">Total affiché : <strong id="compteurBaseAffichee">0</strong> activité(s)</p>
+                <p style="margin-bottom:8px; font-size:13px; color:#555;">Total affiché : <strong id="compteurBaseAffichee">0</strong> élément(s)</p>
                 <table class="table-classique">
                     <thead>
                         <tr>
@@ -626,7 +642,7 @@
                             <th style="width:75px;">Période(s)</th>
                             <th style="width:175px;">Matière / Séquence(s)</th>
                             <th>Compétence(s)</th>
-                            <th>Ressource, Pages & Lien Anton</th>
+                            <th>Ressource / Leçon, Pages & Lien (Anton / PDF / PPT)</th>
                             <th style="width:90px;">Type</th>
                             <th style="width:65px; text-align:center;">Nb Pers.</th>
                             <th style="width:105px; text-align:center;">N° Atelier / Visuel</th>
@@ -1028,6 +1044,6 @@
 
     <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" style="display:none; position:fixed; bottom:20px; right:20px; z-index:99; background:#1b4f72; color:#fff; border:none; padding:12px 16px; border-radius:50%; cursor:pointer; font-size:16px; box-shadow:0 3px 8px rgba(0,0,0,0.2);">⬆️</button>
 
-    <script src="script.js?v=20261104"></script>
+    <script src="script.js?v=20261105"></script>
 </body>
 </html>
