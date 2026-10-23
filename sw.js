@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gestionclasse-v2026-11-04';
+const CACHE_NAME = 'gestionclasse-v2026-11-05';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
