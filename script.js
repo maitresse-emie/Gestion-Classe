@@ -930,6 +930,8 @@ function calculTailleStockage() {
     let jauge = document.getElementById('jaugeStockageFill');
     if (jauge) { jauge.style.width = pct + "%"; jauge.style.backgroundColor = pct > 80 ? "#e74c3c" : (pct > 50 ? "#f39c12" : "#27ae60"); }
 }
+
+
 // ==========================================
 // 3B. CORRECTIF SAUVEGARDE PROGRAMMATION ANNUELLE, ARCHITECTURE PÉRIODES & DÉCALAGE DYNAMIQUE
 // ==========================================
@@ -2433,7 +2435,6 @@ function afficherPlanHebdo() {
     let nbTabCount = planObjects.filter(b => b && estActiviteTablette(b)).length;
     let compteurTabElem = document.getElementById('compteurTablettesEleve'); if (compteurTabElem) compteurTabElem.innerText = `${nbTabCount}/${eleve.maxTablettes ?? 2}`;
 
-    // Séparation en 2 listes avec numérotation continue (1..N) pour le semainier unique
     let itemsFrancais = [];
     let itemsMaths = [];
     planObjects.forEach((a, idx) => {
@@ -2442,7 +2443,6 @@ function afficherPlanHebdo() {
         else itemsFrancais.push(obj);
     });
 
-    // Créer ou mettre à jour le conteneur des 2 tableaux séparés (📘 Français et 📕 Mathématiques)
     let tbodyOrigine = document.getElementById('tableApercuPlan');
     if (tbodyOrigine) {
         let tableOrigine = tbodyOrigine.closest('table');
@@ -2527,8 +2527,76 @@ function afficherHistorique() {
 }
 
 // ==========================================
-// 5. ONGLET 2 : IMPRESSION FICHES ÉLÈVES EN 3 PAGES (1. PLANNING À REMPLIR | 2. FRANÇAIS | 3. MATHÉMATIQUES)
+// 5. ONGLET 2 : IMPRESSION FICHES ÉLÈVES EN 3 PAGES + RÉGLAGE TAILLE DE POLICE SUR MESURE
 // ==========================================
+function appliquerStyleTaillePoliceImpression(taillePx) {
+    let basePx = Math.min(22, Math.max(6, parseFloat(taillePx) || 11));
+    let r = basePx / 11;
+
+    let styleEl = document.getElementById('styleDynamiquePoliceFiche');
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = 'styleDynamiquePoliceFiche';
+        document.head.appendChild(styleEl);
+    }
+
+    let padV = Math.max(2, Math.round(4 * r));
+    let padH = Math.max(3, Math.round(6 * r));
+    let numPx = Math.round((basePx + 2) * 10) / 10;
+    let sepPx = Math.round((basePx + 1) * 10) / 10;
+    let planThPx = Math.round((basePx + 0.5) * 10) / 10;
+    let planBoxPx = Math.round((basePx + 1.5) * 10) / 10;
+    let pillPx = Math.max(6.5, Math.round((basePx - 0.5) * 10) / 10);
+
+    styleEl.innerHTML = `
+        #zoneFichesImpression .fiche-plan-print table th,
+        #zoneFichesImpression .fiche-plan-print table td {
+            font-size: ${basePx}px !important;
+            padding: ${padV}px ${padH}px !important;
+        }
+        #zoneFichesImpression .fiche-plan-print .col-num {
+            font-size: ${numPx}px !important;
+        }
+        #zoneFichesImpression .fiche-plan-print .sequence-separator-row td {
+            font-size: ${sepPx}px !important;
+            padding: ${padV}px ${padH + 2}px !important;
+        }
+        #zoneFichesImpression .fiche-plan-print .planning-table th {
+            font-size: ${planThPx}px !important;
+        }
+        #zoneFichesImpression .fiche-plan-print .planning-cell-box {
+            font-size: ${planBoxPx}px !important;
+        }
+        #zoneFichesImpression .fiche-plan-print .comp-tag-pill,
+        #zoneFichesImpression .fiche-plan-print .badge-eval,
+        #zoneFichesImpression .fiche-plan-print td span {
+            font-size: ${pillPx}px !important;
+        }
+        #zoneFichesImpression .fiche-plan-print .print-visual-cell strong,
+        #zoneFichesImpression .fiche-plan-print .print-visual-cell span {
+            font-size: ${numPx}px !important;
+        }
+    `;
+}
+
+function modifierTaillePoliceImpression(delta, valeurDirecte = null) {
+    let actuelle = parseFloat(printConfig.taillePolice) || 11;
+    let nouvelle = (valeurDirecte !== null && valeurDirecte !== undefined)
+        ? parseFloat(valeurDirecte)
+        : Math.round((actuelle + delta) * 2) / 2;
+    if (isNaN(nouvelle)) nouvelle = 11;
+    nouvelle = Math.min(22, Math.max(6, nouvelle));
+
+    printConfig.taillePolice = nouvelle;
+    let inp = document.getElementById('printInputTaillePolice');
+    if (inp && parseFloat(inp.value) !== nouvelle) inp.value = nouvelle;
+
+    appliquerStyleTaillePoliceImpression(nouvelle);
+    localStorage.setItem(KEY_PRINT_CFG, JSON.stringify(printConfig));
+    declencherAutoSaveFirebase();
+    rafraichirFicheImpression();
+}
+
 function chargerConfigImpressionUI() {
     let t = document.getElementById('printInputTitre'); if (t) t.value = printConfig.titre || "Plan de travail";
     let c = document.getElementById('printInputConsigne'); if (c) c.value = printConfig.consigne || "";
@@ -2537,7 +2605,6 @@ function chargerConfigImpressionUI() {
     let cbSig = document.getElementById('printCbSignature'); if (cbSig) cbSig.checked = printConfig.afficherSignature !== false;
     let cbCom = document.getElementById('printCbCommentaire'); if (cbCom) cbCom.checked = Boolean(printConfig.afficherCommentaire);
 
-    // Ajoute l'option "📄 3 pages par élève (Planning + Français + Maths)" dans le sélecteur de format si elle n'y est pas encore
     let selFmt = document.getElementById('selectFormatImpression');
     if (selFmt && !Array.from(selFmt.options).some(o => o.value === '3PAGES')) {
         selFmt.innerHTML = `
@@ -2547,19 +2614,43 @@ function chargerConfigImpressionUI() {
         `;
         selFmt.value = '3PAGES';
     }
+
+    if (selFmt && !document.getElementById('blocControleTaillePoliceImp')) {
+        let labelFmt = selFmt.closest('label') || selFmt.parentElement;
+        let spanCtrl = document.createElement('div');
+        spanCtrl.id = 'blocControleTaillePoliceImp';
+        spanCtrl.style.cssText = 'display:inline-flex; align-items:center; gap:4px; background:#f8fbff; padding:4px 8px; border-radius:6px; border:1px solid #aed6f1;';
+        spanCtrl.innerHTML = `
+            <strong style="font-size:13px; color:#1b4f72;">🔤 Police :</strong>
+            <button type="button" class="filter-btn" style="padding:2px 7px; font-weight:bold;" onclick="modifierTaillePoliceImpression(-0.5)" title="Réduire la police">➖</button>
+            <input type="number" id="printInputTaillePolice" min="6" max="22" step="0.5" value="${parseFloat(printConfig.taillePolice) || 11}" onchange="modifierTaillePoliceImpression(0, this.value)" style="width:58px; text-align:center; font-weight:bold; padding:3px 4px;">
+            <span style="font-size:12px; color:#555;">px</span>
+            <button type="button" class="filter-btn" style="padding:2px 7px; font-weight:bold;" onclick="modifierTaillePoliceImpression(0.5)" title="Agrandir la police">➕</button>
+            <button type="button" class="filter-btn" style="padding:2px 6px; font-size:11px;" onclick="modifierTaillePoliceImpression(0, 11)" title="Remettre la taille par défaut (11 px)">11px</button>
+        `;
+        labelFmt.parentNode.insertBefore(spanCtrl, labelFmt.nextSibling);
+    } else {
+        let inpP = document.getElementById('printInputTaillePolice');
+        if (inpP) inpP.value = parseFloat(printConfig.taillePolice) || 11;
+    }
+
+    appliquerStyleTaillePoliceImpression(printConfig.taillePolice || 11);
 }
 
 function sauvegarderConfigImpression() {
     let t = document.getElementById('printInputTitre'), c = document.getElementById('printInputConsigne'), m = document.getElementById('printSelectMeteo');
     let cbCpt = document.getElementById('printCbCompteur'), cbSig = document.getElementById('printCbSignature'), cbCom = document.getElementById('printCbCommentaire');
+    let inpPol = document.getElementById('printInputTaillePolice');
     printConfig = {
         titre: t ? t.value : "Plan de travail",
         consigne: c ? c.value : "",
         meteo: m ? m.value : "meteo",
         afficherCompteur: cbCpt ? cbCpt.checked : true,
         afficherSignature: cbSig ? cbSig.checked : true,
-        afficherCommentaire: cbCom ? cbCom.checked : false
+        afficherCommentaire: cbCom ? cbCom.checked : false,
+        taillePolice: inpPol ? (parseFloat(inpPol.value) || 11) : (printConfig.taillePolice || 11)
     };
+    appliquerStyleTaillePoliceImpression(printConfig.taillePolice);
     localStorage.setItem(KEY_PRINT_CFG, JSON.stringify(printConfig));
     declencherAutoSaveFirebase();
     rafraichirFicheImpression();
@@ -2596,6 +2687,10 @@ function genererLignesTableImpressionPoleHtml(listeItems, e) {
     if (listeItems.length === 0) {
         return `<tr><td colspan="7" style="text-align:center; color:#7f8c8d; padding:12px;">Aucune activité programmée dans ce pôle.</td></tr>`;
     }
+    let basePx = parseFloat(printConfig.taillePolice) || 11;
+    let r = basePx / 11;
+    let tailleIcone = Math.max(18, Math.round(30 * r));
+
     let rowsHtml = "";
     let derniereCleSeq = "";
 
@@ -2615,7 +2710,7 @@ function genererLignesTableImpressionPoleHtml(listeItems, e) {
         }
 
         let infos = getInfosActivitePourEleve(a, e);
-        let rep = getRepereAtelierHtml(a, e, 32);
+        let rep = getRepereAtelierHtml(a, e, tailleIcone);
         let jourImp = (e.joursAssignes && e.joursAssignes[a.id]) ? e.joursAssignes[a.id] : "";
         let estValide = e.valides && e.valides[a.id];
         let rowClass = a.estEvaluation ? 'row-eval' : (estValide ? 'row-valide' : '');
@@ -2641,6 +2736,9 @@ function genererLignesTableImpressionPoleHtml(listeItems, e) {
 
 function genererHtmlFicheEleve(e, format = '3PAGES') {
     assurerStructureSemaines(e);
+    let basePx = parseFloat(printConfig.taillePolice) || 11;
+    let r = basePx / 11;
+
     let planObjects = getListeTrie(e.planHebdo, e.priorites || [], e);
 
     let itemsFrancais = [];
@@ -2667,10 +2765,9 @@ function genererHtmlFicheEleve(e, format = '3PAGES') {
         }
     });
 
-    // Nombre de lignes du semainier adapté au format (grand semainier confortable en mode 3 pages)
     let minLignesSemainier = (format === '3PAGES') ? 16 : 5;
     let nbLignesPlanning = Math.max(minLignesSemainier, Math.ceil(planObjects.length / 3), joursJours["Lundi"].length, joursJours["Mardi"].length, joursJours["Jeudi"].length, joursJours["Vendredi"].length);
-    let hauteurCelluleSemainier = (format === '3PAGES') ? '32px' : '24px';
+    let hauteurCelluleSemainier = (format === '3PAGES') ? Math.max(20, Math.round(32 * r)) + 'px' : Math.max(16, Math.round(24 * r)) + 'px';
 
     let planningRowsHtml = "";
     for (let i = 0; i < nbLignesPlanning; i++) {
@@ -2695,22 +2792,24 @@ function genererHtmlFicheEleve(e, format = '3PAGES') {
         </table>
     </div>`;
 
+    let piedPx = Math.round(10.5 * r * 10) / 10;
     let blocsPied = [];
     if (!printConfig || printConfig.afficherCompteur !== false) {
-        blocsPied.push(`<div style="flex:1; border:1px solid #7f8c8d; border-radius:4px; padding:6px 10px; display:flex; align-items:center; justify-content:space-between;"><strong>🏁 Bilan :</strong><span style="font-size:11px; font-weight:bold;">📘 Fr : .... / ${itemsFrancais.length} &nbsp;|&nbsp; 📕 Maths : .... / ${itemsMaths.length} &nbsp;|&nbsp; Total : .... / ${planObjects.length}</span></div>`);
+        blocsPied.push(`<div style="flex:1; border:1px solid #7f8c8d; border-radius:4px; padding:6px 10px; display:flex; align-items:center; justify-content:space-between;"><strong>🏁 Bilan :</strong><span style="font-size:${piedPx}px; font-weight:bold;">📘 Fr : .... / ${itemsFrancais.length} &nbsp;|&nbsp; 📕 Maths : .... / ${itemsMaths.length} &nbsp;|&nbsp; Total : .... / ${planObjects.length}</span></div>`);
     }
     if (!printConfig || printConfig.meteo !== 'aucun') {
-        let icones = `<span style="font-size:14px;">☀️</span> <span style="font-size:14px;">⛅</span> <span style="font-size:14px;">🌧️</span>`;
-        if (printConfig && printConfig.meteo === 'smileys') icones = `<span style="font-size:14px;">😊</span> <span style="font-size:14px;">😐</span> <span style="font-size:14px;">😟</span>`;
-        if (printConfig && printConfig.meteo === 'etoiles') icones = `<span style="font-size:14px;">⭐</span> <span style="font-size:14px;">⭐</span> <span style="font-size:14px;">⭐</span>`;
+        let icPx = Math.round(14 * r);
+        let icones = `<span style="font-size:${icPx}px;">☀️</span> <span style="font-size:${icPx}px;">⛅</span> <span style="font-size:${icPx}px;">🌧️</span>`;
+        if (printConfig && printConfig.meteo === 'smileys') icones = `<span style="font-size:${icPx}px;">😊</span> <span style="font-size:${icPx}px;">😐</span> <span style="font-size:${icPx}px;">😟</span>`;
+        if (printConfig && printConfig.meteo === 'etoiles') icones = `<span style="font-size:${icPx}px;">⭐</span> <span style="font-size:${icPx}px;">⭐</span> <span style="font-size:${icPx}px;">⭐</span>`;
         blocsPied.push(`<div style="flex:0.6; border:1px solid #7f8c8d; border-radius:4px; padding:6px 10px; display:flex; align-items:center; justify-content:space-around;"><strong>🌤️ Météo :</strong> ${icones}</div>`);
     }
     if (!printConfig || printConfig.afficherSignature !== false) {
         blocsPied.push(`<div style="flex:0.8; border:1px solid #7f8c8d; border-radius:4px; padding:6px 10px; display:flex; align-items:center; justify-content:space-between;"><strong>✍️ Signature :</strong> <span>........................</span></div>`);
     }
 
-    let bilanBasPageHtml = blocsPied.length > 0 ? `<div style="display:flex; justify-content:space-between; align-items:stretch; gap:8px; margin-top:8px; font-size:10.5px;">${blocsPied.join('')}</div>` : '';
-    let commBasHtml = (printConfig && printConfig.afficherCommentaire) ? `<div style="margin-top:8px; border:1px dashed #7f8c8d; border-radius:4px; padding:6px 10px; font-size:11px; min-height:42px;"><strong>💬 Mot de l'enseignante :</strong></div>` : '';
+    let bilanBasPageHtml = blocsPied.length > 0 ? `<div style="display:flex; justify-content:space-between; align-items:stretch; gap:8px; margin-top:8px; font-size:${piedPx}px;">${blocsPied.join('')}</div>` : '';
+    let commBasHtml = (printConfig && printConfig.afficherCommentaire) ? `<div style="margin-top:8px; border:1px dashed #7f8c8d; border-radius:4px; padding:6px 10px; font-size:${basePx}px; min-height:42px;"><strong>💬 Mot de l'enseignante :</strong></div>` : '';
 
     const theadAteliers = `<thead>
         <tr>
@@ -2725,19 +2824,17 @@ function genererHtmlFicheEleve(e, format = '3PAGES') {
     </thead>`;
 
     const semLabel = `Semaine ${(e.semaineIndex || 0) + 1} ${(e.dateDebut && e.dateFin) ? `du ${e.dateDebut} au ${e.dateFin}` : ''}`;
+    let h2Px = Math.round(17.5 * r * 10) / 10;
+    let subPx = Math.round(12 * r * 10) / 10;
 
-    // MODE 3 PAGES PAR ÉLÈVE :
-    // Page 1 : Le Planning à remplir + Bilan
-    // Page 2 : Les activités de Français
-    // Page 3 : Les activités de Mathématiques
     if (format === '3PAGES') {
         let page1Planning = `<div class="fiche-plan-print plan-eleve-page" style="page-break-after: always; break-after: page;">
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #2c3e50; padding-bottom:6px; margin-bottom:8px;">
-                <h2 style="margin:0; border:none; padding:0; font-size:18px; color:#2c3e50;">📅 ${escHTML(titreFiche)} — PLANNING DE ${escHTML(e.nom.toUpperCase())} (${escHTML(e.niveau)})</h2>
-                <span style="font-size:12.5px; color:#2c3e50; font-weight:bold;">${escHTML(semLabel)} (Page 1/3)</span>
+                <h2 style="margin:0; border:none; padding:0; font-size:${h2Px}px; color:#2c3e50;">📅 ${escHTML(titreFiche)} — PLANNING DE ${escHTML(e.nom.toUpperCase())} (${escHTML(e.niveau)})</h2>
+                <span style="font-size:${subPx}px; color:#2c3e50; font-weight:bold;">${escHTML(semLabel)} (Page 1/3)</span>
             </div>
-            <div style="background:#f8f9fa; border-left:4px solid #1b4f72; padding:6px 10px; font-size:11.5px; margin-bottom:10px; border-radius:4px;">📌 ${consignePerso}</div>
-            <div style="display:flex; gap:12px; margin-bottom:8px; font-size:12px; font-weight:bold;">
+            <div style="background:#f8f9fa; border-left:4px solid #1b4f72; padding:6px 10px; font-size:${basePx}px; margin-bottom:10px; border-radius:4px;">📌 ${consignePerso}</div>
+            <div style="display:flex; gap:12px; margin-bottom:8px; font-size:${subPx}px; font-weight:bold;">
                 <span style="background:#eaf2f8; color:#1b4f72; padding:4px 10px; border-radius:6px; border:1px solid #aed6f1;">📘 Activités de Français : N° ${itemsFrancais.length > 0 ? `${itemsFrancais[0].num} à ${itemsFrancais[itemsFrancais.length - 1].num}` : 'Aucune'} (${itemsFrancais.length})</span>
                 <span style="background:#fdedec; color:#c0392b; padding:4px 10px; border-radius:6px; border:1px solid #f5b7b1;">📕 Activités de Mathématiques : N° ${itemsMaths.length > 0 ? `${itemsMaths[0].num} à ${itemsMaths[itemsMaths.length - 1].num}` : 'Aucune'} (${itemsMaths.length})</span>
             </div>
@@ -2748,8 +2845,8 @@ function genererHtmlFicheEleve(e, format = '3PAGES') {
 
         let page2Francais = `<div class="fiche-plan-print plan-eleve-page" style="page-break-after: always; break-after: page; border-color:#1b4f72;">
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:3px solid #1b4f72; padding-bottom:6px; margin-bottom:8px;">
-                <h2 style="margin:0; border:none; padding:0; font-size:18px; color:#1b4f72;">📘 ACTIVITÉS DE FRANÇAIS — ${escHTML(e.nom)} (${escHTML(e.niveau)})</h2>
-                <span style="font-size:12.5px; color:#1b4f72; font-weight:bold;">${escHTML(semLabel)} (Page 2/3)</span>
+                <h2 style="margin:0; border:none; padding:0; font-size:${h2Px}px; color:#1b4f72;">📘 ACTIVITÉS DE FRANÇAIS — ${escHTML(e.nom)} (${escHTML(e.niveau)})</h2>
+                <span style="font-size:${subPx}px; color:#1b4f72; font-weight:bold;">${escHTML(semLabel)} (Page 2/3)</span>
             </div>
             <table class="table-classique" style="margin-top:0; margin-bottom:6px;">
                 ${theadAteliers}
@@ -2759,8 +2856,8 @@ function genererHtmlFicheEleve(e, format = '3PAGES') {
 
         let page3Maths = `<div class="fiche-plan-print plan-eleve-page" style="page-break-after: always; break-after: page; border-color:#c0392b;">
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:3px solid #c0392b; padding-bottom:6px; margin-bottom:8px;">
-                <h2 style="margin:0; border:none; padding:0; font-size:18px; color:#c0392b;">📕 ACTIVITÉS DE MATHÉMATIQUES — ${escHTML(e.nom)} (${escHTML(e.niveau)})</h2>
-                <span style="font-size:12.5px; color:#c0392b; font-weight:bold;">${escHTML(semLabel)} (Page 3/3)</span>
+                <h2 style="margin:0; border:none; padding:0; font-size:${h2Px}px; color:#c0392b;">📕 ACTIVITÉS DE MATHÉMATIQUES — ${escHTML(e.nom)} (${escHTML(e.niveau)})</h2>
+                <span style="font-size:${subPx}px; color:#c0392b; font-weight:bold;">${escHTML(semLabel)} (Page 3/3)</span>
             </div>
             <table class="table-classique" style="margin-top:0; margin-bottom:6px;">
                 ${theadAteliers}
@@ -2771,20 +2868,19 @@ function genererHtmlFicheEleve(e, format = '3PAGES') {
         return page1Planning + page2Francais + page3Maths;
     }
 
-    // MODE COMPACT A4 OU A5 (avec les 2 tableaux Français et Maths séparés sous le semainier unique)
     return `<div class="fiche-plan-print plan-eleve-page ${format === 'A4' ? 'a4-page' : ''}" style="page-break-after: always;">
         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1b4f72; padding-bottom:5px; margin-bottom:6px;">
-            <h2 style="margin:0; border:none; padding:0; font-size:17px; color:#1b4f72;">${escHTML(titreFiche)} — ${escHTML(e.nom)} (${escHTML(e.niveau)})</h2>
-            <span style="font-size:12px; color:#2c3e50; font-weight:bold;">${escHTML(semLabel)}</span>
+            <h2 style="margin:0; border:none; padding:0; font-size:${h2Px}px; color:#1b4f72;">${escHTML(titreFiche)} — ${escHTML(e.nom)} (${escHTML(e.niveau)})</h2>
+            <span style="font-size:${subPx}px; color:#2c3e50; font-weight:bold;">${escHTML(semLabel)}</span>
         </div>
-        <div style="background:#f8f9fa; border-left:4px solid #1b4f72; padding:4px 8px; font-size:11px; margin-bottom:6px; border-radius:4px;">📌 ${consignePerso}</div>
+        <div style="background:#f8f9fa; border-left:4px solid #1b4f72; padding:4px 8px; font-size:${basePx}px; margin-bottom:6px; border-radius:4px;">📌 ${consignePerso}</div>
         ${planningTableHtml}
-        <div style="background:#1b4f72 !important; color:#fff !important; padding:3px 8px; font-weight:bold; font-size:11.5px; border-radius:4px 4px 0 0; margin-top:6px;">📘 ACTIVITÉS DE FRANÇAIS (${itemsFrancais.length})</div>
+        <div style="background:#1b4f72 !important; color:#fff !important; padding:3px 8px; font-weight:bold; font-size:${subPx}px; border-radius:4px 4px 0 0; margin-top:6px;">📘 ACTIVITÉS DE FRANÇAIS (${itemsFrancais.length})</div>
         <table class="table-classique" style="margin-top:0; margin-bottom:8px;">
             ${theadAteliers}
             <tbody>${genererLignesTableImpressionPoleHtml(itemsFrancais, e)}</tbody>
         </table>
-        <div style="background:#c0392b !important; color:#fff !important; padding:3px 8px; font-weight:bold; font-size:11.5px; border-radius:4px 4px 0 0; margin-top:6px;">📕 ACTIVITÉS DE MATHÉMATIQUES (${itemsMaths.length})</div>
+        <div style="background:#c0392b !important; color:#fff !important; padding:3px 8px; font-weight:bold; font-size:${subPx}px; border-radius:4px 4px 0 0; margin-top:6px;">📕 ACTIVITÉS DE MATHÉMATIQUES (${itemsMaths.length})</div>
         <table class="table-classique" style="margin-top:0; margin-bottom:6px;">
             ${theadAteliers}
             <tbody>${genererLignesTableImpressionPoleHtml(itemsMaths, e)}</tbody>
@@ -3541,7 +3637,7 @@ function gererCocheLeconLigneMulti(cbElem) {
 function ajouterLigneSaisieMultiple(nbLignes = 1) {
     const tbody = document.getElementById('tbodySaisieMultiple'); if (!tbody) return;
     let isCM = estCMSelectionneFormMulti();
-    let optsTypes = `<option value="">-- Support * --</option>` + Object.keys(imagesParType || {}).map(t => `<option value="${escHTML(t)}">${escHTML(((imagesParType[t] && imagesParType[t].emoji) ? imagesParType[t].emoji + ' ' : '') + t)}</option>`).join('');
+    let optsTypes = `<option value="">-- Support * --</option>` + Object.keys(imagesParType || {}).map(t => `<option value="escHTML(t)">{escHTML(((imagesParType[t] && imagesParType[t].emoji) ? imagesParType[t].emoji + ' ' : '') + t)}</option>`).join('');
 
     let premiereLigne = tbody.querySelector('.ligne-saisie-multi');
     let getValSiCoche = (champ) => {
@@ -3695,7 +3791,7 @@ function ouvrirModalGestionMatieres() { afficherListeMatieresModal(); ouvrirModa
 function afficherListeMatieresModal() {
     let mats = [...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
     let cont = document.getElementById('listeMatieresModalContainer'); if (!cont) return;
-    cont.innerHTML = mats.map(m => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;"><input type="text" class="input-rename-mat" data-old="${escHTML(m)}" value="${escHTML(m)}" style="flex:1;"><button type="button" class="btn-remove" style="padding:4px 8px;" onclick="supprimerMatiereModal('${escJS(m)}')">🗑️</button></div>`).join('');
+    cont.innerHTML = mats.map(m => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;"><input type="text" class="input-rename-mat" data-old="escHTML(m)"value="{escHTML(m)}" style="flex:1;"><button type="button" class="btn-remove" style="padding:4px 8px;" onclick="supprimerMatiereModal('${escJS(m)}')">🗑️</button></div>`).join('');
 }
 function sauvegarderToutesMatieres() {
     document.querySelectorAll('.input-rename-mat').forEach(inp => {
@@ -3709,7 +3805,7 @@ function supprimerMatiereModal(m) { if (confirm(`Supprimer toutes les activités
 function ouvrirModalGestionSequences() {
     let sel = document.getElementById('filtreMatiereModalSeq');
     let mats = ['Toutes', ...new Set([...MATIERES_DEFAUT_LISTE, ...baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean)])];
-    if (sel) sel.innerHTML = mats.map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
+    if (sel) sel.innerHTML = mats.map(m => `<option value="escHTML(m)">{escHTML(m)}</option>`).join('');
     afficherListeSequencesModal();
     ouvrirModal('modalSequences');
 }
@@ -3742,7 +3838,7 @@ function afficherBlocOrphelinsDansModal(orphelines) {
         </div>
     </div>` + orphelines.map(o => `
         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12.5px; padding:5px 0; border-bottom:1px dashed #f39c12;">
-            <span style="flex:1;"><strong>[${escHTML(o.niveau)}]</strong> ${escHTML(o.matiere)} — <strong>${escHTML(o.ressource)}</strong> <small style="color:#666;">(${escHTML(o.competence)})</small></span>
+            <span style="flex:1;"><strong>[${escHTML(o.niveau)}]</strong> escHTML(o.matiere)—<strong>{escHTML(o.ressource)}</strong> <small style="color:#666;">(${escHTML(o.competence)})</small></span>
             <div style="display:flex; gap:4px; align-items:center;">
                 <input type="text" id="inp_orph_${o.id}" list="listeSequencesConnues" placeholder="Choisir ou écrire..." style="width:165px; padding:4px 6px; font-size:12px;">
                 <button type="button" class="btn-action" style="padding:4px 8px; font-size:12px;" onclick="reassignerActiviteSequence('${o.id}', document.getElementById('inp_orph_${o.id}').value)">OK</button>
@@ -3800,8 +3896,8 @@ function afficherListeSequencesModal() {
 
                 return `<div class="ligne-seq-modal" style="display:flex; gap:8px; align-items:center; margin-bottom:7px; padding-bottom:6px; border-bottom:1px solid #f1f5f9; flex-wrap:wrap;">
                     <span class="filter-btn" style="font-size:11px; padding:2px 6px; white-space:nowrap;">${escHTML(nivTxt)} • ${info.count} élém.</span>
-                    <input type="text" class="input-rename-seq" data-old="${escHTML(s)}" value="${escHTML(s)}" style="flex:1; min-width:170px;" title="Renommer cette séquence">
-                    <select class="select-matiere-seq" data-seq="${escHTML(s)}" data-old-mat="${escHTML(matUnique)}" style="width:240px; padding:5px; font-size:12px; background:#f8fbff; border:1px solid #2980b9; border-radius:5px; font-weight:600;" title="Changer la matière de tous les éléments de cette séquence">
+                    <input type="text" class="input-rename-seq" data-old="escHTML(s)"value="{escHTML(s)}" style="flex:1; min-width:170px;" title="Renommer cette séquence">
+                    <select class="select-matiere-seq" data-seq="escHTML(s)"data-old-mat="{escHTML(matUnique)}" style="width:240px; padding:5px; font-size:12px; background:#f8fbff; border:1px solid #2980b9; border-radius:5px; font-weight:600;" title="Changer la matière de tous les éléments de cette séquence">
                         ${optionsMatHtml}
                     </select>
                     <button type="button" class="btn-remove" style="padding:4px 8px;" title="Retirer cette séquence (les activités passeront en 'Sans séquence')" onclick="supprimerSequenceModal('${escJS(s)}')">🗑️</button>
@@ -3854,7 +3950,7 @@ function reassignerToutesOrphelinesModal() {
     if (!sequencesCustom.includes(nouvSeq)) sequencesCustom.push(nouvSeq);
     postEditGlobal();
     afficherListeSequencesModal();
-    showToast(`✅ ${count} élément(s) réassigné(s) dans "${nouvSeq}" !`, "success");
+    showToast(`✅ countélément(s)réassigné(s)dans"{nouvSeq}" !`, "success");
 }
 
 function sauvegarderToutesSequences() {
@@ -3896,7 +3992,7 @@ function sauvegarderToutesSequences() {
                 if (k.startsWith('SEQ||') && (k.endsWith('||' + oldV) || k.endsWith('||' + oldClean))) {
                     let parts = k.split('||');
                     if (newV) {
-                        programmations[`SEQ||${parts[1]}||${newClean}`] = programmations[k];
+                        programmations[`SEQ||parts[1]||{newClean}`] = programmations[k];
                     }
                     delete programmations[k];
                 }
@@ -3950,7 +4046,7 @@ function supprimerSequenceModal(s) {
 function ouvrirModalGestionCompetences() {
     let sel = document.getElementById('filtreMatiereModalComp');
     let mats = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))];
-    if (sel) sel.innerHTML = mats.map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
+    if (sel) sel.innerHTML = mats.map(m => `<option value="escHTML(m)">{escHTML(m)}</option>`).join('');
     afficherListeCompetencesModal(); ouvrirModal('modalCompetences');
 }
 function afficherListeCompetencesModal() {
@@ -3961,7 +4057,7 @@ function afficherListeCompetencesModal() {
     });
     let comps = [...new Set(toutesComps)].sort((a, b) => a.localeCompare(b, 'fr'));
     let cont = document.getElementById('listeCompetencesModalContainer'); if (!cont) return;
-    cont.innerHTML = comps.map(c => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;"><input type="text" class="input-rename-comp" data-old="${escHTML(c)}" value="${escHTML(c)}" style="flex:1;"></div>`).join('');
+    cont.innerHTML = comps.map(c => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;"><input type="text" class="input-rename-comp" data-old="escHTML(c)"value="{escHTML(c)}" style="flex:1;"></div>`).join('');
 }
 function sauvegarderToutesCompetences() {
     document.querySelectorAll('.input-rename-comp').forEach(inp => {
@@ -4343,7 +4439,7 @@ function supprimerSelectionGroupeeBase() {
 
 function initNiveaux() {
     const barre = document.getElementById('barreFiltresNiveauxBase');
-    if (barre) barre.innerHTML = ['Tous', 'CP', 'CE1', 'CE2', 'CM1', 'CM2'].map(n => `<button type="button" class="filter-btn ${filtreCourantDB === n ? 'active' : ''}" onclick="filtrerBaseNiveau('${n}')">${n}</button>`).join('');
+    if (barre) barre.innerHTML = ['Tous', 'CP', 'CE1', 'CE2', 'CM1', 'CM2'].map(n => `<button type="button" class="filter-btn filtreCourantDB===n?'active':''"onclick="filtrerBaseNiveau('{n}')">${n}</button>`).join('');
     const selMat = document.getElementById('selectFiltreMatiereBase');
     if (selMat) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}" ${filtreCourantMatiere === m ? 'selected' : ''}>Matière : ${escHTML(m)}</option>`).join('');
     const selSeq = document.getElementById('selectFiltreSequenceBase');
@@ -4355,7 +4451,7 @@ function initNiveaux() {
         let seqsDispo = [...new Set(toutesSeqs.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
         let nbSansSeq = baseDonnees.filter(b => extraireListeSequences(b.sequence).length === 0).length;
         selSeq.innerHTML = `<option value="Toutes" ${filtreCourantSequenceDB === 'Toutes' ? 'selected' : ''}>Séquence : Toutes</option>`
-            + (nbSansSeq > 0 ? `<option value="SANS_SEQUENCE" ${filtreCourantSequenceDB === 'SANS_SEQUENCE' ? 'selected' : ''}>⚠️ Sans séquence (${nbSansSeq})</option>` : '')
+            + (nbSansSeq > 0 ? `<option value="SANS_SEQUENCE" filtreCourantSequenceDB==='SANSSEQUENCE'?'selected':''>⚠️Sansséquence({nbSansSeq})</option>` : '')
             + seqsDispo.map(s => `<option value="${escHTML(s)}" ${filtreCourantSequenceDB === s ? 'selected' : ''}>Séquence : ${escHTML(s)}</option>`).join('');
     }
     const selType = document.getElementById('selectFiltreTypeBase');
@@ -4402,10 +4498,10 @@ function afficherBase() {
             badgePages = `<span style="background:#fdebd0; color:#9c640c; padding:1px 5px; border-radius:4px; font-size:11px; border:1px solid #f39c12;">🟠 ${escHTML(a.pageOrange)}</span> `;
         }
         let badgeGuideProf = (a.pageProf && a.pageProf.trim()) ? `<span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ${escHTML(a.pageProf.trim())}</span> ` : '';
-        let detailsLivres = `${badgePages}${a.varianteJaune ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 5px; border-radius:4px; font-size:11px;">📒 ${escHTML(a.varianteJaune)}</span> ` : ''}${badgeGuideProf}`;
+        let detailsLivres = `badgePages{a.varianteJaune ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 5px; border-radius:4px; font-size:11px;">📒 ${escHTML(a.varianteJaune)}</span> ` : ''}${badgeGuideProf}`;
         let labelBtnLien = isLecon ? "📽️ PDF/PPT ↗" : "🔗 Anton ↗";
         let badgeLien = (a.lienExterne && a.lienExterne.trim())
-            ? `<a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir le lien">${labelBtnLien}</a> `
+            ? `<a href="escHTML(a.lienExterne.trim())"target="blank"rel="noopenernoreferrer"style="background:#f5eef8;color:#6c3483;padding:1px6px;border-radius:4px;font-size:11px;font-weight:bold;text-decoration:none;border:1pxsolid#d7bde2;"title="Ouvrirlelien">{labelBtnLien}</a> `
             : '';
         let badgeRoleHtml = isLecon
             ? ` <span class="badge-lecon-prof" title="Leçon explicite : visible uniquement dans votre Programmation et votre Tableau de bord enseignante">👩‍🏫 Leçon Prof</span>`
@@ -4419,20 +4515,20 @@ function afficherBase() {
             : `<span style="color:#e67e22; font-weight:bold; cursor:pointer;" onclick="ouvrirModalGestionSequences()" title="Cliquez pour réassigner">⚠️ Sans séquence</span>`;
 
         html += `<tr style="${isLecon ? 'background:#f4fbf9;' : ''}">
-            <td style="text-align:center;"><input type="checkbox" class="cb-select-base" value="${a.id}" ${isChecked ? 'checked' : ''} onchange="toggleCheckActiviteBase('${a.id}', this.checked)" style="transform:scale(1.2); cursor:pointer;"></td>
+            <td style="text-align:center;"><input type="checkbox" class="cb-select-base" value="${a.id}" isChecked?'checked':''onchange="toggleCheckActiviteBase('{a.id}', this.checked)" style="transform:scale(1.2); cursor:pointer;"></td>
             <td><strong>${escHTML(a.niveau)}</strong></td>
             <td><span class="filter-btn" style="padding:2px 6px; font-size:11px;">${escHTML(per)}</span></td>
-            <td><span style="display:inline-block; padding:2px 7px; border-radius:4px; background:${coul.bg}; color:${coul.text}; font-size:11.5px; font-weight:bold; margin-bottom:2px;">${escHTML(a.matiere)}</span><br>${seqHtml} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
+            <td><span style="display:inline-block; padding:2px 7px; border-radius:4px; background:coul.bg;color:{coul.text}; font-size:11.5px; font-weight:bold; margin-bottom:2px;">escHTML(a.matiere)</span><br>{seqHtml} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
             <td>${formaterAffichageCompetences(a.competence)}</td>
-            <td>${isLecon ? '' : formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${detailsLivres}${badgeLien}${badgeRoleHtml}</td>
+            <td>isLecon?'':formaterEtoiles(a.difficulte)<strong>{escHTML(a.ressource)}</strong> detailsLivres{badgeLien}${badgeRoleHtml}</td>
             <td>${escHTML(a.typeRes || (isLecon ? 'Leçon' : ''))}</td>
             <td style="text-align:center;">${escHTML(a.personnes || '')}</td>
             <td style="text-align:center; background:${coulVisuel};">
                 ${rep.html}
                 <div style="margin-top:3px;">
-                    <input type="color" value="${coulVisuel.startsWith('#') ? coulVisuel : '#ffffff'}" onchange="changerCouleurDB('${a.id}', this.value)" style="width:22px; height:18px; border:none; cursor:pointer; vertical-align:middle;">
-                    <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" onclick="changerImageDB('${a.id}')">${a.imageSpecifique ? '🖼️' : '➕🖼️'}</button>
-                    <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Ajouter ou modifier le lien direct (Anton / PDF / PowerPoint)" onclick="definirLienRapideDepuisDash('${a.id}')">${a.lienExterne ? '🔗' : '➕🔗'}</button>
+                    <input type="color" value="coulVisuel.startsWith('#')?coulVisuel:'#ffffff'"onchange="changerCouleurDB('{a.id}', this.value)" style="width:22px; height:18px; border:none; cursor:pointer; vertical-align:middle;">
+                    <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" onclick="changerImageDB('a.id')">{a.imageSpecifique ? '🖼️' : '➕🖼️'}</button>
+                    <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Ajouter ou modifier le lien direct (Anton / PDF / PowerPoint)" onclick="definirLienRapideDepuisDash('a.id')">{a.lienExterne ? '🔗' : '➕🔗'}</button>
                 </div>
             </td>
             <td>
@@ -4494,7 +4590,7 @@ function getNiveauxPartageantLecon(pole, nivOrigine, texteLecon) {
 
         let prefix = a.lecon ? `${a.lecon.trim()} - `.toLowerCase() : "";
         let res = (a.ressource || "").trim().toLowerCase();
-        let labelComplet = (prefix && !res.startsWith(prefix)) ? `${prefix}${res}` : res;
+        let labelComplet = (prefix && !res.startsWith(prefix)) ? `prefix{res}` : res;
         let codeSeul = (a.lecon || "").trim().toLowerCase();
 
         if (txtNorm === labelComplet || txtNorm === res || (codeSeul !== "" && txtNorm === codeSeul)) {
@@ -4525,7 +4621,7 @@ function getLeconsPreEnregistreesPourSequencesSemaine(pole, niveauGroupe, seqsSe
         let prefix = a.lecon ? `${a.lecon.trim()} - ` : "";
         let titreBase = (a.ressource || a.competence || a.sequence || "Leçon").trim();
         let label = (prefix && !titreBase.toLowerCase().startsWith(prefix.toLowerCase()))
-            ? `${prefix}${titreBase}`
+            ? `prefix{titreBase}`
             : titreBase;
         if (!resMap.has(label)) {
             resMap.set(label, {
@@ -4557,7 +4653,7 @@ trouverInfosDepuisBaseLecon = function(pole, niveauGroupe, texteSaisi) {
 
         let prefix = a.lecon ? `${a.lecon.trim()} - `.toLowerCase() : "";
         let res = (a.ressource || "").trim().toLowerCase();
-        let labelComplet = (prefix && !res.startsWith(prefix)) ? `${prefix}${res}` : res;
+        let labelComplet = (prefix && !res.startsWith(prefix)) ? `prefix{res}` : res;
         let codeSeul = (a.lecon || "").trim().toLowerCase();
 
         return txtNorm === labelComplet || txtNorm === res || (codeSeul !== "" && txtNorm === codeSeul);
@@ -4641,7 +4737,7 @@ genererTableauLeconsPoleHtml = function(pole, titre, couleurBandeau, sem) {
             let bgCell = cell.fait ? "#d4efdf" : "#ffffff";
 
             let optionsNiv = `<option value="" ${!nivSlot ? 'selected' : ''}>-- Pause / Libre --</option>` +
-                OPTIONS_NIVEAUX_PROF_SELECT.map(n => `<option value="${n}" ${nivSlot === n ? 'selected' : ''}>${n}</option>`).join('');
+                OPTIONS_NIVEAUX_PROF_SELECT.map(n => `<option value="${n}" nivSlot===n?'selected':''>{n}</option>`).join('');
 
             let leconsDispo = getLeconsPreEnregistreesPourSequencesSemaine(pole, nivSlot, nomsSeqsSem);
             let valActuelle = (cell.texte || "").trim();
@@ -4653,7 +4749,7 @@ genererTableauLeconsPoleHtml = function(pole, titre, couleurBandeau, sem) {
                 optionsLeconsHtml = `<option value="">-- Aucune leçon 👩‍🏫 dans cette séquence --</option>`;
             } else {
                 optionsLeconsHtml = `<option value="">-- Choisir la leçon (${leconsDispo.length}) --</option>` +
-                    leconsDispo.map(l => `<option value="${escHTML(l.label)}" ${l.label === valActuelle ? 'selected' : ''}>👩‍🏫 ${escHTML(l.label)}${l.lien ? ' 📽️' : ''}</option>`).join('');
+                    leconsDispo.map(l => `<option value="${escHTML(l.label)}" ${l.label === valActuelle ? 'selected' : ''}>👩‍🏫 escHTML(l.label){l.lien ? ' 📽️' : ''}</option>`).join('');
             }
             if (valActuelle && !leconsDispo.some(l => l.label === valActuelle)) {
                 optionsLeconsHtml += `<option value="${escHTML(valActuelle)}" selected>👩‍🏫 ${escHTML(valActuelle)}</option>`;
@@ -4671,37 +4767,37 @@ genererTableauLeconsPoleHtml = function(pole, titre, couleurBandeau, sem) {
                 ? `<div style="display:flex; gap:3px; align-items:center; margin-top:4px; flex-wrap:wrap;">
                        ${badgeGuideHtml}
                        <a href="${escHTML(lienDoc)}" target="_blank" rel="noopener noreferrer" class="btn-action" style="flex:1; text-align:center; text-decoration:none; padding:2px 6px; font-size:11px; background:#8e44ad !important; color:#fff !important; border-radius:4px;" title="Ouvrir le diaporama (PDF / PowerPoint) à projeter">📽️ Projeter ↗</a>
-                       <button type="button" class="filter-btn" style="padding:2px 5px; font-size:10px;" title="Modifier le lien" onclick="definirLienSlotLeconProf('${pole}', '${jour}', ${slotIdx})">✏️</button>
+                       <button type="button" class="filter-btn" style="padding:2px 5px; font-size:10px;" title="Modifier le lien" onclick="definirLienSlotLeconProf('pole','{jour}', ${slotIdx})">✏️</button>
                    </div>`
                 : `<div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
                        <span>${badgeGuideHtml}</span>
-                       <button type="button" class="filter-btn" style="padding:1px 5px; font-size:10px; opacity:0.8;" title="Ajouter un lien PDF ou PowerPoint à projeter" onclick="definirLienSlotLeconProf('${pole}', '${jour}', ${slotIdx})">➕📎 PDF/PPT</button>
+                       <button type="button" class="filter-btn" style="padding:1px 5px; font-size:10px; opacity:0.8;" title="Ajouter un lien PDF ou PowerPoint à projeter" onclick="definirLienSlotLeconProf('pole','{jour}', ${slotIdx})">➕📎 PDF/PPT</button>
                    </div>`;
 
             return `<td style="background:${bgCell}; padding:6px; vertical-align:top; border:1px solid #cbd5e1;">
                 <div class="no-print">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:3px;">
-                        <select onchange="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'niveau', this.value)" style="background:${stNiv.bg}; color:${stNiv.text}; font-weight:bold; font-size:12px; padding:2px 6px; border-radius:5px; border:1px solid rgba(0,0,0,0.18); cursor:pointer;">
+                        <select onchange="majSlotLeconProf('pole','{jour}', slotIdx,'niveau',this.value)"style="background:{stNiv.bg}; color:${stNiv.text}; font-weight:bold; font-size:12px; padding:2px 6px; border-radius:5px; border:1px solid rgba(0,0,0,0.18); cursor:pointer;">
                             ${optionsNiv}
                         </select>
                         <div style="display:flex; align-items:center; gap:2px;">
                             ${slotIdx > 0 ? `<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Monter ce groupe plus tôt" onclick="deplacerSlotLeconProf('${pole}', '${jour}', ${slotIdx}, -1)">▲</button>` : ''}
                             ${slotIdx < (NB_SLOTS_PASSAGES_PROF - 1) ? `<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Descendre ce groupe plus tard" onclick="deplacerSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 1)">▼</button>` : ''}
                             <label style="font-size:11px; font-weight:bold; color:${cell.fait ? '#1e8449' : '#7f8c8d'}; cursor:pointer; margin-left:3px; display:flex; align-items:center; gap:2px;" title="Cocher quand la leçon a été donnée">
-                                <input type="checkbox" ${cell.fait ? 'checked' : ''} onchange="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'fait', this.checked)" style="cursor:pointer;">
+                                <input type="checkbox" cell.fait?'checked':''onchange="majSlotLeconProf('{pole}', '${jour}', ${slotIdx}, 'fait', this.checked)" style="cursor:pointer;">
                                 ${cell.fait ? '✅' : ''}
                             </label>
                         </div>
                     </div>
                     ${rappelSeqHtml}
-                    <select onchange="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'texte', this.value)" style="width:100%; padding:5px 6px; font-size:12px; font-weight:${valActuelle ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:5px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;'}">
+                    <select onchange="majSlotLeconProf('pole','{jour}', slotIdx,'texte',this.value)"style="width:100%;padding:5px6px;font-size:12px;font-weight:{valActuelle ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:5px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;'}">
                         ${optionsLeconsHtml}
                     </select>
                     ${btnDocHtml}
                 </div>
 
                 <div class="only-print-lecons" style="text-align:center; padding:3px 2px;">
-                    ${nivSlot ? `<div style="display:inline-block; background:${stNiv.bg} !important; color:${stNiv.text} !important; font-weight:bold; font-size:11.5pt; padding:2px 10px; border-radius:6px; border:1px solid #2c3e50; margin-bottom:4px;">${escHTML(nivSlot)}</div>` : ''}
+                    ${nivSlot ? `<div style="display:inline-block; background:${stNiv.bg} !important; color:stNiv.text!important;font-weight:bold;font-size:11.5pt;padding:2px10px;border-radius:6px;border:1pxsolid#2c3e50;margin-bottom:4px;">{escHTML(nivSlot)}</div>` : ''}
                     <div id="print_txt_${pole}_${jour}_${slotIdx}" style="font-size:11pt; font-weight:bold; color:#1e293b; line-height:1.2; ${cell.fait ? 'text-decoration:line-through; opacity:0.6;' : ''}">
                         ${escHTML(cell.texte || '—')}
                     </div>
@@ -4711,7 +4807,7 @@ genererTableauLeconsPoleHtml = function(pole, titre, couleurBandeau, sem) {
 
         return `<tr>
             <td style="font-weight:bold; font-size:12.5px; text-align:center; background:#f1f5f9; color:#1e293b; width:88px;">
-                <span style="display:inline-block; background:${couleurBandeau}; color:#fff; border-radius:50%; width:22px; height:22px; line-height:22px; font-size:12px; margin-bottom:2px;">${slotIdx + 1}</span><br>
+                <span style="display:inline-block; background:couleurBandeau;color:#fff;border-radius:50%;width:22px;height:22px;line-height:22px;font-size:12px;margin-bottom:2px;">{slotIdx + 1}</span><br>
                 <small>${labelsOrdre[slotIdx]}</small>
             </td>
             ${cellsHtml}
@@ -4743,7 +4839,7 @@ genererTableauLeconsPoleHtml = function(pole, titre, couleurBandeau, sem) {
 function initProgFilters() {
     const selMat = document.getElementById('selectMatiereProg'); if (!selMat) return;
     let val = selMat.value || 'Toutes';
-    selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
+    selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="escHTML(m)">{escHTML(m)}</option>`).join('');
     selMat.value = val;
 }
 
@@ -4883,7 +4979,7 @@ function majLeconJourProg(per, semIdx, niv, pole, jour, champ, valeur) {
     afficherProgrammation();
     rafraichirDashboard();
     if (champ === 'texte' && valeur && niveauxCibles.length > 1) {
-        showToast(`👩‍🏫 Leçon placée automatiquement en ${niveauxCibles.join(' & ')} (${jour} - S${semIdx + 1}) !`, "success");
+        showToast(`👩‍🏫 Leçon placée automatiquement en niveauxCibles.join('&')({jour} - S${semIdx + 1}) !`, "success");
     }
 }
 
@@ -5004,11 +5100,11 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
     });
 
     let idDlSeq = `dl_prog_seq_${per}_${niv}_${pole}`;
-    let dlSeqHtml = `<datalist id="${idDlSeq}">` + Array.from(toutesSeqsPoleSet).map(s => `<option value="${escHTML(s)}">`).join('') + `</datalist>`;
+    let dlSeqHtml = `<datalist id="idDlSeq">`+Array.from(toutesSeqsPoleSet).map(s=>`<optionvalue="{escHTML(s)}">`).join('') + `</datalist>`;
 
     let reservoirHtml = seqsPeriode.length > 0
         ? `<div style="margin-bottom:10px; padding:8px 10px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:6px; font-size:12px;">
-               <strong style="color:${couleurPole};">📌 Séquences affectées en ${per} (${niv}) :</strong> ` +
+               <strong style="color:${couleurPole};">📌 Séquences affectées en per({niv}) :</strong> ` +
                seqsPeriode.map(sp => {
                    let semsPlacees = [];
                    pObj.semaines.forEach((sm, idx) => {
@@ -5016,11 +5112,11 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
                        if ((b.sequences || []).some(x => x.nom.toLowerCase() === sp.nom.toLowerCase())) semsPlacees.push(`S${idx + 1}`);
                    });
                    let badgeSem = semsPlacees.length > 0 ? ` <strong style="color:#27ae60;">[${semsPlacees.join(', ')}]</strong>` : ` <em style="color:#e67e22;">(à placer)</em>`;
-                   return `<span class="seq-tag-pill" style="margin:2px;">📑 ${escHTML(sp.nom)}${badgeSem}</span>`;
+                   return `<span class="seq-tag-pill" style="margin:2px;">📑 escHTML(sp.nom){badgeSem}</span>`;
                }).join(' ') +
            `</div>`
         : `<div style="margin-bottom:10px; padding:6px 10px; background:#fef9e7; border-radius:6px; font-size:12px; color:#7d6608;">
-               ℹ️ Aucune séquence de ${niv} n'est encore cochée en <strong>${per}</strong> dans la <em>Répartition annuelle</em> (vous pouvez tout de même en ajouter ci-dessous).
+               ℹ️ Aucune séquence de nivn'estencorecochéeen<strong>{per}</strong> dans la <em>Répartition annuelle</em> (vous pouvez tout de même en ajouter ci-dessous).
            </div>`;
 
     let rowsHtml = pObj.semaines.map((sem, semIdx) => {
@@ -5034,9 +5130,9 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
             let nivPart = getNiveauxPartageantSequence(sq.nom, pole, niv);
             let badgeShared = nivPart.length > 1 ? ` <small style="opacity:0.75;">(${nivPart.join('/')})</small>` : '';
             return `<span class="seq-tag-pill ${sq.fait ? 'done' : ''}" style="display:inline-flex; align-items:center; gap:4px; margin:2px 0;">
-                <input type="checkbox" ${sq.fait ? 'checked' : ''} onchange="toggleFaitSequenceSemaineProg('${per}', ${semIdx}, '${niv}', '${pole}', ${sqIdx})" title="Cocher quand la séquence est faite (si non cochée, elle glissera en S+1 lors du report)">
-                <span>📑 ${escHTML(sq.nom)}${badgeShared}</span>
-                <span class="comp-tag-remove" onclick="retirerSequenceDeSemaineProg('${per}', ${semIdx}, '${niv}', '${pole}', ${sqIdx})" title="Retirer de cette semaine">✖</span>
+                <input type="checkbox" sq.fait?'checked':''onchange="toggleFaitSequenceSemaineProg('{per}', semIdx,'{niv}', '${pole}', ${sqIdx})" title="Cocher quand la séquence est faite (si non cochée, elle glissera en S+1 lors du report)">
+                <span>📑 escHTML(sq.nom){badgeShared}</span>
+                <span class="comp-tag-remove" onclick="retirerSequenceDeSemaineProg('${per}', semIdx,'{niv}', '${pole}', ${sqIdx})" title="Retirer de cette semaine">✖</span>
             </span>`;
         }).join(' ');
 
@@ -5056,7 +5152,7 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
                 optionsSelectHtml = `<option value="">-- ⚠️ Aucune leçon 👩‍🏫 enregistrée pour cette séquence --</option>`;
             } else {
                 optionsSelectHtml = `<option value="">-- Choisir la leçon (${leconsDispoSemaine.length} dispo) --</option>` +
-                    leconsDispoSemaine.map(l => `<option value="${escHTML(l.label)}" ${l.label === valActuelle ? 'selected' : ''}>👩‍🏫 ${escHTML(l.label)}${l.lien ? ' 📽️' : ''}</option>`).join('');
+                    leconsDispoSemaine.map(l => `<option value="${escHTML(l.label)}" ${l.label === valActuelle ? 'selected' : ''}>👩‍🏫 escHTML(l.label){l.lien ? ' 📽️' : ''}</option>`).join('');
             }
             if (valActuelle && !leconsDispoSemaine.some(l => l.label === valActuelle)) {
                 optionsSelectHtml += `<option value="${escHTML(valActuelle)}" selected>👩‍🏫 ${escHTML(valActuelle)}</option>`;
@@ -5065,7 +5161,7 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
             return `<td style="background:${cell.fait ? '#e8f8f5' : '#fff'}; vertical-align:top; padding:6px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                     <label style="font-size:11px; font-weight:bold; color:${cell.fait ? '#1e8449' : '#7f8c8d'}; cursor:pointer; display:flex; align-items:center; gap:3px;" title="Cocher quand la leçon est faite">
-                        <input type="checkbox" ${cell.fait ? 'checked' : ''} onchange="majLeconJourProg('${per}', ${semIdx}, '${niv}', '${pole}', '${jour}', 'fait', this.checked)">
+                        <input type="checkbox" cell.fait?'checked':''onchange="majLeconJourProg('{per}', semIdx,'{niv}', 'pole','{jour}', 'fait', this.checked)">
                         ${cell.fait ? '✅ Fait' : 'À faire'}
                     </label>
                     <div style="display:flex; gap:3px; align-items:center;">
@@ -5073,7 +5169,7 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
                         ${lienEff ? `<a href="${escHTML(lienEff)}" target="_blank" rel="noopener noreferrer" style="background:#8e44ad; color:#fff; padding:1px 6px; border-radius:4px; font-size:10.5px; text-decoration:none; font-weight:bold;" title="Diaporama automatiquement rattaché depuis la base : cliquer pour projeter">📽️ Diapo ↗</a>` : ''}
                     </div>
                 </div>
-                <select onchange="majLeconJourProg('${per}', ${semIdx}, '${niv}', '${pole}', '${jour}', 'texte', this.value)" style="width:100%; padding:5px 6px; font-size:12px; font-weight:${valActuelle ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:4px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;'}">
+                <select onchange="majLeconJourProg('${per}', semIdx,'{niv}', 'pole','{jour}', 'texte', this.value)" style="width:100%; padding:5px 6px; font-size:12px; font-weight:${valActuelle ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:4px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;'}">
                     ${optionsSelectHtml}
                 </select>
             </td>`;
@@ -5083,18 +5179,18 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
 
         return `<tr>
             <td style="background:#f8fafc; text-align:center; vertical-align:top; width:115px;">
-                <strong style="color:${couleurPole}; font-size:13.5px;">Semaine ${semIdx + 1}</strong>${datesLabel}
+                <strong style="color:${couleurPole}; font-size:13.5px;">Semaine semIdx+1</strong>{datesLabel}
                 <div style="margin-top:6px; display:flex; flex-direction:column; gap:3px;">
                     <button type="button" class="filter-btn" style="font-size:10.5px; padding:2px 5px;" onclick="envoyerSemaineProgVersDashboard('${per}', ${semIdx})" title="Ouvrir cette semaine sur le Tableau de bord">📊 Tableau de bord</button>
-                    <button type="button" class="btn-action" style="font-size:10.5px; padding:2px 5px;" onclick="actionReporterEtDecalerDepuisProg('${per}', ${semIdx}, '${niv}', '${pole}')" title="Reporter les non-cochés de cette semaine sur S+1 et décaler toutes les semaines suivantes">⏭️ Reporter non-faits</button>
-                    <button type="button" class="filter-btn" style="font-size:10.5px; padding:2px 5px;" onclick="actionRecalerAvanceDepuisProg('${per}', ${semIdx}, '${niv}', '${pole}')" title="Si vous avez pris de l'avance, remonte les séances de S+1 sur les créneaux libres">⏮️ Recaler l'avance</button>
+                    <button type="button" class="btn-action" style="font-size:10.5px; padding:2px 5px;" onclick="actionReporterEtDecalerDepuisProg('${per}', semIdx,'{niv}', '${pole}')" title="Reporter les non-cochés de cette semaine sur S+1 et décaler toutes les semaines suivantes">⏭️ Reporter non-faits</button>
+                    <button type="button" class="filter-btn" style="font-size:10.5px; padding:2px 5px;" onclick="actionRecalerAvanceDepuisProg('${per}', semIdx,'{niv}', '${pole}')" title="Si vous avez pris de l'avance, remonte les séances de S+1 sur les créneaux libres">⏮️ Recaler l'avance</button>
                 </div>
             </td>
             <td style="vertical-align:top; width:215px;">
                 <div style="margin-bottom:5px; display:flex; flex-direction:column; gap:3px;">${pillsSeqHtml}</div>
                 <div style="display:flex; gap:3px;">
-                    <input type="text" id="${idInputAddSeq}" list="${idDlSeq}" placeholder="+ Séquence..." style="flex:1; padding:4px 6px; font-size:11.5px;" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterSequenceDansSemaineProg('${per}', ${semIdx}, '${niv}', '${pole}', this.value); this.value='';}">
-                    <button type="button" class="btn-action" style="padding:3px 7px; font-size:11.5px;" onclick="let inp=document.getElementById('${idInputAddSeq}'); ajouterSequenceDansSemaineProg('${per}', ${semIdx}, '${niv}', '${pole}', inp.value); inp.value='';">➕</button>
+                    <input type="text" id="idInputAddSeq"list="{idDlSeq}" placeholder="+ Séquence..." style="flex:1; padding:4px 6px; font-size:11.5px;" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterSequenceDansSemaineProg('${per}', semIdx,'{niv}', '${pole}', this.value); this.value='';}">
+                    <button type="button" class="btn-action" style="padding:3px 7px; font-size:11.5px;" onclick="let inp=document.getElementById('idInputAddSeq');ajouterSequenceDansSemaineProg('{per}', semIdx,'{niv}', '${pole}', inp.value); inp.value='';">➕</button>
                 </div>
             </td>
             ${cellsJoursHtml}
@@ -5103,7 +5199,7 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
 
     return `<div class="card-panel" style="border-top:4px solid ${couleurPole}; margin-bottom:22px; padding:14px 16px;">
         <div style="background:${couleurPole} !important; color:#fff !important; padding:7px 12px; border-radius:6px; font-weight:bold; font-size:14.5px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
-            <span>${titrePole} — Niveau ${niv} (${per})</span>
+            <span>${titrePole} — Niveau niv({per})</span>
             <small style="font-weight:normal; opacity:0.95;">Les séquences & leçons communes (ex: CM1/CM2) se placent automatiquement dans les deux niveaux</small>
         </div>
         ${dlSeqHtml}
@@ -5132,7 +5228,7 @@ function afficherProgrammationPeriodeDetail(per) {
     let pObj = progPeriodesData.periodes[per];
 
     let barreNiveauxHtml = NIVEAUX_LISTE.map(n =>
-        `<button type="button" class="filter-btn ${niveauActifProgPeriode === n ? 'active' : ''}" style="font-size:14px; padding:7px 16px;" onclick="changerNiveauActifProgPeriode('${n}')">🎓 Niveau ${n}</button>`
+        `<button type="button" class="filter-btn niveauActifProgPeriode===n?'active':''"style="font-size:14px;padding:7px16px;"onclick="changerNiveauActifProgPeriode('{n}')">🎓 Niveau ${n}</button>`
     ).join('');
 
     let html = `
@@ -5144,10 +5240,10 @@ function afficherProgrammationPeriodeDetail(per) {
             </div>
             <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
                 <label style="font-size:13px; font-weight:bold;">Nombre de semaines (${per}) :
-                    <input type="number" min="1" max="15" value="${pObj.nbSemaines}" onchange="modifierNbSemainesPeriode('${per}', this.value)" style="width:60px; font-weight:bold;">
+                    <input type="number" min="1" max="15" value="pObj.nbSemaines"onchange="modifierNbSemainesPeriode('{per}', this.value)" style="width:60px; font-weight:bold;">
                 </label>
                 <label style="font-size:13px; font-weight:bold;">Lundi de la Semaine 1 :
-                    <input type="date" min="2025-01-01" max="2035-12-31" value="${escHTML(pObj.dateDebutP_ISO || '')}" onchange="modifierDateDebutPeriode('${per}', this.value)">
+                    <input type="date" min="2025-01-01" max="2035-12-31" value="escHTML(pObj.dateDebutPISO||'')"onchange="modifierDateDebutPeriode('{per}', this.value)">
                 </label>
             </div>
         </div>
@@ -5184,7 +5280,7 @@ function afficherProgrammation() {
 
         seqs.forEach(s => {
             let matClean = (a.matiere || "").trim();
-            let cleGroupe = `${matClean}||${s}`;
+            let cleGroupe = `matClean||{s}`;
             if (!groupesSeqMap.has(cleGroupe)) {
                 groupesSeqMap.set(cleGroupe, {
                     matiere: matClean,
@@ -5241,16 +5337,16 @@ function afficherProgrammation() {
             let compsHtml = Array.from(g.competences).map(c => `<span style="display:inline-block; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:1px 6px; margin:1px 2px; font-size:11px;">${escHTML(c)}</span>`).join(' ');
 
             let btnsPeriodes = PERIODES_LISTE.map(per =>
-                `<button type="button" class="prog-pill ${pArr.includes(per) ? 'active' : ''}" onclick="toggleProgSequence('${escJS(g.matiere)}', '${escJS(g.sequence)}', '${per}')" title="Activer/Désactiver ${per} pour cette séquence">${per}</button>`
+                `<button type="button" class="prog-pill pArr.includes(per)?'active':''"onclick="toggleProgSequence('{escJS(g.matiere)}', 'escJS(g.sequence)','{per}')" title="Activer/Désactiver perpourcetteséquence">{per}</button>`
             ).join('') +
-            `<button type="button" class="prog-pill all-periods ${toutesCochees ? 'active' : ''}" onclick="toggleProgSequence('${escJS(g.matiere)}', '${escJS(g.sequence)}', 'TOUTES')" title="Sélectionner ou désélectionner toutes les périodes (P1 à P5)">🌟 Année</button>`;
+            `<button type="button" class="prog-pill all-periods toutesCochees?'active':''"onclick="toggleProgSequence('{escJS(g.matiere)}', '${escJS(g.sequence)}', 'TOUTES')" title="Sélectionner ou désélectionner toutes les périodes (P1 à P5)">🌟 Année</button>`;
 
-            let resumeNb = `${g.nbAteliers} atelier(s)${g.nbLecons > 0 ? ` • ${g.nbLecons} 👩‍🏫 leçon(s)` : ''}${g.nbEvals > 0 ? ` • ${g.nbEvals} 🎯 éval.` : ''}`;
+            let resumeNb = `g.nbAteliersatelier(s){g.nbLecons > 0 ? ` • ${g.nbLecons} 👩‍🏫 leçon(s)` : ''}${g.nbEvals > 0 ? ` • ${g.nbEvals} 🎯 éval.` : ''}`;
 
             return `<tr>
                 <td><strong>${escHTML(nivTxt)}</strong></td>
-                <td><span style="background:${coul.bg}; color:#fff; padding:3px 8px; border-radius:4px; font-size:11.5px; font-weight:bold; display:inline-block;">${escHTML(g.matiere)}</span></td>
-                <td><strong style="font-size:13.5px; color:#1b4f72;">📑 ${escHTML(g.sequence)}</strong><br><small style="color:#666;">${resumeNb}</small></td>
+                <td><span style="background:coul.bg;color:#fff;padding:3px8px;border-radius:4px;font-size:11.5px;font-weight:bold;display:inline-block;">{escHTML(g.matiere)}</span></td>
+                <td><strong style="font-size:13.5px; color:#1b4f72;">📑 escHTML(g.sequence)</strong><br><smallstyle="color:#666;">{resumeNb}</small></td>
                 <td>${compsHtml || '<em style="color:#999;">Aucune compétence renseignée</em>'}</td>
                 <td style="text-align:center;">${btnsPeriodes}</td>
             </tr>`;
@@ -5262,14 +5358,14 @@ function afficherProgrammation() {
 // ==========================================
 function afficherChoixEtiquettes() {
     const selMat = document.getElementById('selectMatiereEtiquettes');
-    if (selMat && selMat.options.length <= 1) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
+    if (selMat && selMat.options.length <= 1) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="escHTML(m)">{escHTML(m)}</option>`).join('');
     const niv = document.getElementById('selectNiveauEtiquettes') ? document.getElementById('selectNiveauEtiquettes').value : 'Tous';
     const mat = selMat ? selMat.value : 'Toutes', typeF = document.getElementById('selectTypeEtiquettes') ? document.getElementById('selectTypeEtiquettes').value : 'Tous';
     const cont = document.getElementById('listeChoixEtiquettes'); if (!cont) return;
     let liste = baseDonnees.filter(a => a && !estLeconProf(a) && (niv === 'Tous' || (a.niveau || "").toUpperCase().includes(niv)) && (mat === 'Toutes' || (a.matiere || "").trim() === mat) && (typeF === 'Tous' || (a.typeRes || "").trim() === typeF));
     cont.innerHTML = liste.map(a => {
         let rep = getRepereAtelierHtml(a, null, 18);
-        return `<label style="display:inline-block; width:280px; margin:3px 6px; font-size:13px; cursor:pointer;"><input type="checkbox" class="cb-etiq-item" value="${a.id}" checked onchange="genererApercuEtiquettes()"> [${escHTML(a.niveau)}] ${rep.codeTexte ? '<strong>'+escHTML(rep.codeTexte)+'</strong> — ' : ''}${escHTML(a.ressource)}</label>`;
+        return `<label style="display:inline-block; width:280px; margin:3px 6px; font-size:13px; cursor:pointer;"><input type="checkbox" class="cb-etiq-item" value="a.id"checkedonchange="genererApercuEtiquettes()">[{escHTML(a.niveau)}] rep.codeTexte?'<strong>'+escHTML(rep.codeTexte)+'</strong>—':''{escHTML(a.ressource)}</label>`;
     }).join('');
     genererApercuEtiquettes();
 }
@@ -5306,7 +5402,7 @@ function genererApercuEtiquettes() {
         let borderCss = showBorder ? `0.4mm solid ${coul.bg}` : `none`;
 
         let bandeauHtml = (showMatiere || showNiveau) ? `
-            <div style="background:${coul.bg} !important; color:${coul.text} !important; font-size:${Math.max(7, fsPt - 2.5)}pt; font-weight:bold; padding:1px 5px; border-radius:3px; display:flex; justify-content:space-between; align-items:center; width:100%;">
+            <div style="background:coul.bg!important;color:{coul.text} !important; font-size:${Math.max(7, fsPt - 2.5)}pt; font-weight:bold; padding:1px 5px; border-radius:3px; display:flex; justify-content:space-between; align-items:center; width:100%;">
                 <span>${showMatiere ? escHTML(a.matiere) : ''}</span>
                 <span>${showNiveau ? escHTML(a.niveau) : ''}</span>
             </div>` : '';
@@ -5316,16 +5412,16 @@ function genererApercuEtiquettes() {
                 ${rep.html}
             </div>` : '';
 
-        let nomHtml = showNom ? `<div style="font-weight:bold; font-size:${fsPt}pt; color:#1e293b; line-height:1.15;">${escHTML(a.ressource)}</div>` : '';
-        let seqHtml = (showSeq && (a.sequence || a.lecon)) ? `<div style="font-size:${Math.max(7, fsPt - 2)}pt; color:#333; line-height:1.1;">${escHTML(a.sequence || '')} ${a.lecon ? '— ' + escHTML(a.lecon) : ''}</div>` : '';
-        let compHtml = (showComp && a.competence) ? `<div style="font-size:${Math.max(6.5, fsPt - 2.5)}pt; color:#444; font-style:italic; line-height:1.1;">${escHTML(a.competence)}</div>` : '';
+        let nomHtml = showNom ? `<div style="font-weight:bold; font-size:fsPtpt;color:#1e293b;line-height:1.15;">{escHTML(a.ressource)}</div>` : '';
+        let seqHtml = (showSeq && (a.sequence || a.lecon)) ? `<div style="font-size:Math.max(7,fsPt-2)pt;color:#333;line-height:1.1;">{escHTML(a.sequence || '')} ${a.lecon ? '— ' + escHTML(a.lecon) : ''}</div>` : '';
+        let compHtml = (showComp && a.competence) ? `<div style="font-size:Math.max(6.5,fsPt-2.5)pt;color:#444;font-style:italic;line-height:1.1;">{escHTML(a.competence)}</div>` : '';
         let piedHtml = (showEtoiles || showPers) ? `
             <div style="display:flex; justify-content:space-between; align-items:center; font-size:${Math.max(7, fsPt - 2.5)}pt; width:100%;">
                 <span>${showEtoiles ? formaterEtoiles(a.difficulte) : ''}</span>
                 <span>${showPers ? escHTML(a.personnes || '') : ''}</span>
             </div>` : '';
 
-        return `<div class="etiquette-item" style="width:${wMm}mm; height:${hMm}mm; background:${bgEtiq} !important; border:${borderCss}; font-size:${fsPt}pt;">
+        return `<div class="etiquette-item" style="width:wMmmm;height:{hMm}mm; background:bgEtiq!important;border:{borderCss}; font-size:${fsPt}pt;">
             ${bandeauHtml}
             ${codeHtml}
             ${nomHtml}
@@ -5343,7 +5439,7 @@ function lancerImpressionEtiquettes() {
 
 function genererMatriceCompetences() {
     const selMat = document.getElementById('selectMatiereMatrice');
-    if (selMat && selMat.options.length <= 1) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
+    if (selMat && selMat.options.length <= 1) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="escHTML(m)">{escHTML(m)}</option>`).join('');
     const niv = document.getElementById('selectNiveauMatrice')?.value || 'CP', per = document.getElementById('selectPeriodeMatrice')?.value || 'Toutes', mat = selMat ? selMat.value : 'Toutes';
     const evalOnly = document.getElementById('cbEvalOnlyMatrice') ? document.getElementById('cbEvalOnlyMatrice').checked : false;
     const cont = document.getElementById('conteneurMatrice'); if (!cont) return;
@@ -5364,7 +5460,7 @@ function genererMatriceCompetences() {
     acts.forEach(a => {
         let coul = getCouleurMatiereBandeau(a.matiere), p = getPeriodesActiviteTexte(a);
         let badgePer = p !== '-' ? `<span class="filter-btn" style="padding:1px 5px; font-size:10.5px; margin-left:4px;">${escHTML(p)}</span>` : '';
-        html += `<tr><td><span style="background:${coul.bg}; color:#fff; padding:1px 6px; border-radius:4px; font-size:11px;">${escHTML(a.matiere)}</span>${badgePer} <strong>${escHTML(a.ressource)}</strong> ${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}<br><small>${escHTML(a.sequence)} — ${escHTML(a.competence)}</small></td>` + elevesNiv.map(e => {
+        html += `<tr><td><span style="background:coul.bg;color:#fff;padding:1px6px;border-radius:4px;font-size:11px;">{escHTML(a.matiere)}</span>badgePer<strong>{escHTML(a.ressource)}</strong> a.estEvaluation?'<spanclass="badge-eval">🎯</span>':''<br><small>{escHTML(a.sequence)} — ${escHTML(a.competence)}</small></td>` + elevesNiv.map(e => {
             let valide = e.historique && e.historique.some(h => h.idActivite === a.id), enCours = e.planHebdo && e.planHebdo.includes(a.id);
             return `<td style="text-align:center; font-size:16px;">${valide ? '✅' : (enCours ? '⏳' : '—')}</td>`;
         }).join('') + `</tr>`;
@@ -5387,12 +5483,12 @@ function genererBilanEleve() {
 
     let parMat = {};
     hist.forEach(h => { let a = baseDonnees.find(b => b.id === h.idActivite && !estLeconProf(b)); if (!a) return; let m = a.matiere || "Autres"; if (!parMat[m]) parMat[m] = []; parMat[m].push({ act: a, date: h.date, sequence: h.sequence || a.sequence }); });
-    let html = `<div class="card-panel"><h3>📋 Bilan des acquisitions de ${escHTML(e.nom)} (${escHTML(e.niveau)}) — ${hist.length} activités validées</h3>`;
+    let html = `<div class="card-panel"><h3>📋 Bilan des acquisitions de escHTML(e.nom)({escHTML(e.niveau)}) — ${hist.length} activités validées</h3>`;
     Object.keys(parMat).forEach(m => {
         let coul = getCouleurMatiereBandeau(m);
-        html += `<div class="bandeau-matiere-print" style="background:${coul.bg}; color:${coul.text}; margin-top:15px;">${escHTML(m.toUpperCase())}</div><table class="table-classique"><thead><tr><th style="width:90px;">Date</th><th style="width:160px;">Séquence</th><th>Compétence(s)</th><th>Atelier validé</th><th style="width:170px;">Maîtrise (LSU)</th></tr></thead><tbody>` + parMat[m].map(it => {
-            let cleComp = `${it.act.matiere}||${it.act.competence || it.act.ressource}`, nivMaitrise = e.bilanEvaluations[cleComp] || "Atteint";
-            return `<tr><td>${escHTML(it.date)}</td><td>${escHTML(it.sequence)}</td><td><strong>${formaterAffichageCompetences(it.act.competence)}</strong></td><td>${escHTML(it.act.ressource)}</td><td><select onchange="changerBilanEval('${e.id}', '${escJS(cleComp)}', this.value)" style="width:100%; font-weight:bold;"><option value="Dépassé" ${nivMaitrise === 'Dépassé' ? 'selected' : ''}>✨ Dépassé</option><option value="Atteint" ${nivMaitrise === 'Atteint' ? 'selected' : ''}>✅ Atteint</option><option value="Partiellement atteint" ${nivMaitrise === 'Partiellement atteint' ? 'selected' : ''}>🟠 Partiellement atteint</option><option value="Non atteint" ${nivMaitrise === 'Non atteint' ? 'selected' : ''}>🔴 Non atteint</option></select></td></tr>`;
+        html += `<div class="bandeau-matiere-print" style="background:coul.bg;color:{coul.text}; margin-top:15px;">${escHTML(m.toUpperCase())}</div><table class="table-classique"><thead><tr><th style="width:90px;">Date</th><th style="width:160px;">Séquence</th><th>Compétence(s)</th><th>Atelier validé</th><th style="width:170px;">Maîtrise (LSU)</th></tr></thead><tbody>` + parMat[m].map(it => {
+            let cleComp = `it.act.matiere||{it.act.competence || it.act.ressource}`, nivMaitrise = e.bilanEvaluations[cleComp] || "Atteint";
+            return `<tr><td>escHTML(it.date)</td><td>{escHTML(it.sequence)}</td><td><strong>formaterAffichageCompetences(it.act.competence)</strong></td><td>{escHTML(it.act.ressource)}</td><td><select onchange="changerBilanEval('e.id','{escJS(cleComp)}', this.value)" style="width:100%; font-weight:bold;"><option value="Dépassé" ${nivMaitrise === 'Dépassé' ? 'selected' : ''}>✨ Dépassé</option><option value="Atteint" ${nivMaitrise === 'Atteint' ? 'selected' : ''}>✅ Atteint</option><option value="Partiellement atteint" ${nivMaitrise === 'Partiellement atteint' ? 'selected' : ''}>🟠 Partiellement atteint</option><option value="Non atteint" ${nivMaitrise === 'Non atteint' ? 'selected' : ''}>🔴 Non atteint</option></select></td></tr>`;
         }).join('') + `</tbody></table>`;
     });
     cont.innerHTML = html + `</div>`;
@@ -5404,10 +5500,10 @@ function exporterBilanEdulivret() {
     (e.historique || []).forEach(h => {
         let a = baseDonnees.find(b => b.id === h.idActivite && !estLeconProf(b)); if (!a) return;
         let m = a.matiere || "Autres"; if (!parMat[m]) parMat[m] = new Set();
-        let cleComp = `${a.matiere}||${a.competence || a.ressource}`, niv = (e.bilanEvaluations && e.bilanEvaluations[cleComp]) ? e.bilanEvaluations[cleComp] : "Atteint";
-        parMat[m].add(`- ${a.competence || a.ressource} (${h.sequence || a.sequence}) : ${niv}`);
+        let cleComp = `a.matiere||{a.competence || a.ressource}`, niv = (e.bilanEvaluations && e.bilanEvaluations[cleComp]) ? e.bilanEvaluations[cleComp] : "Atteint";
+        parMat[m].add(`- a.competence||a.ressource({h.sequence || a.sequence}) : ${niv}`);
     });
-    let lignes = [`BILAN DES COMPÉTENCES — ${e.nom.toUpperCase()} (${e.niveau})\n`];
+    let lignes = [`BILAN DES COMPÉTENCES — e.nom.toUpperCase()({e.niveau})\n`];
     Object.keys(parMat).forEach(m => { lignes.push(`=== ${m.toUpperCase()} ===`); parMat[m].forEach(it => lignes.push(it)); lignes.push(''); });
     let zone = document.getElementById('zoneExportEdulivret'), ta = document.getElementById('textareaExportLSU');
     if (zone && ta) { zone.style.display = 'block'; ta.value = lignes.join('\n'); ta.select(); navigator.clipboard?.writeText(ta.value).catch(() => {}); showToast("📋 Bilan copié dans le presse-papiers !", "success"); }
@@ -5449,3 +5545,4 @@ document.addEventListener("DOMContentLoaded", function() {
     rafraichirToutApresImport();
     tenterConnexionAutoFirebase();
 });
+
