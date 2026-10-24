@@ -3663,7 +3663,7 @@ function enregistrerSaisieMultiple() {
             programmations[getCleProgSequence(matiere, sq)] = periode;
         }
     });
-    sauvegarderProgrammations(); postEditGlobal();
+    sauvegarderProgrammations(); postEditGlobal(); rafraichirDashboard();
     document.getElementById('tbodySaisieMultiple').innerHTML = '';
     ajouterLigneSaisieMultiple(4);
     showToast(`✅ ${nbAjoutes} élément(s) ajouté(s) d'un coup !`, "success");
@@ -3997,7 +3997,6 @@ function afficherListeTypesModal() {
 }
 
 function sauvegarderTousLesTypes() {
-    // Si l'utilisatrice a écrit un nouveau type en haut sans avoir cliqué sur "➕ Créer ce type", on l'ajoute aussi automatiquement !
     let inpNew = document.getElementById('inputNouveauTypeNom');
     if (inpNew && inpNew.value.trim() !== "") {
         ajouterOuModifierType(true);
@@ -4429,8 +4428,215 @@ function afficherBase() {
 }
 
 // ==========================================
-// 8. ONGLET 5 : PROGRAMMATION (SOUS-ONGLETS ANNUEL + P1 À P5, SEMAINES, JOURS & DÉCALAGE)
+// 8. ONGLET 5 : PROGRAMMATION (SOUS-ONGLETS ANNUEL + P1 À P5, MENU DÉROULANT STRICT DES LEÇONS DE LA SEMAINE & DIAPORAMA AUTO)
 // ==========================================
+
+// Récupère EXCLUSIVEMENT les activités pré-enregistrées en tant que Leçon (👩‍🏫)
+// appartenant aux séquences sélectionnées pour la semaine (et au niveau / pôle)
+function getLeconsPreEnregistreesPourSequencesSemaine(pole, niveauGroupe, seqsSemaine = []) {
+    if (!Array.isArray(seqsSemaine) || seqsSemaine.length === 0) return [];
+    let nivCibles = niveauGroupe === "CM1-CM2" ? ["CM1", "CM2"] : (niveauGroupe ? [niveauGroupe] : ["CP", "CE1", "CE2", "CM1", "CM2"]);
+
+    let leconsTrouvees = baseDonnees.filter(a => {
+        if (!a || !estLeconProf(a)) return false;
+
+        let matNorm = (a.matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        let estBonPole = (pole === 'francais')
+            ? (matNorm.includes('francais') || matNorm.includes('grammaire') || matNorm.includes('conjugaison') || matNorm.includes('orthographe') || matNorm.includes('lexique') || matNorm.includes('vocabulaire') || matNorm.includes('ecriture') || matNorm.includes('lecture'))
+            : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('proportionnalite') || matNorm.includes('programmation') || matNorm.includes('probleme'));
+        if (!estBonPole) return false;
+
+        let nivAct = (a.niveau || "").toUpperCase();
+        if (nivAct && !nivCibles.some(n => nivAct.includes(n)) && nivAct !== "TOUS") return false;
+
+        return seqsSemaine.some(sNom => activiteAppartientASequence(a, sNom));
+    });
+
+    let resMap = new Map();
+    leconsTrouvees.forEach(a => {
+        let prefix = a.lecon ? `${a.lecon.trim()} - ` : "";
+        let titreBase = (a.ressource || a.competence || a.sequence || "Leçon").trim();
+        let label = (prefix && !titreBase.toLowerCase().startsWith(prefix.toLowerCase()))
+            ? `${prefix}${titreBase}`
+            : titreBase;
+        if (!resMap.has(label)) {
+            resMap.set(label, {
+                id: a.id,
+                label: label,
+                sequence: a.sequence || "",
+                lien: (a.lienExterne || "").trim(),
+                pageProf: (a.pageProf || "").trim()
+            });
+        }
+    });
+
+    return Array.from(resMap.values()).sort((x, y) => x.label.localeCompare(y.label, 'fr'));
+}
+
+// Surcharge de genererDatalistSuggestionsLecons (utilisée par le Tableau de bord) pour ne proposer que les leçons pré-enregistrées des séquences de la semaine
+genererDatalistSuggestionsLecons = function(pole, niveauGroupe, seqsPrioritaires = []) {
+    return getLeconsPreEnregistreesPourSequencesSemaine(pole, niveauGroupe, seqsPrioritaires).map(item => item.label);
+};
+
+// Surcharge de trouverInfosDepuisBaseLecon pour retrouver immédiatement le diaporama (lienExterne) et la page du guide enseignant (pageProf) de la leçon sélectionnée
+trouverInfosDepuisBaseLecon = function(pole, niveauGroupe, texteSaisi) {
+    if (!texteSaisi || !texteSaisi.trim()) return { lien: "", pageProf: "" };
+    let txtNorm = texteSaisi.trim().toLowerCase();
+    let nivCibles = niveauGroupe === "CM1-CM2" ? ["CM1", "CM2"] : (niveauGroupe ? [niveauGroupe] : ["CP", "CE1", "CE2", "CM1", "CM2"]);
+
+    let candidats = baseDonnees.filter(a => {
+        if (!a) return false;
+        let matNorm = (a.matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        let estBonPole = (pole === 'francais')
+            ? (matNorm.includes('francais') || matNorm.includes('grammaire') || matNorm.includes('conjugaison') || matNorm.includes('orthographe') || matNorm.includes('lexique') || matNorm.includes('vocabulaire') || matNorm.includes('ecriture') || matNorm.includes('lecture'))
+            : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('proportionnalite') || matNorm.includes('programmation') || matNorm.includes('probleme'));
+        if (!estBonPole) return false;
+
+        let nivAct = (a.niveau || "").toUpperCase();
+        if (nivAct && !nivCibles.some(n => nivAct.includes(n)) && nivAct !== "TOUS") return false;
+
+        let prefix = a.lecon ? `${a.lecon.trim()} - `.toLowerCase() : "";
+        let res = (a.ressource || "").trim().toLowerCase();
+        let labelComplet = (prefix && !res.startsWith(prefix)) ? `${prefix}${res}` : res;
+        let codeSeul = (a.lecon || "").trim().toLowerCase();
+
+        return txtNorm === labelComplet || txtNorm === res || (codeSeul !== "" && txtNorm === codeSeul);
+    });
+
+    let matchPrio = candidats.find(a => estLeconProf(a) && (a.lienExterne || a.pageProf)) || candidats.find(a => estLeconProf(a)) || candidats[0];
+    return {
+        lien: (matchPrio && matchPrio.lienExterne) ? matchPrio.lienExterne.trim() : "",
+        pageProf: (matchPrio && matchPrio.pageProf) ? matchPrio.pageProf.trim() : ""
+    };
+};
+
+// Surcharge de genererTableauLeconsPoleHtml sur le Tableau de bord pour afficher aussi un menu déroulant (<select>) des leçons de la semaine avec intégration directe du diaporama
+genererTableauLeconsPoleHtml = function(pole, titre, couleurBandeau, sem) {
+    const labelsOrdre = ["1er passage", "2e passage", "3e passage", "4e passage", "5e passage"];
+
+    let rowsHtml = [0, 1, 2, 3, 4].map(slotIdx => {
+        let cellsHtml = JOURS_SEMAINE_PROF.map(jour => {
+            let nivSlot = (sem.ordrePassages[pole] && sem.ordrePassages[pole][jour] && sem.ordrePassages[pole][jour][slotIdx] !== undefined)
+                ? sem.ordrePassages[pole][jour][slotIdx]
+                : GROUPES_NIVEAUX_PROF[slotIdx];
+            let nivDataKey = nivSlot === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivSlot) ? nivSlot : "");
+            let cell = (nivDataKey && sem.niveaux[nivDataKey] && sem.niveaux[nivDataKey][pole])
+                ? sem.niveaux[nivDataKey][pole].jours[jour]
+                : { texte: "", lien: "", pageProf: "", fait: false };
+
+            let seqsDuNiveau = (nivDataKey && sem.niveaux[nivDataKey] && sem.niveaux[nivDataKey][pole])
+                ? (sem.niveaux[nivDataKey][pole].sequences || [])
+                : [];
+            let nomsSeqsSem = seqsDuNiveau.map(s => s.nom);
+
+            let rappelSeqHtml = seqsDuNiveau.length > 0
+                ? `<div style="font-size:10.5px; color:#7d6608; background:#fef9e7; border:1px solid #f5b041; border-radius:4px; padding:1px 4px; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="Séquence(s) programmée(s) : ${escHTML(nomsSeqsSem.join(', '))}">📑 ${escHTML(nomsSeqsSem.join(', '))}</div>`
+                : '';
+
+            let stNiv = getStyleNiveauProf(pole, nivSlot);
+            let bgCell = cell.fait ? "#d4efdf" : "#ffffff";
+
+            let optionsNiv = `<option value="" ${!nivSlot ? 'selected' : ''}>-- Pause / Libre --</option>` +
+                OPTIONS_NIVEAUX_PROF_SELECT.map(n => `<option value="${n}" ${nivSlot === n ? 'selected' : ''}>${n}</option>`).join('');
+
+            // Liste des leçons pré-enregistrées pour les séquences de la semaine de ce niveau
+            let leconsDispo = getLeconsPreEnregistreesPourSequencesSemaine(pole, nivSlot, nomsSeqsSem);
+            let valActuelle = (cell.texte || "").trim();
+            let optionsLeconsHtml = "";
+
+            if (nomsSeqsSem.length === 0) {
+                optionsLeconsHtml = `<option value="">-- Aucune séquence cette semaine --</option>`;
+            } else if (leconsDispo.length === 0) {
+                optionsLeconsHtml = `<option value="">-- Aucune leçon 👩‍🏫 dans cette séquence --</option>`;
+            } else {
+                optionsLeconsHtml = `<option value="">-- Choisir la leçon (${leconsDispo.length}) --</option>` +
+                    leconsDispo.map(l => `<option value="${escHTML(l.label)}" ${l.label === valActuelle ? 'selected' : ''}>👩‍🏫 ${escHTML(l.label)}${l.lien ? ' 📽️' : ''}</option>`).join('');
+            }
+            if (valActuelle && !leconsDispo.some(l => l.label === valActuelle)) {
+                optionsLeconsHtml += `<option value="${escHTML(valActuelle)}" selected>👩‍🏫 ${escHTML(valActuelle)}</option>`;
+            }
+
+            let infosBase = trouverInfosDepuisBaseLecon(pole, nivSlot, cell.texte);
+            let lienDoc = infosBase.lien || ((cell.lien && cell.lien.trim()) ? cell.lien.trim() : "");
+            let pageGuide = infosBase.pageProf || ((cell.pageProf && cell.pageProf.trim()) ? cell.pageProf.trim() : "");
+
+            let badgeGuideHtml = pageGuide
+                ? `<span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ${escHTML(pageGuide)}</span>`
+                : '';
+
+            let btnDocHtml = lienDoc
+                ? `<div style="display:flex; gap:3px; align-items:center; margin-top:4px; flex-wrap:wrap;">
+                       ${badgeGuideHtml}
+                       <a href="${escHTML(lienDoc)}" target="_blank" rel="noopener noreferrer" class="btn-action" style="flex:1; text-align:center; text-decoration:none; padding:2px 6px; font-size:11px; background:#8e44ad !important; color:#fff !important; border-radius:4px;" title="Ouvrir le diaporama (PDF / PowerPoint) à projeter">📽️ Projeter ↗</a>
+                       <button type="button" class="filter-btn" style="padding:2px 5px; font-size:10px;" title="Modifier le lien" onclick="definirLienSlotLeconProf('${pole}', '${jour}', ${slotIdx})">✏️</button>
+                   </div>`
+                : `<div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
+                       <span>${badgeGuideHtml}</span>
+                       <button type="button" class="filter-btn" style="padding:1px 5px; font-size:10px; opacity:0.8;" title="Ajouter un lien PDF ou PowerPoint à projeter" onclick="definirLienSlotLeconProf('${pole}', '${jour}', ${slotIdx})">➕📎 PDF/PPT</button>
+                   </div>`;
+
+            return `<td style="background:${bgCell}; padding:6px; vertical-align:top; border:1px solid #cbd5e1;">
+                <div class="no-print">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:3px;">
+                        <select onchange="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'niveau', this.value)" style="background:${stNiv.bg}; color:${stNiv.text}; font-weight:bold; font-size:12px; padding:2px 6px; border-radius:5px; border:1px solid rgba(0,0,0,0.18); cursor:pointer;">
+                            ${optionsNiv}
+                        </select>
+                        <div style="display:flex; align-items:center; gap:2px;">
+                            ${slotIdx > 0 ? `<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Monter ce groupe plus tôt" onclick="deplacerSlotLeconProf('${pole}', '${jour}', ${slotIdx}, -1)">▲</button>` : ''}
+                            ${slotIdx < (NB_SLOTS_PASSAGES_PROF - 1) ? `<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Descendre ce groupe plus tard" onclick="deplacerSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 1)">▼</button>` : ''}
+                            <label style="font-size:11px; font-weight:bold; color:${cell.fait ? '#1e8449' : '#7f8c8d'}; cursor:pointer; margin-left:3px; display:flex; align-items:center; gap:2px;" title="Cocher quand la leçon a été donnée">
+                                <input type="checkbox" ${cell.fait ? 'checked' : ''} onchange="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'fait', this.checked)" style="cursor:pointer;">
+                                ${cell.fait ? '✅' : ''}
+                            </label>
+                        </div>
+                    </div>
+                    ${rappelSeqHtml}
+                    <select onchange="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'texte', this.value)" style="width:100%; padding:5px 6px; font-size:12px; font-weight:${valActuelle ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:5px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;'}">
+                        ${optionsLeconsHtml}
+                    </select>
+                    ${btnDocHtml}
+                </div>
+
+                <div class="only-print-lecons" style="text-align:center; padding:3px 2px;">
+                    ${nivSlot ? `<div style="display:inline-block; background:${stNiv.bg} !important; color:${stNiv.text} !important; font-weight:bold; font-size:11.5pt; padding:2px 10px; border-radius:6px; border:1px solid #2c3e50; margin-bottom:4px;">${escHTML(nivSlot)}</div>` : ''}
+                    <div id="print_txt_${pole}_${jour}_${slotIdx}" style="font-size:11pt; font-weight:bold; color:#1e293b; line-height:1.2; ${cell.fait ? 'text-decoration:line-through; opacity:0.6;' : ''}">
+                        ${escHTML(cell.texte || '—')}
+                    </div>
+                </div>
+            </td>`;
+        }).join('');
+
+        return `<tr>
+            <td style="font-weight:bold; font-size:12.5px; text-align:center; background:#f1f5f9; color:#1e293b; width:88px;">
+                <span style="display:inline-block; background:${couleurBandeau}; color:#fff; border-radius:50%; width:22px; height:22px; line-height:22px; font-size:12px; margin-bottom:2px;">${slotIdx + 1}</span><br>
+                <small>${labelsOrdre[slotIdx]}</small>
+            </td>
+            ${cellsHtml}
+        </tr>`;
+    }).join('');
+
+    return `<div class="card-panel card-pole-lecon" style="border-top:4px solid ${couleurBandeau}; padding:12px 14px;">
+        <div style="background:${couleurBandeau} !important; color:#ffffff !important; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:14px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+            <span>${titre}</span>
+            <small style="font-weight:normal; opacity:0.95;">⬇ Ordre de passage de haut en bas (1er ➔ 5e)</small>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="table-classique" style="table-layout:fixed; min-width:620px;">
+                <thead>
+                    <tr>
+                        <th style="width:88px; text-align:center;">Passage</th>
+                        <th style="text-align:center;">LUNDI</th>
+                        <th style="text-align:center;">MARDI</th>
+                        <th style="text-align:center;">JEUDI</th>
+                        <th style="text-align:center;">VENDREDI</th>
+                    </tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+        </div>
+    </div>`;
+};
+
 function initProgFilters() {
     const selMat = document.getElementById('selectMatiereProg'); if (!selMat) return;
     let val = selMat.value || 'Toutes';
@@ -4514,19 +4720,24 @@ function toggleFaitSequenceSemaineProg(per, semIdx, niv, pole, idxSeq) {
     }
 }
 
+// Sélection d'une leçon dans la Programmation : copie automatiquement son diaporama (lienExterne) et sa page de guide enseignant (pageProf) !
 function majLeconJourProg(per, semIdx, niv, pole, jour, champ, valeur) {
     assurerStructureProgPeriodes();
     let cell = progPeriodesData.periodes[per].semaines[semIdx].niveaux[niv][pole].jours[jour];
     cell[champ] = valeur;
 
     if (champ === 'texte') {
-        let infos = trouverInfosDepuisBaseLecon(pole, niv, valeur);
-        let doitReafficher = false;
-        if (infos.lien && cell.lien !== infos.lien) { cell.lien = infos.lien; doitReafficher = true; }
-        if (infos.pageProf && cell.pageProf !== infos.pageProf) { cell.pageProf = infos.pageProf; doitReafficher = true; }
+        if (!valeur || !valeur.trim()) {
+            cell.lien = "";
+            cell.pageProf = "";
+        } else {
+            let infos = trouverInfosDepuisBaseLecon(pole, niv, valeur);
+            cell.lien = infos.lien || "";
+            cell.pageProf = infos.pageProf || "";
+        }
         sauvegarderProgPeriodes();
+        afficherProgrammation();
         rafraichirDashboard();
-        if (doitReafficher) afficherProgrammation();
     } else {
         sauvegarderProgPeriodes();
         afficherProgrammation();
@@ -4616,7 +4827,6 @@ function toggleProgSequence(matiere, sequence, per) {
     afficherBase();
 }
 
-// Récupère toutes les séquences affectées à une période donnée pour un niveau et un pôle ('francais' ou 'maths')
 function getSequencesAffecteesPeriodePole(per, niv, pole) {
     let seqMap = new Map();
     baseDonnees.forEach(a => {
@@ -4643,7 +4853,6 @@ function getSequencesAffecteesPeriodePole(per, niv, pole) {
 function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPole, pObj) {
     let seqsPeriode = getSequencesAffecteesPeriodePole(per, niv, pole);
 
-    // Datalist des séquences de ce pôle (celles de la période en priorité + toutes les autres du pôle)
     let toutesSeqsPoleSet = new Set(seqsPeriode.map(x => x.nom));
     baseDonnees.forEach(a => {
         if (!a) return;
@@ -4659,12 +4868,10 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
     let idDlSeq = `dl_prog_seq_${per}_${niv}_${pole}`;
     let dlSeqHtml = `<datalist id="${idDlSeq}">` + Array.from(toutesSeqsPoleSet).map(s => `<option value="${escHTML(s)}">`).join('') + `</datalist>`;
 
-    // Réservoir visuel des séquences affectées à cette période
     let reservoirHtml = seqsPeriode.length > 0
         ? `<div style="margin-bottom:10px; padding:8px 10px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:6px; font-size:12px;">
                <strong style="color:${couleurPole};">📌 Séquences affectées en ${per} (${niv}) :</strong> ` +
                seqsPeriode.map(sp => {
-                   // Vérifier dans quelle(s) semaine(s) cette séquence est placée
                    let semsPlacees = [];
                    pObj.semaines.forEach((sm, idx) => {
                        let b = sm.niveaux[niv][pole];
@@ -4675,7 +4882,7 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
                }).join(' ') +
            `</div>`
         : `<div style="margin-bottom:10px; padding:6px 10px; background:#fef9e7; border-radius:6px; font-size:12px; color:#7d6608;">
-               ℹ️ Aucune séquence de ${niv} n'est encore cochée en <strong>${per}</strong> dans la <em>Répartition annuelle</em> (vous pouvez tout de même en ajouter librement ci-dessous).
+               ℹ️ Aucune séquence de ${niv} n'est encore cochée en <strong>${per}</strong> dans la <em>Répartition annuelle</em> (vous pouvez tout de même en ajouter ci-dessous).
            </div>`;
 
     let rowsHtml = pObj.semaines.map((sem, semIdx) => {
@@ -4683,10 +4890,8 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
         let seqsSem = bloc.sequences || [];
         let nomsSeqsSem = seqsSem.map(s => s.nom);
 
-        // Datalist des leçons pour cette semaine (priorisant les leçons des séquences choisies sur cette semaine !)
-        let idDlLec = `dl_prog_lec_${per}_${semIdx}_${niv}_${pole}`;
-        let suggsLecons = genererDatalistSuggestionsLecons(pole, niv, nomsSeqsSem);
-        let dlLecHtml = `<datalist id="${idDlLec}">${suggsLecons.map(l => `<option value="${escHTML(l)}">`).join('')}</datalist>`;
+        // Récupère EXCLUSIVEMENT les leçons pré-enregistrées (👩‍🏫) correspondant aux séquences de cette semaine
+        let leconsDispoSemaine = getLeconsPreEnregistreesPourSequencesSemaine(pole, niv, nomsSeqsSem);
 
         let pillsSeqHtml = seqsSem.map((sq, sqIdx) => `
             <span class="seq-tag-pill ${sq.fait ? 'done' : ''}" style="display:inline-flex; align-items:center; gap:4px; margin:2px 0;">
@@ -4700,9 +4905,23 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
 
         let cellsJoursHtml = JOURS_SEMAINE_PROF.map(jour => {
             let cell = bloc.jours[jour] || { texte: "", lien: "", pageProf: "", fait: false };
-            let infosAuto = trouverInfosDepuisBaseLecon(pole, niv, cell.texte);
-            let lienEff = (cell.lien && cell.lien.trim()) ? cell.lien.trim() : infosAuto.lien;
-            let guideEff = (cell.pageProf && cell.pageProf.trim()) ? cell.pageProf.trim() : infosAuto.pageProf;
+            let valActuelle = (cell.texte || "").trim();
+            let infosAuto = trouverInfosDepuisBaseLecon(pole, niv, valActuelle);
+            let lienEff = infosAuto.lien || ((cell.lien && cell.lien.trim()) ? cell.lien.trim() : "");
+            let guideEff = infosAuto.pageProf || ((cell.pageProf && cell.pageProf.trim()) ? cell.pageProf.trim() : "");
+
+            let optionsSelectHtml = "";
+            if (nomsSeqsSem.length === 0) {
+                optionsSelectHtml = `<option value="">-- ⚠️ Ajoutez d'abord une séquence à la semaine --</option>`;
+            } else if (leconsDispoSemaine.length === 0) {
+                optionsSelectHtml = `<option value="">-- ⚠️ Aucune leçon 👩‍🏫 enregistrée pour cette séquence --</option>`;
+            } else {
+                optionsSelectHtml = `<option value="">-- Choisir la leçon (${leconsDispoSemaine.length} dispo) --</option>` +
+                    leconsDispoSemaine.map(l => `<option value="${escHTML(l.label)}" ${l.label === valActuelle ? 'selected' : ''}>👩‍🏫 ${escHTML(l.label)}${l.lien ? ' 📽️' : ''}</option>`).join('');
+            }
+            if (valActuelle && !leconsDispoSemaine.some(l => l.label === valActuelle)) {
+                optionsSelectHtml += `<option value="${escHTML(valActuelle)}" selected>👩‍🏫 ${escHTML(valActuelle)}</option>`;
+            }
 
             return `<td style="background:${cell.fait ? '#e8f8f5' : '#fff'}; vertical-align:top; padding:6px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
@@ -4712,11 +4931,12 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
                     </label>
                     <div style="display:flex; gap:3px; align-items:center;">
                         ${guideEff ? `<span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ${escHTML(guideEff)}</span>` : ''}
-                        ${lienEff ? `<a href="${escHTML(lienEff)}" target="_blank" rel="noopener noreferrer" style="background:#8e44ad; color:#fff; padding:1px 5px; border-radius:4px; font-size:10.5px; text-decoration:none; font-weight:bold;" title="Ouvrir le PDF / PowerPoint">📽️↗</a>` : ''}
-                        <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Ajouter ou modifier le lien PDF / PowerPoint" onclick="definirLienJourProg('${per}', ${semIdx}, '${niv}', '${pole}', '${jour}')">📎</button>
+                        ${lienEff ? `<a href="${escHTML(lienEff)}" target="_blank" rel="noopener noreferrer" style="background:#8e44ad; color:#fff; padding:1px 6px; border-radius:4px; font-size:10.5px; text-decoration:none; font-weight:bold;" title="Diaporama automatiquement rattaché depuis la base : cliquer pour projeter">📽️ Diapo ↗</a>` : ''}
                     </div>
                 </div>
-                <input type="text" list="${idDlLec}" value="${escHTML(cell.texte || '')}" placeholder="Leçon ${jour}..." oninput="majLeconJourProg('${per}', ${semIdx}, '${niv}', '${pole}', '${jour}', 'texte', this.value)" style="width:100%; padding:5px 6px; font-size:12px; font-weight:${cell.texte ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:4px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449;' : ''}">
+                <select onchange="majLeconJourProg('${per}', ${semIdx}, '${niv}', '${pole}', '${jour}', 'texte', this.value)" style="width:100%; padding:5px 6px; font-size:12px; font-weight:${valActuelle ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:4px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;'}">
+                    ${optionsSelectHtml}
+                </select>
             </td>`;
         }).join('');
 
@@ -4732,7 +4952,6 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
                 </div>
             </td>
             <td style="vertical-align:top; width:215px;">
-                ${dlLecHtml}
                 <div style="margin-bottom:5px; display:flex; flex-direction:column; gap:3px;">${pillsSeqHtml}</div>
                 <div style="display:flex; gap:3px;">
                     <input type="text" id="${idInputAddSeq}" list="${idDlSeq}" placeholder="+ Séquence..." style="flex:1; padding:4px 6px; font-size:11.5px;" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterSequenceDansSemaineProg('${per}', ${semIdx}, '${niv}', '${pole}', this.value); this.value='';}">
@@ -4746,7 +4965,7 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
     return `<div class="card-panel" style="border-top:4px solid ${couleurPole}; margin-bottom:22px; padding:14px 16px;">
         <div style="background:${couleurPole} !important; color:#fff !important; padding:7px 12px; border-radius:6px; font-weight:bold; font-size:14.5px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
             <span>${titrePole} — Niveau ${niv} (${per})</span>
-            <small style="font-weight:normal; opacity:0.95;">Synchronisé en direct avec le Tableau de bord (Onglet 3)</small>
+            <small style="font-weight:normal; opacity:0.95;">Le choix de la leçon rattache automatiquement son diaporama sur le Tableau de bord</small>
         </div>
         ${dlSeqHtml}
         ${reservoirHtml}
@@ -4755,11 +4974,11 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
                 <thead>
                     <tr>
                         <th style="width:115px; text-align:center;">Semaine & Actions</th>
-                        <th style="width:215px;">Séquence(s) de la semaine</th>
-                        <th style="text-align:center;">LUNDI (Leçon)</th>
-                        <th style="text-align:center;">MARDI (Leçon)</th>
-                        <th style="text-align:center;">JEUDI (Leçon)</th>
-                        <th style="text-align:center;">VENDREDI (Leçon)</th>
+                        <th style="width:215px;">1. Séquence(s) de la semaine</th>
+                        <th style="text-align:center;">LUNDI (Leçon 👩‍🏫)</th>
+                        <th style="text-align:center;">MARDI (Leçon 👩‍🏫)</th>
+                        <th style="text-align:center;">JEUDI (Leçon 👩‍🏫)</th>
+                        <th style="text-align:center;">VENDREDI (Leçon 👩‍🏫)</th>
                     </tr>
                 </thead>
                 <tbody>${rowsHtml}</tbody>
@@ -4794,7 +5013,7 @@ function afficherProgrammationPeriodeDetail(per) {
             </div>
         </div>
         <p style="font-size:12.5px; color:#555; margin:0;">
-            💡 <strong>Fonctionnement :</strong> Ajoutez les séquences dans chaque semaine puis répartissez vos leçons explicites sur <em>Lundi, Mardi, Jeudi, Vendredi</em>. Cochez <code>✅</code> quand c'est fait : si une leçon ou une séquence n'est pas faite, cliquez sur <strong>« ⏭️ Reporter non-faits »</strong> pour la glisser en Semaine suivante et décaler automatiquement toute la suite !
+            💡 <strong>Fonctionnement :</strong> 1️⃣ Ajoutez d'abord la ou les <strong>séquences de la semaine</strong> dans la 2<sup>e</sup> colonne ➔ 2️⃣ Choisissez ensuite dans les menus déroulants (<em>Lundi, Mardi, Jeudi, Vendredi</em>) parmi les <strong>leçons pré-enregistrées (👩‍🏫) de ces séquences</strong> : le diaporama (📽️) et la page du guide enseignant se mettent automatiquement sur votre Tableau de bord !
         </p>
     </div>` +
     genererTableauProgPeriodePoleHtml(per, niveauActifProgPeriode, 'francais', '📘 PROGRAMMATION FRANÇAIS', '#1b4f72', pObj) +
