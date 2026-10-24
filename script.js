@@ -931,11 +931,95 @@ function calculTailleStockage() {
     if (jauge) { jauge.style.width = pct + "%"; jauge.style.backgroundColor = pct > 80 ? "#e74c3c" : (pct > 50 ? "#f39c12" : "#27ae60"); }
 }
 // ==========================================
-// 3B. ARCHITECTURE PROGRAMMATION PAR PÉRIODE / SEMAINE / JOUR & DÉCALAGE DYNAMIQUE
+// 3B. CORRECTIF SAUVEGARDE PROGRAMMATION ANNUELLE, ARCHITECTURE PÉRIODES & DÉCALAGE DYNAMIQUE
 // ==========================================
 const GROUPES_NIVEAUX_PROF = ["CP", "CE1", "CE2", "CM1", "CM2"];
 const OPTIONS_NIVEAUX_PROF_SELECT = ["CP", "CE1", "CE2", "CM1", "CM2", "CM1-CM2"];
 const NB_SLOTS_PASSAGES_PROF = 5;
+
+// Nettoyage des clés pour éviter tout blocage Firebase Realtime Database (interdit ., $, #, [, ], /)
+function nettoyerCleFirebase(str) {
+    return (str || "").toString().trim().replace(/[.$#[\]\/]/g, "_");
+}
+
+getCleProgSequence = function(matiere, sequence) {
+    return `SEQ||${nettoyerCleFirebase(matiere)}||${nettoyerCleFirebase(sequence)}`;
+};
+
+getPeriodesSequence = function(matiere, sequence) {
+    if (!sequence || !sequence.trim()) return [];
+    let clePropre = getCleProgSequence(matiere, sequence);
+    let cleAncienne = `SEQ||${(matiere || "").trim()}||${(sequence || "").trim()}`;
+
+    let valProg = programmations[clePropre] !== undefined ? programmations[clePropre] : programmations[cleAncienne];
+    if (valProg !== undefined && valProg !== "") {
+        return extrairePeriodesArray(valProg);
+    }
+
+    let setP = new Set();
+    baseDonnees.forEach(a => {
+        if (!a) return;
+        if (matiere && (a.matiere || "").trim() !== (matiere || "").trim()) return;
+        if (activiteAppartientASequence(a, sequence)) {
+            let pAct = programmations[a.id] || a.periode || "";
+            extrairePeriodesArray(pAct).forEach(p => setP.add(p));
+        }
+    });
+    return PERIODES_LISTE.filter(p => setP.has(p));
+};
+
+function nettoyerObjetClesFirebase(obj) {
+    if (!obj || typeof obj !== 'object') return {};
+    let propre = {};
+    Object.keys(obj).forEach(k => {
+        let kClean = k.replace(/[.$#[\]\/]/g, "_");
+        propre[kClean] = obj[k];
+    });
+    return propre;
+}
+
+sauvegarderProgrammations = function() {
+    programmations = nettoyerObjetClesFirebase(programmations);
+    localStorage.setItem(KEY_PROG, JSON.stringify(programmations));
+    declencherAutoSaveFirebase();
+};
+
+// Détermine le pôle d'une activité pour séparer le Plan de travail en 2 (Français vs Mathématiques)
+function getPoleActivitePlan(act) {
+    if (!act) return 'francais';
+    let m = ((act.matiere || "") + " " + (act.sequence || "")).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (m.includes("math") || m.includes("numeration") || m.includes("calcul") || m.includes("geometrie") || m.includes("mesure") || m.includes("algebre") || m.includes("proportionnalite") || m.includes("programmation") || m.includes("probleme") || m.includes("grandeur")) {
+        return 'maths';
+    }
+    return 'francais';
+}
+
+// Tri du plan élève : Français d'abord, puis Mathématiques, pour garantir une numérotation continue logique
+getListeTrie = function(idsArray, priosArray = [], eleveContext = null) {
+    if (!idsArray) return [];
+    let planObjects = idsArray.map(id => baseDonnees.find(b => b.id === id && !estLeconProf(b))).filter(Boolean);
+    planObjects.sort((a, b) => {
+        let poleA = getPoleActivitePlan(a) === 'francais' ? 0 : 1;
+        let poleB = getPoleActivitePlan(b) === 'francais' ? 0 : 1;
+        if (poleA !== poleB) return poleA - poleB;
+
+        let prioA = (priosArray && priosArray.includes(a.id)) ? 1 : 0;
+        let prioB = (priosArray && priosArray.includes(b.id)) ? 1 : 0;
+        if (prioA !== prioB) return prioB - prioA;
+
+        let matA = nettoyerNomPourTri(a.matiere), matB = nettoyerNomPourTri(b.matiere);
+        if (matA !== matB) return matA.localeCompare(matB, 'fr');
+        let sA = eleveContext ? getSequenceActivePourEleve(eleveContext, a) : (a.sequence || "").trim();
+        let sB = eleveContext ? getSequenceActivePourEleve(eleveContext, b) : (b.sequence || "").trim();
+        if (sA !== sB) return sA.localeCompare(sB, 'fr');
+        let cA = (a.competence || "").trim(), cB = (b.competence || "").trim();
+        if (cA !== cB) return cA.localeCompare(cB, 'fr');
+        let evalDiff = (a.estEvaluation ? 1 : 0) - (b.estEvaluation ? 1 : 0);
+        if (evalDiff !== 0) return evalDiff;
+        return (a.ressource || "").localeCompare(b.ressource || "", 'fr');
+    });
+    return planObjects;
+};
 
 function creerSemaineProgVide(indexSem = 0, dateDebutISO = "") {
     let calc = dateDebutISO ? calculerVendrediDepuisISO(dateDebutISO) : { debutFR: "", finFR: "" };
@@ -1046,44 +1130,6 @@ function assurerStructureProgPeriodes() {
         });
     });
 
-    // Migration automatique de l'ancien planningLeconsProf vers P1 s'il contenait déjà des leçons saisies
-    if (!progPeriodesData.migratedFromLegacy && planningLeconsProf && Array.isArray(planningLeconsProf.semaines) && planningLeconsProf.semaines.length > 0) {
-        let p1 = progPeriodesData.periodes['P1'];
-        planningLeconsProf.semaines.forEach((oldSem, sIdx) => {
-            if (sIdx >= p1.semaines.length) {
-                p1.semaines.push(creerSemaineProgVide(sIdx, oldSem.dateDebutISO || ""));
-                p1.nbSemaines = p1.semaines.length;
-            }
-            let targetSem = p1.semaines[sIdx];
-            if (oldSem.dateDebutISO && !targetSem.dateDebutISO) {
-                targetSem.dateDebutISO = oldSem.dateDebutISO;
-                targetSem.dateDebut = oldSem.dateDebut || "";
-                targetSem.dateFin = oldSem.dateFin || "";
-            }
-            ["francais", "maths"].forEach(pole => {
-                if (!oldSem[pole]) return;
-                JOURS_SEMAINE_PROF.forEach(j => {
-                    let slots = oldSem[pole][j];
-                    if (Array.isArray(slots)) {
-                        slots.forEach((sl, slIdx) => {
-                            if (sl && sl.texte && sl.texte.trim() !== "") {
-                                let nivCib = sl.niveau === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(sl.niveau) ? sl.niveau : GROUPES_NIVEAUX_PROF[slIdx] || "CP");
-                                let dest = targetSem.niveaux[nivCib][pole].jours[j];
-                                if (!dest.texte) {
-                                    dest.texte = sl.texte;
-                                    dest.lien = sl.lien || "";
-                                    dest.fait = Boolean(sl.fait);
-                                }
-                            }
-                        });
-                    }
-                });
-            });
-        });
-        progPeriodesData.migratedFromLegacy = true;
-        localStorage.setItem(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData));
-    }
-
     let pAct = progPeriodesData.periodes[progPeriodesData.periodeActiveDash];
     if (progPeriodesData.semaineIndexDash < 0 || progPeriodesData.semaineIndexDash >= pAct.semaines.length) {
         progPeriodesData.semaineIndexDash = 0;
@@ -1106,7 +1152,6 @@ function recalculerDatesPeriode(per) {
     });
 }
 
-// Recherche dans la base de données si une leçon (ou activité) correspond au texte saisi et renvoie { lien, pageProf }
 function trouverInfosDepuisBaseLecon(pole, niveauGroupe, texteSaisi) {
     if (!texteSaisi || !texteSaisi.trim()) return { lien: "", pageProf: "" };
     let txtNorm = texteSaisi.trim().toLowerCase();
@@ -1116,13 +1161,13 @@ function trouverInfosDepuisBaseLecon(pole, niveauGroupe, texteSaisi) {
         if (!a) return false;
         let matNorm = (a.matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         let estBonPole = (pole === 'francais')
-            ? (matNorm.includes('francais') || matNorm.includes('grammaire') || matNorm.includes('conjugaison') || matNorm.includes('orthographe') || matNorm.includes('lexique') || matNorm.includes('vocabulaire') || matNorm.includes('ecriture'))
-            : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('programmation'));
+            ? (matNorm.includes('francais') || matNorm.includes('grammaire') || matNorm.includes('conjugaison') || matNorm.includes('orthographe') || matNorm.includes('lexique') || matNorm.includes('vocabulaire') || matNorm.includes('ecriture') || matNorm.includes('lecture'))
+            : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('proportionnalite') || matNorm.includes('programmation') || matNorm.includes('probleme'));
         if (!estBonPole) return false;
         let nivAct = (a.niveau || "").toUpperCase();
-        if (nivAct && !nivCibles.some(n => nivAct.includes(n))) return false;
+        if (nivAct && !nivCibles.some(n => nivAct.includes(n)) && nivAct !== "TOUS") return false;
 
-        let prefix = a.lecon ? `${a.lecon} - `.toLowerCase() : "";
+        let prefix = a.lecon ? `${a.lecon.trim()} - `.toLowerCase() : "";
         let titre1 = `${prefix}${a.ressource || ''}`.trim().toLowerCase();
         let titre2 = (a.ressource || '').trim().toLowerCase();
         let titre3 = `${prefix}${a.sequence || ''}`.trim().toLowerCase();
@@ -1140,9 +1185,6 @@ function trouverInfosDepuisBaseLecon(pole, niveauGroupe, texteSaisi) {
 // ==========================================
 // SYSTÈME DE DÉCALAGE DYNAMIQUE (RETARD ⏭️ & AVANCE ⏮️)
 // ==========================================
-
-// 1. En cas de RETARD (Clôture de semaine ou bouton "⏭️ Reporter non-faits & Décaler") :
-// Les séquences et les leçons non cochées de la semaine S se déplacent en S+1 et décalent en cascade toutes les semaines suivantes !
 function reporterEtDecalerSemaine(per, semIdx, niveauFiltre = null, poleFiltre = null) {
     assurerStructureProgPeriodes();
     let pObj = progPeriodesData.periodes[per];
@@ -1155,12 +1197,9 @@ function reporterEtDecalerSemaine(per, semIdx, niveauFiltre = null, poleFiltre =
     niveauxCibles.forEach(niv => {
         polesCibles.forEach(pole => {
             let blocActuel = pObj.semaines[semIdx].niveaux[niv][pole];
-
-            // A. Séquences non faites de la semaine S
             let seqsNonFaites = (blocActuel.sequences || []).filter(s => !s.fait);
             let seqsFaites = (blocActuel.sequences || []).filter(s => s.fait);
 
-            // B. Jours ayant une leçon non faite en semaine S
             let joursNonFaits = JOURS_SEMAINE_PROF.filter(j => {
                 let cell = blocActuel.jours[j];
                 return cell && cell.texte && cell.texte.trim() !== "" && !cell.fait;
@@ -1168,7 +1207,6 @@ function reporterEtDecalerSemaine(per, semIdx, niveauFiltre = null, poleFiltre =
 
             if (seqsNonFaites.length === 0 && joursNonFaits.length === 0) return;
 
-            // Vérifier si la dernière semaine de la période contient déjà des éléments qui risqueraient de déborder
             let derniereSem = pObj.semaines[pObj.semaines.length - 1].niveaux[niv][pole];
             let derniereADesSeqs = (seqsNonFaites.length > 0) && (derniereSem.sequences && derniereSem.sequences.length > 0);
             let derniereADesJours = joursNonFaits.some(j => derniereSem.jours[j] && derniereSem.jours[j].texte.trim() !== "");
@@ -1179,7 +1217,6 @@ function reporterEtDecalerSemaine(per, semIdx, niveauFiltre = null, poleFiltre =
                 recalculerDatesPeriode(per);
             }
 
-            // Décalage en cascade des séquences de la fin vers semIdx + 1
             if (seqsNonFaites.length > 0) {
                 for (let k = pObj.semaines.length - 1; k > semIdx + 1; k--) {
                     let prevSeqs = pObj.semaines[k - 1].niveaux[niv][pole].sequences || [];
@@ -1202,7 +1239,6 @@ function reporterEtDecalerSemaine(per, semIdx, niveauFiltre = null, poleFiltre =
                 nbDecales += seqsNonFaites.length;
             }
 
-            // Décalage en cascade des leçons jour par jour de la fin vers semIdx + 1
             joursNonFaits.forEach(j => {
                 for (let k = pObj.semaines.length - 1; k > semIdx + 1; k--) {
                     let cellPrev = pObj.semaines[k - 1].niveaux[niv][pole].jours[j];
@@ -1224,8 +1260,6 @@ function reporterEtDecalerSemaine(per, semIdx, niveauFiltre = null, poleFiltre =
     return nbDecales;
 }
 
-// 2. En cas d'AVANCE / RATTRAPAGE (Bouton "⏮️ Recaler / Avancer la suite") :
-// Si une leçon ou une séquence de S+1 a été faite en avance (ou si un créneau est libre), toute la suite remonte d'une semaine !
 function recalerAvanceSemaine(per, semIdx, niveauFiltre = null, poleFiltre = null) {
     assurerStructureProgPeriodes();
     let pObj = progPeriodesData.periodes[per];
@@ -1241,14 +1275,12 @@ function recalerAvanceSemaine(per, semIdx, niveauFiltre = null, poleFiltre = nul
                 let curr = pObj.semaines[k].niveaux[niv][pole];
                 let next = pObj.semaines[k + 1].niveaux[niv][pole];
 
-                // Si la semaine k n'a plus de séquences non faites (ou est vide) et que k+1 en a, on remonte
                 if ((curr.sequences || []).length === 0 && (next.sequences || []).length > 0) {
                     curr.sequences = [...next.sequences];
                     next.sequences = [];
                     nbRemontes++;
                 }
 
-                // Pour chaque jour : si le jour de la semaine k est vide (ou si le jour de k+1 a déjà été coché fait en avance), on remonte la file
                 JOURS_SEMAINE_PROF.forEach(j => {
                     let cCurr = curr.jours[j];
                     let cNext = next.jours[j];
@@ -1266,9 +1298,6 @@ function recalerAvanceSemaine(per, semIdx, niveauFiltre = null, poleFiltre = nul
     return nbRemontes;
 }
 
-// Récupère pour un élève donné :
-// - Les séquences programmées cette semaine (Semaine S) -> Entraînement
-// - Les séquences programmées et vues la semaine précédente (Semaine S-1) -> Évaluations à passer en S+1 !
 function getSuggestionsSequencesEtEvalsPourEleve(eleve) {
     assurerStructureProgPeriodes();
     if (!eleve) return { per: 'P1', semNum: 1, seqsSemaineCourante: [], seqsSemainePrecedentePourEval: [] };
@@ -1292,7 +1321,6 @@ function getSuggestionsSequencesEtEvalsPourEleve(eleve) {
         }
     });
 
-    // Chercher la semaine précédente (soit semIdx - 1 dans la même période, soit la dernière semaine de la période précédente)
     let semPrecedente = null;
     if (semIdx > 0) {
         semPrecedente = pObj.semaines[semIdx - 1];
@@ -1312,7 +1340,6 @@ function getSuggestionsSequencesEtEvalsPourEleve(eleve) {
             let bPrev = semPrecedente.niveaux[niv][pole];
             if (bPrev && Array.isArray(bPrev.sequences)) {
                 bPrev.sequences.forEach(s => {
-                    // Si la séquence était en S-1 (et n'a pas été reportée en S faute d'avoir été faite), son évaluation tombe cette semaine !
                     if (s && s.nom && !seqsEvalSPlusUn.includes(s.nom)) {
                         seqsEvalSPlusUn.push(s.nom);
                     }
@@ -1330,7 +1357,7 @@ function getSuggestionsSequencesEtEvalsPourEleve(eleve) {
 }
 
 // ==========================================
-// 4. ONGLET 1 : PLAN & SUIVI ÉLÈVES (AVEC BANDEAU SÉQUENCES SEMAINE S & ÉVALUATIONS S+1)
+// 4. ONGLET 1 : PLAN & SUIVI ÉLÈVES (QUOTA 100 ATELIERS & 2 TABLEAUX FRANÇAIS / MATHS)
 // ==========================================
 function majVisibiliteParcoursCreation(niveau) {
     let selParc = document.getElementById('nouvelEleveParcours');
@@ -1425,7 +1452,6 @@ function filtrerDirectementSequenceEleve(nomSeq) {
     }
 }
 
-// Affiche les séquences de la semaine (Entraînement) et les Évaluations prêtes à passer (Séquences vues en S-1)
 function afficherBandeauSuggestionsProgEleve() {
     let bloc = document.getElementById('blocSuggestionsProgEleve');
     if (!bloc || !idEleveCourant || !eleves[idEleveCourant]) return;
@@ -1433,7 +1459,6 @@ function afficherBandeauSuggestionsProgEleve() {
     let sugg = getSuggestionsSequencesEtEvalsPourEleve(eleve);
     let nivEleve = (eleve.niveau || "CP").toUpperCase();
 
-    // Trouver les activités d'évaluation disponibles pour les séquences de S-1
     let evalsAPasser = baseDonnees.filter(a => {
         if (!a || !a.estEvaluation || estLeconProf(a)) return false;
         let nivAct = (a.niveau || "").toUpperCase();
@@ -1506,15 +1531,19 @@ function majListeEleves() {
     }
 }
 
+// Augmentation du quota maximum d'ateliers à 100 par semaine
 function modifierMaxAteliersEleve() {
     if (!idEleveCourant) return;
-    let val = Math.min(25, Math.max(1, parseInt(document.getElementById('inputMaxAteliersEleve').value) || 15));
+    let inp = document.getElementById('inputMaxAteliersEleve');
+    if (inp) inp.max = "100";
+    let val = Math.min(100, Math.max(1, parseInt(inp ? inp.value : 100) || 100));
+    if (inp) inp.value = val;
     eleves[idEleveCourant].maxAteliers = val; sauvegarderEleves();
     let maxAff = document.getElementById('maxAteliersAffiche'); if (maxAff) maxAff.innerText = val;
 }
 function modifierMaxTablettesEleve() {
     if (!idEleveCourant) return;
-    let val = Math.min(10, Math.max(0, parseInt(document.getElementById('inputMaxTablettesEleve').value) || 0));
+    let val = Math.min(20, Math.max(0, parseInt(document.getElementById('inputMaxTablettesEleve').value) || 0));
     eleves[idEleveCourant].maxTablettes = val; sauvegarderEleves();
     if (idEleveCourant) afficherPlanHebdo();
 }
@@ -1529,7 +1558,7 @@ function creerEleve() {
         id: id, nom: nom, niveau: niveau,
         fichierJaune: Boolean(cbJauneNew && cbJauneNew.checked),
         planHebdo: [], recurrents: [], enAttente: [], historique: [], masquees: [], priorites: [],
-        maxAteliers: 15, maxTablettes: 2, suivi: {}, valides: {}, bilanEvaluations: {}, joursAssignes: {}, sequencesChoisies: {},
+        maxAteliers: 100, maxTablettes: 2, suivi: {}, valides: {}, bilanEvaluations: {}, joursAssignes: {}, sequencesChoisies: {},
         dateDebutISO: "", dateDebut: "", dateFin: ""
     };
     if (estEleveCM(niveau)) nouvEl.parcours = parcSelect ? parcSelect.value : (niveau === "CM2" ? "orange" : "jaune");
@@ -1537,7 +1566,7 @@ function creerEleve() {
     assurerStructureSemaines(eleves[id]); sauvegarderEleves();
     nomInput.value = ''; if (cbJauneNew) cbJauneNew.checked = false;
     majListeInstantaneeEleve(id); rafraichirDashboard();
-    showToast(`Élève ${nom} (${niveau}) ajouté !`, "success");
+    showToast(`Élève ${nom} (${niveau}) ajouté (max 100 ateliers) !`, "success");
 }
 
 function majListeInstantaneeEleve(newId) { majListeEleves(); let sel = document.getElementById('selectEleveProfile'); if (sel) sel.value = newId; chargerEleve(); }
@@ -1656,9 +1685,12 @@ function chargerEleve() {
     if (zoneTravail) zoneTravail.style.display = 'block'; if (message) message.style.display = 'none';
     if (btnEdit) btnEdit.style.display = 'inline-block'; if (btnSuppr) btnSuppr.style.display = 'inline-block';
     let e = eleves[idEleveCourant]; assurerStructureSemaines(e);
+    if (!e.maxAteliers || e.maxAteliers === 15) e.maxAteliers = 100;
     document.querySelectorAll('.nomEleveAffiche').forEach(el => el.innerText = `${e.nom} (${e.niveau})`);
     let inputMax = document.getElementById('inputMaxAteliersEleve'), inputMaxTab = document.getElementById('inputMaxTablettesEleve'), maxAff = document.getElementById('maxAteliersAffiche'), cbJaune = document.getElementById('cbFichierJauneEleve');
-    if (inputMax) inputMax.value = e.maxAteliers || 15; if (inputMaxTab) inputMaxTab.value = e.maxTablettes ?? 2; if (maxAff) maxAff.innerText = e.maxAteliers || 15;
+    if (inputMax) { inputMax.max = "100"; inputMax.value = e.maxAteliers || 100; }
+    if (inputMaxTab) inputMaxTab.value = e.maxTablettes ?? 2;
+    if (maxAff) maxAff.innerText = e.maxAteliers || 100;
     if (cbJaune) cbJaune.checked = Boolean(e.fichierJaune);
 
     let blocParc = document.getElementById('blocParcoursEleveSuivi'), selParc = document.getElementById('selectParcoursEleve');
@@ -2008,7 +2040,7 @@ function validerDuplication() {
             let estRecSource = Array.isArray(recSource) && recSource.includes(idActSrc);
             let seqFinale = activiteAppartientASequence(actAdaptee, seqCible) ? seqCible : getSequenceActivePourEleve(target, actAdaptee);
 
-            if (!target.planHebdo.includes(idActFinal) && (estRecSource || !estActiviteValideePourSequence(target, actAdaptee, seqFinale)) && target.planHebdo.length < (target.maxAteliers || 15)) {
+            if (!target.planHebdo.includes(idActFinal) && (estRecSource || !estActiviteValideePourSequence(target, actAdaptee, seqFinale)) && target.planHebdo.length < (target.maxAteliers || 100)) {
                 target.planHebdo.push(idActFinal);
                 if (joursSource[idActSrc]) target.joursAssignes[idActFinal] = joursSource[idActSrc];
                 if (seqFinale) target.sequencesChoisies[idActFinal] = seqFinale;
@@ -2082,7 +2114,7 @@ function validerAssignationMultiple() {
             if (!e.recurrents) e.recurrents = [];
             if (!e.recurrents.includes(activiteAssignationEnCours)) e.recurrents.push(activiteAssignationEnCours);
         }
-        if (e.planHebdo.length < (e.maxAteliers || 15) || isRecurrent) {
+        if (e.planHebdo.length < (e.maxAteliers || 100) || isRecurrent) {
             if (!e.planHebdo.includes(activiteAssignationEnCours)) e.planHebdo.push(activiteAssignationEnCours);
             if (jourChoisi) { if (!e.joursAssignes) e.joursAssignes = {}; e.joursAssignes[activiteAssignationEnCours] = jourChoisi; }
             syncEleveVersSemaineActive(e); count++;
@@ -2254,7 +2286,7 @@ function masquerActivite(idActivite) { if (!idEleveCourant) return; eleves[idEle
 function demasquerActivite(idActivite) { if (!idEleveCourant) return; eleves[idEleveCourant].masquees = eleves[idEleveCourant].masquees.filter(id => id !== idActivite); sauvegarderEleves(); afficherRessourcesDisponibles(); afficherHistorique(); }
 
 function ajouterAuPlan(idActivite) {
-    const eleve = eleves[idEleveCourant], max = eleve.maxAteliers || 15;
+    const eleve = eleves[idEleveCourant], max = eleve.maxAteliers || 100;
     let seqInput = document.getElementById('seq_dispo_' + idActivite);
     let seqChoisie = seqInput ? seqInput.value : "";
     if (!eleve.sequencesChoisies) eleve.sequencesChoisies = {};
@@ -2329,17 +2361,14 @@ function desarchiverActivite(idActivite, seqSpecifique = "") {
     }
 }
 
-function afficherPlanHebdo() {
-    const eleve = eleves[idEleveCourant], tbodyApercu = document.getElementById('tableApercuPlan'); if (!tbodyApercu || !eleve) return; tbodyApercu.innerHTML = '';
-    afficherBandeauRecurrentsEleve();
-    afficherBandeauSuggestionsProgEleve();
-    let planObjects = getListeTrie(eleve.planHebdo, eleve.priorites || [], eleve);
-    document.getElementById('compteurAteliersEleve').innerText = planObjects.length; document.getElementById('maxAteliersAffiche').innerText = eleve.maxAteliers || 15;
-    let nbTabCount = planObjects.filter(b => b && estActiviteTablette(b)).length;
-    let compteurTabElem = document.getElementById('compteurTablettesEleve'); if (compteurTabElem) compteurTabElem.innerText = `${nbTabCount}/${eleve.maxTablettes ?? 2}`;
-
-    planObjects.forEach((a, index) => {
-        const num = index + 1;
+// Génère les lignes HTML d'une sous-partie du Plan de travail (Français ou Mathématiques) dans l'Onglet 1
+function genererLignesTableauPlanSuiviHtml(listeItems, eleve) {
+    if (listeItems.length === 0) {
+        return `<tr><td colspan="9" style="text-align:center; color:#7f8c8d; padding:14px;">Aucune activité dans ce pôle.</td></tr>`;
+    }
+    return listeItems.map(item => {
+        const a = item.act;
+        const num = item.num;
         let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
         let badge = a.estEvaluation ? `<span class="badge-eval">🎯 Éval</span>` : '';
         let badgeRecHtml = isRec ? ` <span class="badge-recurrent" title="Revient automatiquement chaque semaine">🔄 Hebdo</span>` : '';
@@ -2377,7 +2406,7 @@ function afficherPlanHebdo() {
             : `<button type="button" class="btn-valid" style="width:100%; margin-bottom:4px;" onclick="validerDirectement('${a.id}')">🏁 Fini</button><button type="button" class="btn-remove" style="width:100%;" onclick="retirerDuPlan('${a.id}')">❌ Retirer</button>`;
         let coulMat = getCouleurMatiereBandeau(a.matiere);
 
-        tbodyApercu.innerHTML += `<tr class="${rowClass}">
+        return `<tr class="${rowClass}">
             <td style="text-align:center;"><input type="checkbox" class="cb-plan-valider" value="${a.id}" ${estValide ? 'checked disabled' : ''} style="transform: scale(1.3); cursor:pointer;"></td>
             <td style="text-align:center; cursor:pointer; font-size:18px;" onclick="basculerPriorite('${a.id}')" style="${isPrio ? 'color:#f1c40f;' : 'color:#bdc3c7;'}">${isPrio ? '⭐' : '☆'}</td>
             <td class="${jourActuel ? 'col-num num-jour-impose' : 'col-num'}">${logoDebutLigne}${num}</td>
@@ -2388,8 +2417,79 @@ function afficherPlanHebdo() {
             <td style="text-align:center;">${selectJourHtml}</td>
             <td>${actionHtml}</td>
         </tr>`;
+    }).join('');
+}
+
+function afficherPlanHebdo() {
+    const eleve = eleves[idEleveCourant]; if (!eleve) return;
+    afficherBandeauRecurrentsEleve();
+    afficherBandeauSuggestionsProgEleve();
+
+    let planObjects = getListeTrie(eleve.planHebdo, eleve.priorites || [], eleve);
+    document.getElementById('compteurAteliersEleve').innerText = planObjects.length;
+    document.getElementById('maxAteliersAffiche').innerText = eleve.maxAteliers || 100;
+    let inpMax = document.getElementById('inputMaxAteliersEleve'); if (inpMax) inpMax.max = "100";
+
+    let nbTabCount = planObjects.filter(b => b && estActiviteTablette(b)).length;
+    let compteurTabElem = document.getElementById('compteurTablettesEleve'); if (compteurTabElem) compteurTabElem.innerText = `${nbTabCount}/${eleve.maxTablettes ?? 2}`;
+
+    // Séparation en 2 listes avec numérotation continue (1..N) pour le semainier unique
+    let itemsFrancais = [];
+    let itemsMaths = [];
+    planObjects.forEach((a, idx) => {
+        let obj = { act: a, num: idx + 1 };
+        if (getPoleActivitePlan(a) === 'maths') itemsMaths.push(obj);
+        else itemsFrancais.push(obj);
     });
-    if (planObjects.length === 0) tbodyApercu.innerHTML = '<tr><td colspan="9" style="text-align:center; color:#7f8c8d; padding:20px;">Plan vide.</td></tr>';
+
+    // Créer ou mettre à jour le conteneur des 2 tableaux séparés (📘 Français et 📕 Mathématiques)
+    let tbodyOrigine = document.getElementById('tableApercuPlan');
+    if (tbodyOrigine) {
+        let tableOrigine = tbodyOrigine.closest('table');
+        if (tableOrigine) tableOrigine.style.display = 'none';
+    }
+
+    let contDeuxTables = document.getElementById('conteneurDeuxTablesPlanSuivi');
+    if (!contDeuxTables && tbodyOrigine) {
+        let tableOrigine = tbodyOrigine.closest('table');
+        contDeuxTables = document.createElement('div');
+        contDeuxTables.id = 'conteneurDeuxTablesPlanSuivi';
+        tableOrigine.parentNode.insertBefore(contDeuxTables, tableOrigine.nextSibling);
+    }
+
+    if (contDeuxTables) {
+        const theadCommun = `<thead>
+            <tr>
+                <th style="width:34px; text-align:center;"><input type="checkbox" onchange="cocherToutPlan(this)" title="Tout cocher"></th>
+                <th style="width:36px; text-align:center;">Prio</th>
+                <th style="width:44px; text-align:center;">N°</th>
+                <th style="width:150px;">Matière / Séquence</th>
+                <th>Compétence(s)</th>
+                <th>Ressource & Suivi</th>
+                <th style="width:80px; text-align:center;">N° Atelier</th>
+                <th style="width:105px;">Jour imposé</th>
+                <th style="width:125px;">Actions</th>
+            </tr>
+        </thead>`;
+
+        contDeuxTables.innerHTML = `
+            <div class="card-panel" style="border-top:4px solid #1b4f72; margin-bottom:18px; padding:12px 14px;">
+                <div style="background:#1b4f72; color:#fff; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:14px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                    <span>📘 PLAN DE TRAVAIL — FRANÇAIS (${itemsFrancais.length} activité${itemsFrancais.length > 1 ? 's' : ''})</span>
+                    <small style="font-weight:normal;">Numéros N° ${itemsFrancais.length > 0 ? `${itemsFrancais[0].num} à ${itemsFrancais[itemsFrancais.length - 1].num}` : '—'}</small>
+                </div>
+                <table class="table-classique">${theadCommun}<tbody>${genererLignesTableauPlanSuiviHtml(itemsFrancais, eleve)}</tbody></table>
+            </div>
+
+            <div class="card-panel" style="border-top:4px solid #c0392b; margin-bottom:18px; padding:12px 14px;">
+                <div style="background:#c0392b; color:#fff; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:14px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                    <span>📕 PLAN DE TRAVAIL — MATHÉMATIQUES (${itemsMaths.length} activité${itemsMaths.length > 1 ? 's' : ''})</span>
+                    <small style="font-weight:normal;">Numéros N° ${itemsMaths.length > 0 ? `${itemsMaths[0].num} à ${itemsMaths[itemsMaths.length - 1].num}` : '—'}</small>
+                </div>
+                <table class="table-classique">${theadCommun}<tbody>${genererLignesTableauPlanSuiviHtml(itemsMaths, eleve)}</tbody></table>
+            </div>
+        `;
+    }
 
     const blocAtt = document.getElementById('blocEnAttenteEleve'), tbodyAtt = document.getElementById('tableEnAttente'), cptAtt = document.getElementById('compteurAttenteEleve');
     if (blocAtt && tbodyAtt) {
@@ -2427,7 +2527,7 @@ function afficherHistorique() {
 }
 
 // ==========================================
-// 5. ONGLET 2 : IMPRESSION FICHES ÉLÈVES (N° FIXES + SEMAINIER)
+// 5. ONGLET 2 : IMPRESSION FICHES ÉLÈVES EN 3 PAGES (1. PLANNING À REMPLIR | 2. FRANÇAIS | 3. MATHÉMATIQUES)
 // ==========================================
 function chargerConfigImpressionUI() {
     let t = document.getElementById('printInputTitre'); if (t) t.value = printConfig.titre || "Plan de travail";
@@ -2436,6 +2536,17 @@ function chargerConfigImpressionUI() {
     let cbCpt = document.getElementById('printCbCompteur'); if (cbCpt) cbCpt.checked = printConfig.afficherCompteur !== false;
     let cbSig = document.getElementById('printCbSignature'); if (cbSig) cbSig.checked = printConfig.afficherSignature !== false;
     let cbCom = document.getElementById('printCbCommentaire'); if (cbCom) cbCom.checked = Boolean(printConfig.afficherCommentaire);
+
+    // Ajoute l'option "📄 3 pages par élève (Planning + Français + Maths)" dans le sélecteur de format si elle n'y est pas encore
+    let selFmt = document.getElementById('selectFormatImpression');
+    if (selFmt && !Array.from(selFmt.options).some(o => o.value === '3PAGES')) {
+        selFmt.innerHTML = `
+            <option value="3PAGES">📑 3 pages par élève (1. Planning + 2. Français + 3. Maths)</option>
+            <option value="A4">📄 Compact (Tout sur la même fiche A4)</option>
+            <option value="A5">📑 Deux colonnes côte-à-côte</option>
+        `;
+        selFmt.value = '3PAGES';
+    }
 }
 
 function sauvegarderConfigImpression() {
@@ -2481,55 +2592,16 @@ function appliquerDateImpression(dateISO) {
     sauvegarderEleves(); rafraichirFicheImpression();
 }
 
-function genererHtmlFicheEleve(e, format = 'A4') {
-    assurerStructureSemaines(e);
-    let planObjects = getListeTrie(e.planHebdo, e.priorites || [], e);
-
-    let titreFiche = (printConfig && printConfig.titre) ? printConfig.titre.trim() : "Plan de travail";
-    let consignePerso = (printConfig && printConfig.consigne && printConfig.consigne.trim() !== "")
-        ? escHTML(printConfig.consigne.trim())
-        : `Choisis tes ateliers et écris leur <strong>N°</strong> dans le semainier (les numéros <u>soulignés</u> sont déjà placés au jour imposé, 👩‍🏫 = avec la maîtresse). <strong>Entoure</strong> le numéro quand tu commences, <strong>barre-le</strong> quand c'est terminé !`;
-
-    let joursJours = { "Lundi": [], "Mardi": [], "Jeudi": [], "Vendredi": [] };
-    planObjects.forEach((a, idx) => {
-        let num = idx + 1;
-        let jImp = (e.joursAssignes && e.joursAssignes[a.id]) ? e.joursAssignes[a.id] : "";
-        if (jImp && joursJours[jImp]) {
-            let st = (e.suivi && e.suivi[a.id]) ? e.suivi[a.id].statut : "";
-            let icone = st === 'a_revoir' ? '👩‍🏫' : (st === 'a_refaire' ? '🔄' : '');
-            joursJours[jImp].push(`${icone}<u>${num}</u>`);
-        }
-    });
-
-    let nbLignesPlanning = Math.max(4, Math.ceil(planObjects.length / 3), joursJours["Lundi"].length, joursJours["Mardi"].length, joursJours["Jeudi"].length, joursJours["Vendredi"].length);
-    let planningRowsHtml = "";
-    for (let i = 0; i < nbLignesPlanning; i++) {
-        let valLun = joursJours["Lundi"][i] !== undefined ? joursJours["Lundi"][i] : "";
-        let valMar = joursJours["Mardi"][i] !== undefined ? joursJours["Mardi"][i] : "";
-        let valJeu = joursJours["Jeudi"][i] !== undefined ? joursJours["Jeudi"][i] : "";
-        let valVen = joursJours["Vendredi"][i] !== undefined ? joursJours["Vendredi"][i] : "";
-        planningRowsHtml += `<tr>
-            <td><span class="planning-cell-box">${valLun}</span></td>
-            <td><span class="planning-cell-box">${valMar}</span></td>
-            <td><span class="planning-cell-box">${valJeu}</span></td>
-            <td><span class="planning-cell-box">${valVen}</span></td>
-        </tr>`;
+function genererLignesTableImpressionPoleHtml(listeItems, e) {
+    if (listeItems.length === 0) {
+        return `<tr><td colspan="7" style="text-align:center; color:#7f8c8d; padding:12px;">Aucune activité programmée dans ce pôle.</td></tr>`;
     }
-
-    let planningTableHtml = `<div style="margin-bottom:8px;">
-        <table class="planning-table">
-            <thead>
-                <tr><th>LUNDI</th><th>MARDI</th><th>JEUDI</th><th>VENDREDI</th></tr>
-            </thead>
-            <tbody>${planningRowsHtml}</tbody>
-        </table>
-    </div>`;
-
     let rowsHtml = "";
     let derniereCleSeq = "";
 
-    planObjects.forEach((a, index) => {
-        const num = index + 1;
+    listeItems.forEach(item => {
+        const a = item.act;
+        const num = item.num;
         let seqEleve = getSequenceActivePourEleve(e, a);
         let cleSeq = `${a.matiere || ''}||${seqEleve || ''}`;
         if (cleSeq !== derniereCleSeq) {
@@ -2564,47 +2636,158 @@ function genererHtmlFicheEleve(e, format = 'A4') {
         </tr>`;
     });
 
-    if (planObjects.length === 0) {
-        rowsHtml = `<tr><td colspan="7" style="text-align:center; color:#7f8c8d;">Aucune activité.</td></tr>`;
+    return rowsHtml;
+}
+
+function genererHtmlFicheEleve(e, format = '3PAGES') {
+    assurerStructureSemaines(e);
+    let planObjects = getListeTrie(e.planHebdo, e.priorites || [], e);
+
+    let itemsFrancais = [];
+    let itemsMaths = [];
+    planObjects.forEach((a, idx) => {
+        let obj = { act: a, num: idx + 1 };
+        if (getPoleActivitePlan(a) === 'maths') itemsMaths.push(obj);
+        else itemsFrancais.push(obj);
+    });
+
+    let titreFiche = (printConfig && printConfig.titre) ? printConfig.titre.trim() : "Plan de travail";
+    let consignePerso = (printConfig && printConfig.consigne && printConfig.consigne.trim() !== "")
+        ? escHTML(printConfig.consigne.trim())
+        : `Choisis tes ateliers (📘 Français et 📕 Mathématiques) et écris leur <strong>N°</strong> dans ce semainier (les numéros <u>soulignés</u> sont déjà placés au jour imposé, 👩‍🏫 = avec la maîtresse). <strong>Entoure</strong> le numéro quand tu commences, <strong>barre-le</strong> quand c'est terminé !`;
+
+    let joursJours = { "Lundi": [], "Mardi": [], "Jeudi": [], "Vendredi": [] };
+    planObjects.forEach((a, idx) => {
+        let num = idx + 1;
+        let jImp = (e.joursAssignes && e.joursAssignes[a.id]) ? e.joursAssignes[a.id] : "";
+        if (jImp && joursJours[jImp]) {
+            let st = (e.suivi && e.suivi[a.id]) ? e.suivi[a.id].statut : "";
+            let icone = st === 'a_revoir' ? '👩‍🏫' : (st === 'a_refaire' ? '🔄' : '');
+            joursJours[jImp].push(`${icone}<u>${num}</u>`);
+        }
+    });
+
+    // Nombre de lignes du semainier adapté au format (grand semainier confortable en mode 3 pages)
+    let minLignesSemainier = (format === '3PAGES') ? 16 : 5;
+    let nbLignesPlanning = Math.max(minLignesSemainier, Math.ceil(planObjects.length / 3), joursJours["Lundi"].length, joursJours["Mardi"].length, joursJours["Jeudi"].length, joursJours["Vendredi"].length);
+    let hauteurCelluleSemainier = (format === '3PAGES') ? '32px' : '24px';
+
+    let planningRowsHtml = "";
+    for (let i = 0; i < nbLignesPlanning; i++) {
+        let valLun = joursJours["Lundi"][i] !== undefined ? joursJours["Lundi"][i] : "";
+        let valMar = joursJours["Mardi"][i] !== undefined ? joursJours["Mardi"][i] : "";
+        let valJeu = joursJours["Jeudi"][i] !== undefined ? joursJours["Jeudi"][i] : "";
+        let valVen = joursJours["Vendredi"][i] !== undefined ? joursJours["Vendredi"][i] : "";
+        planningRowsHtml += `<tr>
+            <td style="height:${hauteurCelluleSemainier};"><span class="planning-cell-box">${valLun}</span></td>
+            <td style="height:${hauteurCelluleSemainier};"><span class="planning-cell-box">${valMar}</span></td>
+            <td style="height:${hauteurCelluleSemainier};"><span class="planning-cell-box">${valJeu}</span></td>
+            <td style="height:${hauteurCelluleSemainier};"><span class="planning-cell-box">${valVen}</span></td>
+        </tr>`;
     }
+
+    let planningTableHtml = `<div style="margin-bottom:10px;">
+        <table class="planning-table">
+            <thead>
+                <tr><th>LUNDI</th><th>MARDI</th><th>JEUDI</th><th>VENDREDI</th></tr>
+            </thead>
+            <tbody>${planningRowsHtml}</tbody>
+        </table>
+    </div>`;
 
     let blocsPied = [];
     if (!printConfig || printConfig.afficherCompteur !== false) {
-        blocsPied.push(`<div style="flex:1; border:1px solid #7f8c8d; border-radius:4px; padding:4px 8px; display:flex; align-items:center; justify-content:space-between;"><strong>🏁 Bilan :</strong><span style="font-size:10.5px; font-weight:bold;">Ateliers terminés : ...... / ${planObjects.length}</span></div>`);
+        blocsPied.push(`<div style="flex:1; border:1px solid #7f8c8d; border-radius:4px; padding:6px 10px; display:flex; align-items:center; justify-content:space-between;"><strong>🏁 Bilan :</strong><span style="font-size:11px; font-weight:bold;">📘 Fr : .... / ${itemsFrancais.length} &nbsp;|&nbsp; 📕 Maths : .... / ${itemsMaths.length} &nbsp;|&nbsp; Total : .... / ${planObjects.length}</span></div>`);
     }
     if (!printConfig || printConfig.meteo !== 'aucun') {
-        let icones = `<span style="font-size:13px;">☀️</span> <span style="font-size:13px;">⛅</span> <span style="font-size:13px;">🌧️</span>`;
-        if (printConfig && printConfig.meteo === 'smileys') icones = `<span style="font-size:13px;">😊</span> <span style="font-size:13px;">😐</span> <span style="font-size:13px;">😟</span>`;
-        if (printConfig && printConfig.meteo === 'etoiles') icones = `<span style="font-size:13px;">⭐</span> <span style="font-size:13px;">⭐</span> <span style="font-size:13px;">⭐</span>`;
-        blocsPied.push(`<div style="flex:1; border:1px solid #7f8c8d; border-radius:4px; padding:4px 8px; display:flex; align-items:center; justify-content:space-around;"><strong>🌤️ Météo :</strong> ${icones}</div>`);
+        let icones = `<span style="font-size:14px;">☀️</span> <span style="font-size:14px;">⛅</span> <span style="font-size:14px;">🌧️</span>`;
+        if (printConfig && printConfig.meteo === 'smileys') icones = `<span style="font-size:14px;">😊</span> <span style="font-size:14px;">😐</span> <span style="font-size:14px;">😟</span>`;
+        if (printConfig && printConfig.meteo === 'etoiles') icones = `<span style="font-size:14px;">⭐</span> <span style="font-size:14px;">⭐</span> <span style="font-size:14px;">⭐</span>`;
+        blocsPied.push(`<div style="flex:0.6; border:1px solid #7f8c8d; border-radius:4px; padding:6px 10px; display:flex; align-items:center; justify-content:space-around;"><strong>🌤️ Météo :</strong> ${icones}</div>`);
     }
     if (!printConfig || printConfig.afficherSignature !== false) {
-        blocsPied.push(`<div style="flex:1; border:1px solid #7f8c8d; border-radius:4px; padding:4px 8px; display:flex; align-items:center; justify-content:space-between;"><strong>✍️ Signature :</strong> <span>..................</span></div>`);
+        blocsPied.push(`<div style="flex:0.8; border:1px solid #7f8c8d; border-radius:4px; padding:6px 10px; display:flex; align-items:center; justify-content:space-between;"><strong>✍️ Signature :</strong> <span>........................</span></div>`);
     }
 
-    let bilanBasPageHtml = blocsPied.length > 0 ? `<div style="display:flex; justify-content:space-between; align-items:stretch; gap:8px; margin-top:6px; font-size:10px;">${blocsPied.join('')}</div>` : '';
-    let commBasHtml = (printConfig && printConfig.afficherCommentaire) ? `<div style="margin-top:6px; border:1px dashed #7f8c8d; border-radius:4px; padding:5px 8px; font-size:11px; min-height:32px;"><strong>💬 Mot de l'enseignante :</strong></div>` : '';
+    let bilanBasPageHtml = blocsPied.length > 0 ? `<div style="display:flex; justify-content:space-between; align-items:stretch; gap:8px; margin-top:8px; font-size:10.5px;">${blocsPied.join('')}</div>` : '';
+    let commBasHtml = (printConfig && printConfig.afficherCommentaire) ? `<div style="margin-top:8px; border:1px dashed #7f8c8d; border-radius:4px; padding:6px 10px; font-size:11px; min-height:42px;"><strong>💬 Mot de l'enseignante :</strong></div>` : '';
 
-    return `<div class="fiche-plan-print plan-eleve-page ${format === 'A4' ? 'a4-page' : ''}">
+    const theadAteliers = `<thead>
+        <tr>
+            <th class="col-num">N°</th>
+            <th style="width:135px;">Matière & Séquence</th>
+            <th>Compétence visée</th>
+            <th>Ressource à réaliser</th>
+            <th class="col-center" style="width:75px;">Type</th>
+            <th class="col-center" style="width:85px;">N° Atelier</th>
+            <th class="col-center" style="width:55px;">Nb Pers.</th>
+        </tr>
+    </thead>`;
+
+    const semLabel = `Semaine ${(e.semaineIndex || 0) + 1} ${(e.dateDebut && e.dateFin) ? `du ${e.dateDebut} au ${e.dateFin}` : ''}`;
+
+    // MODE 3 PAGES PAR ÉLÈVE :
+    // Page 1 : Le Planning à remplir + Bilan
+    // Page 2 : Les activités de Français
+    // Page 3 : Les activités de Mathématiques
+    if (format === '3PAGES') {
+        let page1Planning = `<div class="fiche-plan-print plan-eleve-page" style="page-break-after: always; break-after: page;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #2c3e50; padding-bottom:6px; margin-bottom:8px;">
+                <h2 style="margin:0; border:none; padding:0; font-size:18px; color:#2c3e50;">📅 ${escHTML(titreFiche)} — PLANNING DE ${escHTML(e.nom.toUpperCase())} (${escHTML(e.niveau)})</h2>
+                <span style="font-size:12.5px; color:#2c3e50; font-weight:bold;">${escHTML(semLabel)} (Page 1/3)</span>
+            </div>
+            <div style="background:#f8f9fa; border-left:4px solid #1b4f72; padding:6px 10px; font-size:11.5px; margin-bottom:10px; border-radius:4px;">📌 ${consignePerso}</div>
+            <div style="display:flex; gap:12px; margin-bottom:8px; font-size:12px; font-weight:bold;">
+                <span style="background:#eaf2f8; color:#1b4f72; padding:4px 10px; border-radius:6px; border:1px solid #aed6f1;">📘 Activités de Français : N° ${itemsFrancais.length > 0 ? `${itemsFrancais[0].num} à ${itemsFrancais[itemsFrancais.length - 1].num}` : 'Aucune'} (${itemsFrancais.length})</span>
+                <span style="background:#fdedec; color:#c0392b; padding:4px 10px; border-radius:6px; border:1px solid #f5b7b1;">📕 Activités de Mathématiques : N° ${itemsMaths.length > 0 ? `${itemsMaths[0].num} à ${itemsMaths[itemsMaths.length - 1].num}` : 'Aucune'} (${itemsMaths.length})</span>
+            </div>
+            ${planningTableHtml}
+            ${bilanBasPageHtml}
+            ${commBasHtml}
+        </div>`;
+
+        let page2Francais = `<div class="fiche-plan-print plan-eleve-page" style="page-break-after: always; break-after: page; border-color:#1b4f72;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:3px solid #1b4f72; padding-bottom:6px; margin-bottom:8px;">
+                <h2 style="margin:0; border:none; padding:0; font-size:18px; color:#1b4f72;">📘 ACTIVITÉS DE FRANÇAIS — ${escHTML(e.nom)} (${escHTML(e.niveau)})</h2>
+                <span style="font-size:12.5px; color:#1b4f72; font-weight:bold;">${escHTML(semLabel)} (Page 2/3)</span>
+            </div>
+            <table class="table-classique" style="margin-top:0; margin-bottom:6px;">
+                ${theadAteliers}
+                <tbody>${genererLignesTableImpressionPoleHtml(itemsFrancais, e)}</tbody>
+            </table>
+        </div>`;
+
+        let page3Maths = `<div class="fiche-plan-print plan-eleve-page" style="page-break-after: always; break-after: page; border-color:#c0392b;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:3px solid #c0392b; padding-bottom:6px; margin-bottom:8px;">
+                <h2 style="margin:0; border:none; padding:0; font-size:18px; color:#c0392b;">📕 ACTIVITÉS DE MATHÉMATIQUES — ${escHTML(e.nom)} (${escHTML(e.niveau)})</h2>
+                <span style="font-size:12.5px; color:#c0392b; font-weight:bold;">${escHTML(semLabel)} (Page 3/3)</span>
+            </div>
+            <table class="table-classique" style="margin-top:0; margin-bottom:6px;">
+                ${theadAteliers}
+                <tbody>${genererLignesTableImpressionPoleHtml(itemsMaths, e)}</tbody>
+            </table>
+        </div>`;
+
+        return page1Planning + page2Francais + page3Maths;
+    }
+
+    // MODE COMPACT A4 OU A5 (avec les 2 tableaux Français et Maths séparés sous le semainier unique)
+    return `<div class="fiche-plan-print plan-eleve-page ${format === 'A4' ? 'a4-page' : ''}" style="page-break-after: always;">
         <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #1b4f72; padding-bottom:5px; margin-bottom:6px;">
             <h2 style="margin:0; border:none; padding:0; font-size:17px; color:#1b4f72;">${escHTML(titreFiche)} — ${escHTML(e.nom)} (${escHTML(e.niveau)})</h2>
-            <span style="font-size:12px; color:#2c3e50; font-weight:bold;">Semaine ${(e.semaineIndex || 0) + 1} ${(e.dateDebut && e.dateFin) ? `du ${e.dateDebut} au ${e.dateFin}` : ''}</span>
+            <span style="font-size:12px; color:#2c3e50; font-weight:bold;">${escHTML(semLabel)}</span>
         </div>
         <div style="background:#f8f9fa; border-left:4px solid #1b4f72; padding:4px 8px; font-size:11px; margin-bottom:6px; border-radius:4px;">📌 ${consignePerso}</div>
         ${planningTableHtml}
+        <div style="background:#1b4f72 !important; color:#fff !important; padding:3px 8px; font-weight:bold; font-size:11.5px; border-radius:4px 4px 0 0; margin-top:6px;">📘 ACTIVITÉS DE FRANÇAIS (${itemsFrancais.length})</div>
+        <table class="table-classique" style="margin-top:0; margin-bottom:8px;">
+            ${theadAteliers}
+            <tbody>${genererLignesTableImpressionPoleHtml(itemsFrancais, e)}</tbody>
+        </table>
+        <div style="background:#c0392b !important; color:#fff !important; padding:3px 8px; font-weight:bold; font-size:11.5px; border-radius:4px 4px 0 0; margin-top:6px;">📕 ACTIVITÉS DE MATHÉMATIQUES (${itemsMaths.length})</div>
         <table class="table-classique" style="margin-top:0; margin-bottom:6px;">
-            <thead>
-                <tr>
-                    <th class="col-num">N°</th>
-                    <th style="width:135px;">Matière & Séquence</th>
-                    <th>Compétence visée</th>
-                    <th>Ressource à réaliser</th>
-                    <th class="col-center" style="width:75px;">Type</th>
-                    <th class="col-center" style="width:85px;">N° Atelier</th>
-                    <th class="col-center" style="width:55px;">Nb Pers.</th>
-                </tr>
-            </thead>
-            <tbody>${rowsHtml}</tbody>
+            ${theadAteliers}
+            <tbody>${genererLignesTableImpressionPoleHtml(itemsMaths, e)}</tbody>
         </table>
         ${bilanBasPageHtml}
         ${commBasHtml}
@@ -2612,8 +2795,9 @@ function genererHtmlFicheEleve(e, format = 'A4') {
 }
 
 function rafraichirFicheImpression() {
+    chargerConfigImpressionUI();
     const sel = document.getElementById('selectEleveImpression');
-    const fmt = document.getElementById('selectFormatImpression') ? document.getElementById('selectFormatImpression').value : 'A4';
+    const fmt = document.getElementById('selectFormatImpression') ? document.getElementById('selectFormatImpression').value : '3PAGES';
     const zone = document.getElementById('zoneFichesImpression'); if (!zone) return;
     let val = sel ? (sel.value || 'TOUS_ELEVES') : 'TOUS_ELEVES';
     let cibles = [];
@@ -2629,7 +2813,7 @@ function rafraichirFicheImpression() {
         }
         zone.innerHTML = html;
     } else {
-        zone.innerHTML = cibles.map(e => genererHtmlFicheEleve(e, 'A4')).join('');
+        zone.innerHTML = cibles.map(e => genererHtmlFicheEleve(e, fmt)).join('');
     }
 }
 
@@ -2687,7 +2871,6 @@ function appliquerDateSemaineProf(dateISO) {
     rafraichirDashboard();
 }
 
-// Modification d'un créneau depuis le Tableau de bord -> met à jour directement la Programmation de la période !
 function majSlotLeconProf(pole, jour, slotIdx, champ, valeur) {
     assurerStructureProgPeriodes();
     let per = progPeriodesData.periodeActiveDash;
@@ -2710,20 +2893,12 @@ function majSlotLeconProf(pole, jour, slotIdx, champ, valeur) {
 
     if (champ === 'texte') {
         let infos = trouverInfosDepuisBaseLecon(pole, nivCible, valeur);
-        let doitRafraichir = false;
-        if (infos.lien && cell.lien !== infos.lien) { cell.lien = infos.lien; doitRafraichir = true; }
-        if (infos.pageProf && cell.pageProf !== infos.pageProf) { cell.pageProf = infos.pageProf; doitRafraichir = true; }
-        sauvegarderProgPeriodes();
-        if (doitRafraichir) {
-            rafraichirDashboard();
-        } else {
-            let spanPrint = document.getElementById(`print_txt_${pole}_${jour}_${slotIdx}`);
-            if (spanPrint) spanPrint.innerText = valeur || "—";
-        }
-    } else {
-        sauvegarderProgPeriodes();
-        rafraichirDashboard();
+        cell.lien = infos.lien || "";
+        cell.pageProf = infos.pageProf || "";
     }
+
+    sauvegarderProgPeriodes();
+    rafraichirDashboard();
 }
 
 function definirLienSlotLeconProf(pole, jour, slotIdx) {
@@ -2790,7 +2965,6 @@ function toggleApercuSemaineSuivanteDash() {
     rafraichirDashboard();
 }
 
-// Cocher en avance une leçon ou une séquence de la semaine S+1 directement depuis le Tableau de bord et recaler la suite
 function cocherElementSemaineSuivanteDash(per, nextSemIdx, niv, pole, typeElem, cleJourOuSeq, isChecked) {
     assurerStructureProgPeriodes();
     let pObj = progPeriodesData.periodes[per];
@@ -2820,163 +2994,12 @@ function imprimerPlanningLeconsProf() {
     }, 600);
 }
 
-// Génère les suggestions de leçons pour un pôle et un niveau (en priorisant les leçons des séquences programmées cette semaine !)
 function genererDatalistSuggestionsLecons(pole, niveauGroupe, seqsPrioritaires = []) {
-    let suggPrio = new Set();
-    let suggLeconsProf = new Set();
-    let suggAutres = new Set();
-    let nivCibles = niveauGroupe === "CM1-CM2" ? ["CM1", "CM2"] : (niveauGroupe ? [niveauGroupe] : ["CP", "CE1", "CE2", "CM1", "CM2"]);
-
-    baseDonnees.forEach(a => {
-        if (!a) return;
-        let matNorm = (a.matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        let estBonPole = (pole === 'francais')
-            ? (matNorm.includes('francais') || matNorm.includes('grammaire') || matNorm.includes('conjugaison') || matNorm.includes('orthographe') || matNorm.includes('lexique') || matNorm.includes('vocabulaire') || matNorm.includes('ecriture'))
-            : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('programmation'));
-        if (!estBonPole) return;
-        let nivAct = (a.niveau || "").toUpperCase();
-        if (!nivCibles.some(n => nivAct.includes(n))) return;
-
-        let prefixLecon = a.lecon ? `${a.lecon} - ` : "";
-        let estDansSeqSemaine = seqsPrioritaires.some(sNom => activiteAppartientASequence(a, sNom));
-
-        if (estLeconProf(a)) {
-            let label = `${prefixLecon}${a.ressource || a.competence || a.sequence}`;
-            if (estDansSeqSemaine) suggPrio.add(label);
-            else suggLeconsProf.add(label);
-        } else {
-            extraireListeCompetences(a.competence).forEach(c => {
-                if (estDansSeqSemaine) suggPrio.add(`${prefixLecon}${c}`);
-                else suggAutres.add(`${prefixLecon}${c}`);
-            });
-            extraireListeSequences(a.sequence).forEach(s => {
-                suggAutres.add(`${prefixLecon}${s}`);
-            });
-        }
-    });
-
-    let t1 = Array.from(suggPrio);
-    let t2 = Array.from(suggLeconsProf).filter(x => !suggPrio.has(x)).sort((a, b) => a.localeCompare(b, 'fr'));
-    let t3 = Array.from(suggAutres).filter(x => !suggPrio.has(x) && !suggLeconsProf.has(x)).sort((a, b) => a.localeCompare(b, 'fr'));
-    return [...t1, ...t2, ...t3];
+    return [];
 }
 
 function genererTableauLeconsPoleHtml(pole, titre, couleurBandeau, sem) {
-    let datalistsHtml = "";
-    OPTIONS_NIVEAUX_PROF_SELECT.forEach(niv => {
-        let idDl = `dl_prof_${pole}_${niv.replace('-', '_')}`;
-        let nivClean = niv === "CM1-CM2" ? "CM1" : niv;
-        let seqsSem = (sem.niveaux[nivClean] && sem.niveaux[nivClean][pole])
-            ? (sem.niveaux[nivClean][pole].sequences || []).map(s => s.nom)
-            : [];
-        let suggs = genererDatalistSuggestionsLecons(pole, niv, seqsSem);
-        datalistsHtml += `<datalist id="${idDl}">${suggs.map(s => `<option value="${escHTML(s)}">`).join('')}</datalist>`;
-    });
-
-    const labelsOrdre = ["1er passage", "2e passage", "3e passage", "4e passage", "5e passage"];
-
-    let rowsHtml = [0, 1, 2, 3, 4].map(slotIdx => {
-        let cellsHtml = JOURS_SEMAINE_PROF.map(jour => {
-            let nivSlot = (sem.ordrePassages[pole] && sem.ordrePassages[pole][jour] && sem.ordrePassages[pole][jour][slotIdx] !== undefined)
-                ? sem.ordrePassages[pole][jour][slotIdx]
-                : GROUPES_NIVEAUX_PROF[slotIdx];
-            let nivDataKey = nivSlot === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivSlot) ? nivSlot : "");
-            let cell = (nivDataKey && sem.niveaux[nivDataKey] && sem.niveaux[nivDataKey][pole])
-                ? sem.niveaux[nivDataKey][pole].jours[jour]
-                : { texte: "", lien: "", pageProf: "", fait: false };
-
-            let seqsDuNiveau = (nivDataKey && sem.niveaux[nivDataKey] && sem.niveaux[nivDataKey][pole])
-                ? (sem.niveaux[nivDataKey][pole].sequences || [])
-                : [];
-            let rappelSeqHtml = seqsDuNiveau.length > 0
-                ? `<div style="font-size:10.5px; color:#7d6608; background:#fef9e7; border:1px solid #f5b041; border-radius:4px; padding:1px 4px; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="Séquence(s) programmée(s) : ${escHTML(seqsDuNiveau.map(s => s.nom).join(', '))}">📑 ${escHTML(seqsDuNiveau.map(s => s.nom).join(', '))}</div>`
-                : '';
-
-            let stNiv = getStyleNiveauProf(pole, nivSlot);
-            let idDl = nivSlot ? `dl_prof_${pole}_${nivSlot.replace('-', '_')}` : '';
-            let bgCell = cell.fait ? "#d4efdf" : "#ffffff";
-
-            let optionsNiv = `<option value="" ${!nivSlot ? 'selected' : ''}>-- Pause / Libre --</option>` +
-                OPTIONS_NIVEAUX_PROF_SELECT.map(n => `<option value="${n}" ${nivSlot === n ? 'selected' : ''}>${n}</option>`).join('');
-
-            let infosBase = trouverInfosDepuisBaseLecon(pole, nivSlot, cell.texte);
-            let lienDoc = (cell.lien && cell.lien.trim()) ? cell.lien.trim() : infosBase.lien;
-            let pageGuide = (cell.pageProf && cell.pageProf.trim()) ? cell.pageProf.trim() : infosBase.pageProf;
-
-            let badgeGuideHtml = pageGuide
-                ? `<span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ${escHTML(pageGuide)}</span>`
-                : '';
-
-            let btnDocHtml = lienDoc
-                ? `<div style="display:flex; gap:3px; align-items:center; margin-top:4px; flex-wrap:wrap;">
-                       ${badgeGuideHtml}
-                       <a href="${escHTML(lienDoc)}" target="_blank" rel="noopener noreferrer" class="btn-action" style="flex:1; text-align:center; text-decoration:none; padding:2px 6px; font-size:11px; background:#8e44ad !important; color:#fff !important; border-radius:4px;" title="Ouvrir le PDF ou PowerPoint à projeter">📽️ Projeter ↗</a>
-                       <button type="button" class="filter-btn" style="padding:2px 5px; font-size:10px;" title="Modifier le lien" onclick="definirLienSlotLeconProf('${pole}', '${jour}', ${slotIdx})">✏️</button>
-                   </div>`
-                : `<div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
-                       <span>${badgeGuideHtml}</span>
-                       <button type="button" class="filter-btn" style="padding:1px 5px; font-size:10px; opacity:0.8;" title="Ajouter un lien PDF ou PowerPoint à projeter" onclick="definirLienSlotLeconProf('${pole}', '${jour}', ${slotIdx})">➕📎 PDF/PPT</button>
-                   </div>`;
-
-            return `<td style="background:${bgCell}; padding:6px; vertical-align:top; border:1px solid #cbd5e1;">
-                <div class="no-print">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:3px;">
-                        <select onchange="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'niveau', this.value)" style="background:${stNiv.bg}; color:${stNiv.text}; font-weight:bold; font-size:12px; padding:2px 6px; border-radius:5px; border:1px solid rgba(0,0,0,0.18); cursor:pointer;">
-                            ${optionsNiv}
-                        </select>
-                        <div style="display:flex; align-items:center; gap:2px;">
-                            ${slotIdx > 0 ? `<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Monter ce groupe plus tôt" onclick="deplacerSlotLeconProf('${pole}', '${jour}', ${slotIdx}, -1)">▲</button>` : ''}
-                            ${slotIdx < (NB_SLOTS_PASSAGES_PROF - 1) ? `<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Descendre ce groupe plus tard" onclick="deplacerSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 1)">▼</button>` : ''}
-                            <label style="font-size:11px; font-weight:bold; color:${cell.fait ? '#1e8449' : '#7f8c8d'}; cursor:pointer; margin-left:3px; display:flex; align-items:center; gap:2px;" title="Cocher quand la leçon a été donnée">
-                                <input type="checkbox" ${cell.fait ? 'checked' : ''} onchange="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'fait', this.checked)" style="cursor:pointer;">
-                                ${cell.fait ? '✅' : ''}
-                            </label>
-                        </div>
-                    </div>
-                    ${rappelSeqHtml}
-                    <input type="text" list="${idDl}" value="${escHTML(cell.texte || '')}" placeholder="Leçon / notion..." oninput="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'texte', this.value)" style="width:100%; padding:5px 7px; font-size:12.5px; font-weight:${cell.texte ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:5px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;'}">
-                    ${btnDocHtml}
-                </div>
-
-                <div class="only-print-lecons" style="text-align:center; padding:3px 2px;">
-                    ${nivSlot ? `<div style="display:inline-block; background:${stNiv.bg} !important; color:${stNiv.text} !important; font-weight:bold; font-size:11.5pt; padding:2px 10px; border-radius:6px; border:1px solid #2c3e50; margin-bottom:4px;">${escHTML(nivSlot)}</div>` : ''}
-                    <div id="print_txt_${pole}_${jour}_${slotIdx}" style="font-size:11pt; font-weight:bold; color:#1e293b; line-height:1.2; ${cell.fait ? 'text-decoration:line-through; opacity:0.6;' : ''}">
-                        ${escHTML(cell.texte || '—')}
-                    </div>
-                </div>
-            </td>`;
-        }).join('');
-
-        return `<tr>
-            <td style="font-weight:bold; font-size:12.5px; text-align:center; background:#f1f5f9; color:#1e293b; width:88px;">
-                <span style="display:inline-block; background:${couleurBandeau}; color:#fff; border-radius:50%; width:22px; height:22px; line-height:22px; font-size:12px; margin-bottom:2px;">${slotIdx + 1}</span><br>
-                <small>${labelsOrdre[slotIdx]}</small>
-            </td>
-            ${cellsHtml}
-        </tr>`;
-    }).join('');
-
-    return `<div class="card-panel card-pole-lecon" style="border-top:4px solid ${couleurBandeau}; padding:12px 14px;">
-        <div style="background:${couleurBandeau} !important; color:#ffffff !important; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:14px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-            <span>${titre}</span>
-            <small style="font-weight:normal; opacity:0.95;">⬇ Ordre de passage de haut en bas (1er ➔ 5e)</small>
-        </div>
-        ${datalistsHtml}
-        <div style="overflow-x:auto;">
-            <table class="table-classique" style="table-layout:fixed; min-width:620px;">
-                <thead>
-                    <tr>
-                        <th style="width:88px; text-align:center;">Passage</th>
-                        <th style="text-align:center;">LUNDI</th>
-                        <th style="text-align:center;">MARDI</th>
-                        <th style="text-align:center;">JEUDI</th>
-                        <th style="text-align:center;">VENDREDI</th>
-                    </tr>
-                </thead>
-                <tbody>${rowsHtml}</tbody>
-            </table>
-        </div>
-    </div>`;
+    return "";
 }
 
 function toggleAfficherArchives() {
@@ -3032,7 +3055,6 @@ function rafraichirDashboard() {
         ? `${perActive} — Semaine ${semIdx + 1} (du ${semProf.dateDebut} au ${semProf.dateFin})`
         : `${perActive} — Semaine ${semIdx + 1}`;
 
-    // Encadré optionnel permettant de cocher en avance une leçon ou séquence de la semaine suivante (S+1)
     let blocSemaineSuivanteHtml = '';
     if (afficherSemaineSuivanteDash && semIdx + 1 < pObj.semaines.length) {
         let semNext = pObj.semaines[semIdx + 1];
@@ -3868,11 +3890,13 @@ function sauvegarderToutesSequences() {
         let oldV = inp.getAttribute('data-old');
         let newV = inp.value.trim();
         if (oldV && oldV !== newV) {
+            let oldClean = nettoyerCleFirebase(oldV);
+            let newClean = nettoyerCleFirebase(newV);
             Object.keys(programmations).forEach(k => {
-                if (k.startsWith('SEQ||') && k.endsWith('||' + oldV)) {
+                if (k.startsWith('SEQ||') && (k.endsWith('||' + oldV) || k.endsWith('||' + oldClean))) {
                     let parts = k.split('||');
                     if (newV) {
-                        programmations[`SEQ||${parts[1]}||${newV}`] = programmations[k];
+                        programmations[`SEQ||${parts[1]}||${newClean}`] = programmations[k];
                     }
                     delete programmations[k];
                 }
@@ -3954,9 +3978,6 @@ function sauvegarderToutesCompetences() {
     postEditGlobal(); fermerModal('modalCompetences'); showToast("Compétences mises à jour !", "success");
 }
 
-// ==========================================
-// MODALE TYPES DE SUPPORTS CORRIGÉE (CRÉATION + ÉDITION FLUIDES)
-// ==========================================
 function ouvrirModalGestionTypes() {
     afficherListeTypesModal();
     ouvrirModal('modalTypes');
@@ -4428,8 +4449,63 @@ function afficherBase() {
 }
 
 // ==========================================
-// 8. ONGLET 5 : PROGRAMMATION (SOUS-ONGLETS ANNUEL + P1 À P5, MENU DÉROULANT STRICT DES LEÇONS DE LA SEMAINE & DIAPORAMA AUTO)
+// 8. ONGLET 5 : PROGRAMMATION (MULTI-NIVEAUX AUTOMATIQUE POUR SÉQUENCES & LEÇONS COMMUNES + SAUVEGARDE RENFORCÉE)
 // ==========================================
+
+function estActiviteDuPole(act, pole) {
+    if (!act) return false;
+    let matNorm = (act.matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return (pole === 'francais')
+        ? (matNorm.includes('francais') || matNorm.includes('grammaire') || matNorm.includes('conjugaison') || matNorm.includes('orthographe') || matNorm.includes('lexique') || matNorm.includes('vocabulaire') || matNorm.includes('ecriture') || matNorm.includes('lecture'))
+        : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('proportionnalite') || matNorm.includes('programmation') || matNorm.includes('probleme'));
+}
+
+// Détecte tous les niveaux qui partagent une même séquence avec le niveau d'origine (ex: G1 partagée entre CM1 et CM2)
+function getNiveauxPartageantSequence(nomSeq, pole, nivOrigine) {
+    let niveauxSet = new Set([nivOrigine]);
+    if (!nomSeq || !nomSeq.trim()) return Array.from(niveauxSet);
+
+    baseDonnees.forEach(a => {
+        if (!a || !estActiviteDuPole(a, pole)) return;
+        if (!activiteAppartientASequence(a, nomSeq)) return;
+        let nivAct = (a.niveau || "").toUpperCase();
+        if (nivAct.includes(nivOrigine) || nivAct === "TOUS") {
+            NIVEAUX_LISTE.forEach(n => {
+                if (nivAct.includes(n) || nivAct === "TOUS") niveauxSet.add(n);
+            });
+        }
+    });
+
+    return NIVEAUX_LISTE.filter(n => niveauxSet.has(n));
+}
+
+// Détecte tous les niveaux qui partagent une même leçon avec le niveau d'origine (ex: Leçon G1 commune aux CM1 et CM2)
+function getNiveauxPartageantLecon(pole, nivOrigine, texteLecon) {
+    let nivClean = nivOrigine === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivOrigine) ? nivOrigine : "CP");
+    let niveauxSet = new Set([nivClean]);
+    if (nivOrigine === "CM1-CM2") niveauxSet.add("CM2");
+    if (!texteLecon || !texteLecon.trim()) return Array.from(niveauxSet);
+
+    let txtNorm = texteLecon.trim().toLowerCase();
+    baseDonnees.forEach(a => {
+        if (!a || !estActiviteDuPole(a, pole)) return;
+        let nivAct = (a.niveau || "").toUpperCase();
+        if (!nivAct.includes(nivClean) && nivAct !== "TOUS") return;
+
+        let prefix = a.lecon ? `${a.lecon.trim()} - `.toLowerCase() : "";
+        let res = (a.ressource || "").trim().toLowerCase();
+        let labelComplet = (prefix && !res.startsWith(prefix)) ? `${prefix}${res}` : res;
+        let codeSeul = (a.lecon || "").trim().toLowerCase();
+
+        if (txtNorm === labelComplet || txtNorm === res || (codeSeul !== "" && txtNorm === codeSeul)) {
+            NIVEAUX_LISTE.forEach(n => {
+                if (nivAct.includes(n) || nivAct === "TOUS") niveauxSet.add(n);
+            });
+        }
+    });
+
+    return NIVEAUX_LISTE.filter(n => niveauxSet.has(n));
+}
 
 // Récupère EXCLUSIVEMENT les activités pré-enregistrées en tant que Leçon (👩‍🏫)
 // appartenant aux séquences sélectionnées pour la semaine (et au niveau / pôle)
@@ -4438,17 +4514,9 @@ function getLeconsPreEnregistreesPourSequencesSemaine(pole, niveauGroupe, seqsSe
     let nivCibles = niveauGroupe === "CM1-CM2" ? ["CM1", "CM2"] : (niveauGroupe ? [niveauGroupe] : ["CP", "CE1", "CE2", "CM1", "CM2"]);
 
     let leconsTrouvees = baseDonnees.filter(a => {
-        if (!a || !estLeconProf(a)) return false;
-
-        let matNorm = (a.matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        let estBonPole = (pole === 'francais')
-            ? (matNorm.includes('francais') || matNorm.includes('grammaire') || matNorm.includes('conjugaison') || matNorm.includes('orthographe') || matNorm.includes('lexique') || matNorm.includes('vocabulaire') || matNorm.includes('ecriture') || matNorm.includes('lecture'))
-            : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('proportionnalite') || matNorm.includes('programmation') || matNorm.includes('probleme'));
-        if (!estBonPole) return false;
-
+        if (!a || !estLeconProf(a) || !estActiviteDuPole(a, pole)) return false;
         let nivAct = (a.niveau || "").toUpperCase();
         if (nivAct && !nivCibles.some(n => nivAct.includes(n)) && nivAct !== "TOUS") return false;
-
         return seqsSemaine.some(sNom => activiteAppartientASequence(a, sNom));
     });
 
@@ -4473,25 +4541,17 @@ function getLeconsPreEnregistreesPourSequencesSemaine(pole, niveauGroupe, seqsSe
     return Array.from(resMap.values()).sort((x, y) => x.label.localeCompare(y.label, 'fr'));
 }
 
-// Surcharge de genererDatalistSuggestionsLecons (utilisée par le Tableau de bord) pour ne proposer que les leçons pré-enregistrées des séquences de la semaine
 genererDatalistSuggestionsLecons = function(pole, niveauGroupe, seqsPrioritaires = []) {
     return getLeconsPreEnregistreesPourSequencesSemaine(pole, niveauGroupe, seqsPrioritaires).map(item => item.label);
 };
 
-// Surcharge de trouverInfosDepuisBaseLecon pour retrouver immédiatement le diaporama (lienExterne) et la page du guide enseignant (pageProf) de la leçon sélectionnée
 trouverInfosDepuisBaseLecon = function(pole, niveauGroupe, texteSaisi) {
-    if (!texteSaisi || !texteSaisi.trim()) return { lien: "", pageProf: "" };
+    if (!texteSaisi || !texteSaisi.trim()) return { lien: "", pageProf: "", sequence: "" };
     let txtNorm = texteSaisi.trim().toLowerCase();
     let nivCibles = niveauGroupe === "CM1-CM2" ? ["CM1", "CM2"] : (niveauGroupe ? [niveauGroupe] : ["CP", "CE1", "CE2", "CM1", "CM2"]);
 
     let candidats = baseDonnees.filter(a => {
-        if (!a) return false;
-        let matNorm = (a.matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        let estBonPole = (pole === 'francais')
-            ? (matNorm.includes('francais') || matNorm.includes('grammaire') || matNorm.includes('conjugaison') || matNorm.includes('orthographe') || matNorm.includes('lexique') || matNorm.includes('vocabulaire') || matNorm.includes('ecriture') || matNorm.includes('lecture'))
-            : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('proportionnalite') || matNorm.includes('programmation') || matNorm.includes('probleme'));
-        if (!estBonPole) return false;
-
+        if (!a || !estActiviteDuPole(a, pole)) return false;
         let nivAct = (a.niveau || "").toUpperCase();
         if (nivAct && !nivCibles.some(n => nivAct.includes(n)) && nivAct !== "TOUS") return false;
 
@@ -4506,11 +4566,55 @@ trouverInfosDepuisBaseLecon = function(pole, niveauGroupe, texteSaisi) {
     let matchPrio = candidats.find(a => estLeconProf(a) && (a.lienExterne || a.pageProf)) || candidats.find(a => estLeconProf(a)) || candidats[0];
     return {
         lien: (matchPrio && matchPrio.lienExterne) ? matchPrio.lienExterne.trim() : "",
-        pageProf: (matchPrio && matchPrio.pageProf) ? matchPrio.pageProf.trim() : ""
+        pageProf: (matchPrio && matchPrio.pageProf) ? matchPrio.pageProf.trim() : "",
+        sequence: (matchPrio && matchPrio.sequence) ? extraireListeSequences(matchPrio.sequence)[0] || "" : ""
     };
 };
 
-// Surcharge de genererTableauLeconsPoleHtml sur le Tableau de bord pour afficher aussi un menu déroulant (<select>) des leçons de la semaine avec intégration directe du diaporama
+// Surcharge de majSlotLeconProf sur le Tableau de bord pour répercuter aussi la leçon sur tous les niveaux qui la partagent (ex: CM1 et CM2)
+majSlotLeconProf = function(pole, jour, slotIdx, champ, valeur) {
+    assurerStructureProgPeriodes();
+    let per = progPeriodesData.periodeActiveDash;
+    let sIdx = progPeriodesData.semaineIndexDash;
+    let sem = progPeriodesData.periodes[per].semaines[sIdx];
+    if (!sem) return;
+
+    let nivActuel = sem.ordrePassages[pole][jour][slotIdx] || GROUPES_NIVEAUX_PROF[slotIdx];
+
+    if (champ === 'niveau') {
+        sem.ordrePassages[pole][jour][slotIdx] = valeur;
+        sauvegarderProgPeriodes();
+        rafraichirDashboard();
+        return;
+    }
+
+    let nivCible = nivActuel === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivActuel) ? nivActuel : "CP");
+    let cellOrig = sem.niveaux[nivCible][pole].jours[jour];
+    let texteRef = (champ === 'texte') ? (valeur || cellOrig.texte) : cellOrig.texte;
+    let niveauxPartages = getNiveauxPartageantLecon(pole, nivActuel, texteRef);
+
+    niveauxPartages.forEach(nPart => {
+        let c = sem.niveaux[nPart][pole].jours[jour];
+        c[champ] = valeur;
+        if (champ === 'texte') {
+            if (!valeur || !valeur.trim()) {
+                c.lien = "";
+                c.pageProf = "";
+            } else {
+                let infos = trouverInfosDepuisBaseLecon(pole, nPart, valeur);
+                c.lien = infos.lien || "";
+                c.pageProf = infos.pageProf || "";
+                if (infos.sequence && !sem.niveaux[nPart][pole].sequences.some(s => s.nom.toLowerCase() === infos.sequence.toLowerCase())) {
+                    sem.niveaux[nPart][pole].sequences.push({ nom: infos.sequence, fait: false });
+                }
+            }
+        }
+    });
+
+    sauvegarderProgPeriodes();
+    rafraichirDashboard();
+};
+
 genererTableauLeconsPoleHtml = function(pole, titre, couleurBandeau, sem) {
     const labelsOrdre = ["1er passage", "2e passage", "3e passage", "4e passage", "5e passage"];
 
@@ -4539,7 +4643,6 @@ genererTableauLeconsPoleHtml = function(pole, titre, couleurBandeau, sem) {
             let optionsNiv = `<option value="" ${!nivSlot ? 'selected' : ''}>-- Pause / Libre --</option>` +
                 OPTIONS_NIVEAUX_PROF_SELECT.map(n => `<option value="${n}" ${nivSlot === n ? 'selected' : ''}>${n}</option>`).join('');
 
-            // Liste des leçons pré-enregistrées pour les séquences de la semaine de ce niveau
             let leconsDispo = getLeconsPreEnregistreesPourSequencesSemaine(pole, nivSlot, nomsSeqsSem);
             let valActuelle = (cell.texte || "").trim();
             let optionsLeconsHtml = "";
@@ -4687,23 +4790,42 @@ function modifierDateDebutPeriode(per, dateISO) {
     afficherProgrammation();
 }
 
+// Ajout d'une séquence dans une semaine : si cette séquence est commune à plusieurs niveaux (ex: CM1 et CM2),
+// elle se place automatiquement au même endroit (même période, même semaine, même pôle) dans l'autre niveau !
 function ajouterSequenceDansSemaineProg(per, semIdx, niv, pole, nomSeq) {
     if (!nomSeq || !nomSeq.trim()) return;
     assurerStructureProgPeriodes();
     let clean = nomSeq.trim();
-    let bloc = progPeriodesData.periodes[per].semaines[semIdx].niveaux[niv][pole];
-    if (!bloc.sequences.some(s => s.nom.toLowerCase() === clean.toLowerCase())) {
-        bloc.sequences.push({ nom: clean, fait: false });
-        sauvegarderProgPeriodes();
-        afficherProgrammation();
-        rafraichirDashboard();
+    let niveauxCibles = getNiveauxPartageantSequence(clean, pole, niv);
+
+    niveauxCibles.forEach(nCib => {
+        let bloc = progPeriodesData.periodes[per].semaines[semIdx].niveaux[nCib][pole];
+        if (!bloc.sequences.some(s => s.nom.toLowerCase() === clean.toLowerCase())) {
+            bloc.sequences.push({ nom: clean, fait: false });
+        }
+    });
+
+    sauvegarderProgPeriodes();
+    afficherProgrammation();
+    rafraichirDashboard();
+    if (niveauxCibles.length > 1) {
+        showToast(`📑 Séquence "${clean}" placée automatiquement en ${niveauxCibles.join(' & ')} (Semaine ${semIdx + 1}) !`, "success");
     }
 }
 
 function retirerSequenceDeSemaineProg(per, semIdx, niv, pole, idxSeq) {
     assurerStructureProgPeriodes();
-    let bloc = progPeriodesData.periodes[per].semaines[semIdx].niveaux[niv][pole];
-    bloc.sequences.splice(idxSeq, 1);
+    let blocOrig = progPeriodesData.periodes[per].semaines[semIdx].niveaux[niv][pole];
+    let seqObj = blocOrig.sequences[idxSeq];
+    if (!seqObj) return;
+    let nomCible = seqObj.nom;
+    let niveauxCibles = getNiveauxPartageantSequence(nomCible, pole, niv);
+
+    niveauxCibles.forEach(nCib => {
+        let b = progPeriodesData.periodes[per].semaines[semIdx].niveaux[nCib][pole];
+        b.sequences = (b.sequences || []).filter(s => s.nom.toLowerCase() !== nomCible.toLowerCase());
+    });
+
     sauvegarderProgPeriodes();
     afficherProgrammation();
     rafraichirDashboard();
@@ -4711,37 +4833,57 @@ function retirerSequenceDeSemaineProg(per, semIdx, niv, pole, idxSeq) {
 
 function toggleFaitSequenceSemaineProg(per, semIdx, niv, pole, idxSeq) {
     assurerStructureProgPeriodes();
-    let bloc = progPeriodesData.periodes[per].semaines[semIdx].niveaux[niv][pole];
-    if (bloc.sequences[idxSeq]) {
-        bloc.sequences[idxSeq].fait = !bloc.sequences[idxSeq].fait;
-        sauvegarderProgPeriodes();
-        afficherProgrammation();
-        rafraichirDashboard();
-    }
+    let blocOrig = progPeriodesData.periodes[per].semaines[semIdx].niveaux[niv][pole];
+    if (!blocOrig.sequences[idxSeq]) return;
+    let nouvEtat = !blocOrig.sequences[idxSeq].fait;
+    let nomCible = blocOrig.sequences[idxSeq].nom;
+    let niveauxCibles = getNiveauxPartageantSequence(nomCible, pole, niv);
+
+    niveauxCibles.forEach(nCib => {
+        let b = progPeriodesData.periodes[per].semaines[semIdx].niveaux[nCib][pole];
+        (b.sequences || []).forEach(s => {
+            if (s.nom.toLowerCase() === nomCible.toLowerCase()) s.fait = nouvEtat;
+        });
+    });
+
+    sauvegarderProgPeriodes();
+    afficherProgrammation();
+    rafraichirDashboard();
 }
 
-// Sélection d'une leçon dans la Programmation : copie automatiquement son diaporama (lienExterne) et sa page de guide enseignant (pageProf) !
+// Sélection ou validation d'une leçon dans la Programmation :
+// Si la leçon est commune à plusieurs niveaux (ex: G1 pour CM1 et CM2), elle se place automatiquement au même jour dans tous les niveaux concernés avec son diaporama !
 function majLeconJourProg(per, semIdx, niv, pole, jour, champ, valeur) {
     assurerStructureProgPeriodes();
-    let cell = progPeriodesData.periodes[per].semaines[semIdx].niveaux[niv][pole].jours[jour];
-    cell[champ] = valeur;
+    let semObj = progPeriodesData.periodes[per].semaines[semIdx];
+    let cellOrig = semObj.niveaux[niv][pole].jours[jour];
+    let texteRef = (champ === 'texte') ? (valeur || cellOrig.texte) : cellOrig.texte;
+    let niveauxCibles = getNiveauxPartageantLecon(pole, niv, texteRef);
 
-    if (champ === 'texte') {
-        if (!valeur || !valeur.trim()) {
-            cell.lien = "";
-            cell.pageProf = "";
-        } else {
-            let infos = trouverInfosDepuisBaseLecon(pole, niv, valeur);
-            cell.lien = infos.lien || "";
-            cell.pageProf = infos.pageProf || "";
+    niveauxCibles.forEach(nCib => {
+        let cell = semObj.niveaux[nCib][pole].jours[jour];
+        cell[champ] = valeur;
+
+        if (champ === 'texte') {
+            if (!valeur || !valeur.trim()) {
+                cell.lien = "";
+                cell.pageProf = "";
+            } else {
+                let infos = trouverInfosDepuisBaseLecon(pole, nCib, valeur);
+                cell.lien = infos.lien || "";
+                cell.pageProf = infos.pageProf || "";
+                if (infos.sequence && !semObj.niveaux[nCib][pole].sequences.some(s => s.nom.toLowerCase() === infos.sequence.toLowerCase())) {
+                    semObj.niveaux[nCib][pole].sequences.push({ nom: infos.sequence, fait: false });
+                }
+            }
         }
-        sauvegarderProgPeriodes();
-        afficherProgrammation();
-        rafraichirDashboard();
-    } else {
-        sauvegarderProgPeriodes();
-        afficherProgrammation();
-        rafraichirDashboard();
+    });
+
+    sauvegarderProgPeriodes();
+    afficherProgrammation();
+    rafraichirDashboard();
+    if (champ === 'texte' && valeur && niveauxCibles.length > 1) {
+        showToast(`👩‍🏫 Leçon placée automatiquement en ${niveauxCibles.join(' & ')} (${jour} - S${semIdx + 1}) !`, "success");
     }
 }
 
@@ -4750,7 +4892,11 @@ function definirLienJourProg(per, semIdx, niv, pole, jour) {
     let cell = progPeriodesData.periodes[per].semaines[semIdx].niveaux[niv][pole].jours[jour];
     let url = prompt(`Collez ici le lien vers votre PDF / PowerPoint à projeter (${niv} - ${jour}) :`, cell.lien || "");
     if (url !== null) {
-        cell.lien = url.trim();
+        let cleanUrl = url.trim();
+        let niveauxCibles = getNiveauxPartageantLecon(pole, niv, cell.texte);
+        niveauxCibles.forEach(nCib => {
+            progPeriodesData.periodes[per].semaines[semIdx].niveaux[nCib][pole].jours[jour].lien = cleanUrl;
+        });
         sauvegarderProgPeriodes();
         afficherProgrammation();
         rafraichirDashboard();
@@ -4782,6 +4928,7 @@ function envoyerSemaineProgVersDashboard(per, semIdx) {
     showToast(`📊 Tableau de bord positionné sur ${per} — Semaine ${semIdx + 1} !`, "success");
 }
 
+// Affectation d'une séquence aux périodes dans la Répartition Annuelle (avec double sauvegarde dans programmations + baseDonnees)
 function toggleProgSequence(matiere, sequence, per) {
     let actuelles = getPeriodesSequence(matiere, sequence);
     let nouvelles = [];
@@ -4800,19 +4947,20 @@ function toggleProgSequence(matiere, sequence, per) {
         }
     }
 
+    let strNouvelles = nouvelles.join(', ');
     let cleSeq = getCleProgSequence(matiere, sequence);
-    if (nouvelles.length === 0) {
-        programmations[cleSeq] = "";
-    } else {
-        programmations[cleSeq] = nouvelles.join(', ');
-    }
+    programmations[cleSeq] = strNouvelles;
 
     baseDonnees.forEach(a => {
         if (!a) return;
-        if ((a.matiere || "").trim() === (matiere || "").trim() && activiteAppartientASequence(a, sequence)) {
+        if (activiteAppartientASequence(a, sequence) && (!matiere || (a.matiere || "").trim() === (matiere || "").trim())) {
             let pUnion = new Set();
             extraireListeSequences(a.sequence).forEach(s => {
-                getPeriodesSequence(a.matiere, s).forEach(p => pUnion.add(p));
+                if (s.toLowerCase() === sequence.trim().toLowerCase()) {
+                    nouvelles.forEach(p => pUnion.add(p));
+                } else {
+                    getPeriodesSequence(a.matiere, s).forEach(p => pUnion.add(p));
+                }
             });
             let strP = PERIODES_LISTE.filter(p => pUnion.has(p)).join(', ');
             a.periode = strP;
@@ -4830,15 +4978,9 @@ function toggleProgSequence(matiere, sequence, per) {
 function getSequencesAffecteesPeriodePole(per, niv, pole) {
     let seqMap = new Map();
     baseDonnees.forEach(a => {
-        if (!a) return;
+        if (!a || !estActiviteDuPole(a, pole)) return;
         let nivAct = (a.niveau || "").toUpperCase();
         if (nivAct && !nivAct.includes(niv) && nivAct !== "TOUS") return;
-
-        let matNorm = (a.matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        let estBonPole = (pole === 'francais')
-            ? (matNorm.includes('francais') || matNorm.includes('grammaire') || matNorm.includes('conjugaison') || matNorm.includes('orthographe') || matNorm.includes('lexique') || matNorm.includes('vocabulaire') || matNorm.includes('ecriture') || matNorm.includes('lecture'))
-            : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('proportionnalite') || matNorm.includes('programmation') || matNorm.includes('probleme'));
-        if (!estBonPole) return;
 
         extraireListeSequences(a.sequence).forEach(s => {
             let pSeq = getPeriodesSequence(a.matiere, s);
@@ -4855,14 +4997,10 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
 
     let toutesSeqsPoleSet = new Set(seqsPeriode.map(x => x.nom));
     baseDonnees.forEach(a => {
-        if (!a) return;
+        if (!a || !estActiviteDuPole(a, pole)) return;
         let nivAct = (a.niveau || "").toUpperCase();
         if (nivAct && !nivAct.includes(niv) && nivAct !== "TOUS") return;
-        let matNorm = (a.matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        let estBonPole = (pole === 'francais')
-            ? (matNorm.includes('francais') || matNorm.includes('grammaire') || matNorm.includes('conjugaison') || matNorm.includes('orthographe') || matNorm.includes('lexique') || matNorm.includes('vocabulaire') || matNorm.includes('ecriture'))
-            : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('programmation'));
-        if (estBonPole) extraireListeSequences(a.sequence).forEach(s => toutesSeqsPoleSet.add(s));
+        extraireListeSequences(a.sequence).forEach(s => toutesSeqsPoleSet.add(s));
     });
 
     let idDlSeq = `dl_prog_seq_${per}_${niv}_${pole}`;
@@ -4890,16 +5028,17 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
         let seqsSem = bloc.sequences || [];
         let nomsSeqsSem = seqsSem.map(s => s.nom);
 
-        // Récupère EXCLUSIVEMENT les leçons pré-enregistrées (👩‍🏫) correspondant aux séquences de cette semaine
         let leconsDispoSemaine = getLeconsPreEnregistreesPourSequencesSemaine(pole, niv, nomsSeqsSem);
 
-        let pillsSeqHtml = seqsSem.map((sq, sqIdx) => `
-            <span class="seq-tag-pill ${sq.fait ? 'done' : ''}" style="display:inline-flex; align-items:center; gap:4px; margin:2px 0;">
+        let pillsSeqHtml = seqsSem.map((sq, sqIdx) => {
+            let nivPart = getNiveauxPartageantSequence(sq.nom, pole, niv);
+            let badgeShared = nivPart.length > 1 ? ` <small style="opacity:0.75;">(${nivPart.join('/')})</small>` : '';
+            return `<span class="seq-tag-pill ${sq.fait ? 'done' : ''}" style="display:inline-flex; align-items:center; gap:4px; margin:2px 0;">
                 <input type="checkbox" ${sq.fait ? 'checked' : ''} onchange="toggleFaitSequenceSemaineProg('${per}', ${semIdx}, '${niv}', '${pole}', ${sqIdx})" title="Cocher quand la séquence est faite (si non cochée, elle glissera en S+1 lors du report)">
-                <span>📑 ${escHTML(sq.nom)}</span>
+                <span>📑 ${escHTML(sq.nom)}${badgeShared}</span>
                 <span class="comp-tag-remove" onclick="retirerSequenceDeSemaineProg('${per}', ${semIdx}, '${niv}', '${pole}', ${sqIdx})" title="Retirer de cette semaine">✖</span>
-            </span>
-        `).join(' ');
+            </span>`;
+        }).join(' ');
 
         let idInputAddSeq = `inp_add_seq_${per}_${semIdx}_${niv}_${pole}`;
 
@@ -4965,7 +5104,7 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
     return `<div class="card-panel" style="border-top:4px solid ${couleurPole}; margin-bottom:22px; padding:14px 16px;">
         <div style="background:${couleurPole} !important; color:#fff !important; padding:7px 12px; border-radius:6px; font-weight:bold; font-size:14.5px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
             <span>${titrePole} — Niveau ${niv} (${per})</span>
-            <small style="font-weight:normal; opacity:0.95;">Le choix de la leçon rattache automatiquement son diaporama sur le Tableau de bord</small>
+            <small style="font-weight:normal; opacity:0.95;">Les séquences & leçons communes (ex: CM1/CM2) se placent automatiquement dans les deux niveaux</small>
         </div>
         ${dlSeqHtml}
         ${reservoirHtml}
@@ -5013,7 +5152,7 @@ function afficherProgrammationPeriodeDetail(per) {
             </div>
         </div>
         <p style="font-size:12.5px; color:#555; margin:0;">
-            💡 <strong>Fonctionnement :</strong> 1️⃣ Ajoutez d'abord la ou les <strong>séquences de la semaine</strong> dans la 2<sup>e</sup> colonne ➔ 2️⃣ Choisissez ensuite dans les menus déroulants (<em>Lundi, Mardi, Jeudi, Vendredi</em>) parmi les <strong>leçons pré-enregistrées (👩‍🏫) de ces séquences</strong> : le diaporama (📽️) et la page du guide enseignant se mettent automatiquement sur votre Tableau de bord !
+            💡 <strong>Fonctionnement :</strong> 1️⃣ Ajoutez d'abord la ou les <strong>séquences de la semaine</strong> dans la 2<sup>e</sup> colonne ➔ 2️⃣ Choisissez ensuite la <strong>leçon pré-enregistrée (👩‍🏫)</strong> dans le menu du jour : si la séquence ou la leçon est commune à plusieurs niveaux (ex: CM1 et CM2), elle se place automatiquement au même endroit dans l'autre niveau avec son diaporama !
         </p>
     </div>` +
     genererTableauProgPeriodePoleHtml(per, niveauActifProgPeriode, 'francais', '📘 PROGRAMMATION FRANÇAIS', '#1b4f72', pObj) +
@@ -5119,7 +5258,7 @@ function afficherProgrammation() {
 }
 
 // ==========================================
-// ÉTIQUETTES 3x8 (66x33,8mm), MATRICE & BILANS
+// 8B. ÉTIQUETTES 3x8 (66x33,8mm), MATRICE & BILANS
 // ==========================================
 function afficherChoixEtiquettes() {
     const selMat = document.getElementById('selectMatiereEtiquettes');
@@ -5302,6 +5441,8 @@ document.addEventListener("DOMContentLoaded", function() {
     if (inpMat) inpMat.addEventListener('input', majCouleurAutoFormSimple);
     let selType = document.getElementById('selectTypeRessource');
     if (selType) selType.addEventListener('change', majCouleurAutoFormSimple);
+    let inpMaxEl = document.getElementById('inputMaxAteliersEleve');
+    if (inpMaxEl) inpMaxEl.max = "100";
     verifierNiveauxCMFormSimple();
     renderTagsSequencesSimple();
     renderTagsCompetencesSimple();
