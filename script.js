@@ -17,6 +17,7 @@ const KEY_FIREBASE_CFG = 'maConfigFirebase_Finale';
 const KEY_PRINT_CFG = 'maConfigImpression_Finale';
 const KEY_SEQ_CUSTOM = 'mesSequencesCustom_Finale';
 const KEY_LECONS_PROF = 'mesLeconsProf_Finale';
+const KEY_PROG_HEBDO = 'maProgHebdoPeriodes_Finale';
 
 const MATIERES_DEFAUT_LISTE = [
     "✅Français - Orthographe",
@@ -33,6 +34,8 @@ const MATIERES_DEFAUT_LISTE = [
 ];
 
 const PERIODES_LISTE = ['P1', 'P2', 'P3', 'P4', 'P5'];
+const NIVEAUX_LISTE = ['CP', 'CE1', 'CE2', 'CM1', 'CM2'];
+const JOURS_SEMAINE_PROF = ["Lundi", "Mardi", "Jeudi", "Vendredi"];
 
 let dashboardExpanded = new Set();
 let dashboardArchives = JSON.parse(localStorage.getItem(KEY_ARCHIVES_TODO)) || [];
@@ -40,10 +43,16 @@ let afficherArchivesMode = false;
 let programmations = JSON.parse(localStorage.getItem(KEY_PROG)) || {};
 let sequencesCustom = JSON.parse(localStorage.getItem(KEY_SEQ_CUSTOM)) || [];
 let planningLeconsProf = JSON.parse(localStorage.getItem(KEY_LECONS_PROF)) || { semaineIndex: 0, semaines: [] };
+let progPeriodesData = JSON.parse(localStorage.getItem(KEY_PROG_HEBDO)) || null;
 let selectionGroupeeBase = new Set();
 let competencesSelectionneesSimple = [];
 let sequencesSelectionneesSimple = [];
 let sequencesSelectionneesMulti = [];
+
+// Navigation Programmation (Annuel vs P1..P5)
+let sousOngletProgActif = 'ANNUEL';
+let niveauActifProgPeriode = 'CP';
+let afficherSemaineSuivanteDash = false;
 
 let printConfig = JSON.parse(localStorage.getItem(KEY_PRINT_CFG)) || {
     titre: "Plan de travail",
@@ -59,7 +68,7 @@ let filtreEtoilesDispo = 0;
 let modeSaisieMultipleActif = false;
 
 let imagesParType = JSON.parse(localStorage.getItem(KEY_IMAGES));
-if (!imagesParType) {
+if (!imagesParType || typeof imagesParType !== 'object') {
     imagesParType = {
         "Atelier": { img: "", emoji: "", remplacerNum: false, appliquerCouleur: true, isTablette: false },
         "Jeu": { img: "", emoji: "🎲", remplacerNum: false, appliquerCouleur: true, isTablette: false },
@@ -77,7 +86,7 @@ if (!imagesParType) {
         imagesParType["Leçon"] = { img: "", emoji: "👩‍🏫", remplacerNum: true, appliquerCouleur: false, isTablette: false };
     }
     Object.keys(imagesParType).forEach(k => {
-        if (typeof imagesParType[k] === 'object') {
+        if (typeof imagesParType[k] === 'object' && imagesParType[k] !== null) {
             if (imagesParType[k].isTablette === undefined) {
                 imagesParType[k].isTablette = (k.toLowerCase() === 'anton' || k.toLowerCase() === 'scratch');
             }
@@ -94,7 +103,7 @@ if (!baseDonnees || !Array.isArray(baseDonnees)) baseDonnees = [];
 let eleves = JSON.parse(localStorage.getItem(KEY_ELEVES));
 if (!eleves || typeof eleves !== 'object') eleves = {};
 
-// Indique si un élément de la base de données est une Leçon explicite (réservée au Tableau de bord prof, masquée dans le plan élève)
+// Indique si un élément de la base de données est une Leçon explicite (réservée au Tableau de bord prof)
 function estLeconProf(act) {
     if (!act) return false;
     if (act.estLecon) return true;
@@ -530,6 +539,11 @@ function sauvegarderProgrammations() {
     localStorage.setItem(KEY_PROG, JSON.stringify(programmations));
     declencherAutoSaveFirebase();
 }
+function sauvegarderProgPeriodes() {
+    assurerStructureProgPeriodes();
+    localStorage.setItem(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData));
+    declencherAutoSaveFirebase();
+}
 
 // ==========================================
 // 2. RESTAURATION UNIVERSELLE JSON & FIREBASE
@@ -554,6 +568,7 @@ function importerDonneesUniversel(rawData) {
     let nouvPrintCfg = parseSiString(data.printConfig || data[KEY_PRINT_CFG]);
     let nouvSeqCustom = parseSiString(data.sequencesCustom || data[KEY_SEQ_CUSTOM]);
     let nouvLeconsProf = parseSiString(data.planningLeconsProf || data[KEY_LECONS_PROF]);
+    let nouvProgHebdo = parseSiString(data.progPeriodesData || data[KEY_PROG_HEBDO]);
 
     if (!Array.isArray(nouvBase) && (!nouvEleves || typeof nouvEleves !== 'object')) {
         showToast("⚠️ Format non reconnu : ni ateliers ni élèves trouvés.", "error");
@@ -572,7 +587,7 @@ function importerDonneesUniversel(rawData) {
             imagesParType["Leçon"] = { img: "", emoji: "👩‍🏫", remplacerNum: true, appliquerCouleur: false, isTablette: false };
         }
         Object.keys(imagesParType).forEach(k => {
-            if (typeof imagesParType[k] === 'object' && imagesParType[k].emoji === undefined) {
+            if (typeof imagesParType[k] === 'object' && imagesParType[k] !== null && imagesParType[k].emoji === undefined) {
                 imagesParType[k].emoji = (k.toLowerCase() === 'jeu' ? '🎲' : '');
             }
         });
@@ -583,6 +598,7 @@ function importerDonneesUniversel(rawData) {
     if (nouvPrintCfg && typeof nouvPrintCfg === 'object') { printConfig = { ...printConfig, ...nouvPrintCfg }; localStorage.setItem(KEY_PRINT_CFG, JSON.stringify(printConfig)); }
     if (Array.isArray(nouvSeqCustom)) { sequencesCustom = nouvSeqCustom; localStorage.setItem(KEY_SEQ_CUSTOM, JSON.stringify(sequencesCustom)); }
     if (nouvLeconsProf && typeof nouvLeconsProf === 'object') { planningLeconsProf = nouvLeconsProf; localStorage.setItem(KEY_LECONS_PROF, JSON.stringify(planningLeconsProf)); }
+    if (nouvProgHebdo && typeof nouvProgHebdo === 'object') { progPeriodesData = nouvProgHebdo; localStorage.setItem(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData)); }
     if (data.theme) appliquerThemeVisuel(data.theme);
 
     rafraichirToutApresImport();
@@ -591,6 +607,7 @@ function importerDonneesUniversel(rawData) {
 }
 
 function rafraichirToutApresImport() {
+    assurerStructureProgPeriodes();
     eliminerDoublonsHistoriques();
     trierBaseDonnees();
     majListeTypesSelect();
@@ -653,7 +670,8 @@ function restaurerDepuisTexteColle() {
 
 function exporterSauvegardeJSON() {
     Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
-    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, sequencesCustom: sequencesCustom, planningLeconsProf: planningLeconsProf, printConfig: printConfig, theme: localStorage.getItem(KEY_THEME) || 'pastel', exportedAt: new Date().toISOString() };
+    assurerStructureProgPeriodes();
+    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, sequencesCustom: sequencesCustom, planningLeconsProf: planningLeconsProf, progPeriodesData: progPeriodesData, printConfig: printConfig, theme: localStorage.getItem(KEY_THEME) || 'pastel', exportedAt: new Date().toISOString() };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -677,7 +695,8 @@ const URL_FIREBASE_FIXE = "https://gestionclasse-cc401-default-rtdb.europe-west1
 async function sauvegarderVersFirebase(forcerManuellement = false) {
     if (!forcerManuellement && baseDonnees.length === 0 && Object.keys(eleves).length === 0) return;
     Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
-    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, sequencesCustom: sequencesCustom, planningLeconsProf: planningLeconsProf, printConfig: printConfig, theme: localStorage.getItem(KEY_THEME) || 'pastel', updatedAt: new Date().toISOString() };
+    assurerStructureProgPeriodes();
+    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, sequencesCustom: sequencesCustom, planningLeconsProf: planningLeconsProf, progPeriodesData: progPeriodesData, printConfig: printConfig, theme: localStorage.getItem(KEY_THEME) || 'pastel', updatedAt: new Date().toISOString() };
     try {
         let res = await fetch(`${URL_FIREBASE_FIXE}/classe_data.json`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -782,20 +801,31 @@ function majListeTypesSelect() {
     const selectType = document.getElementById('selectTypeRessource');
     const selectTypeEtiq = document.getElementById('selectTypeEtiquettes');
     const bulkType = document.getElementById('bulkSelectType');
+    let valActuelleSimple = selectType ? selectType.value : "";
     let html = '<option value="">-- Type --</option>';
     let htmlEtiq = '<option value="Tous">Tous les supports</option>';
     let htmlBulk = '<option value="">-- Changer Support --</option>';
     if (imagesParType) {
         Object.keys(imagesParType).forEach(t => {
-            let em = imagesParType[t].emoji ? imagesParType[t].emoji + " " : "";
+            let em = (imagesParType[t] && imagesParType[t].emoji) ? imagesParType[t].emoji + " " : "";
             html += `<option value="${escHTML(t)}">${escHTML(em + t)}</option>`;
             htmlEtiq += `<option value="${escHTML(t)}">${escHTML(em + t)}</option>`;
             htmlBulk += `<option value="${escHTML(t)}">${escHTML(em + t)}</option>`;
         });
     }
-    if (selectType) selectType.innerHTML = html;
+    if (selectType) {
+        selectType.innerHTML = html;
+        if (valActuelleSimple && imagesParType[valActuelleSimple]) selectType.value = valActuelleSimple;
+    }
     if (selectTypeEtiq) selectTypeEtiq.innerHTML = htmlEtiq;
     if (bulkType) bulkType.innerHTML = htmlBulk;
+
+    // Met aussi à jour les selects .m-type éventuellement ouverts en saisie multiple
+    document.querySelectorAll('#tbodySaisieMultiple .m-type').forEach(sel => {
+        let cur = sel.value;
+        sel.innerHTML = `<option value="">-- Support * --</option>` + Object.keys(imagesParType || {}).map(t => `<option value="${escHTML(t)}">${escHTML(((imagesParType[t] && imagesParType[t].emoji) ? imagesParType[t].emoji + ' ' : '') + t)}</option>`).join('');
+        if (cur && imagesParType[cur]) sel.value = cur;
+    });
 }
 
 let idEleveCourant = null, idEleveImpressionCourant = null;
@@ -901,7 +931,406 @@ function calculTailleStockage() {
     if (jauge) { jauge.style.width = pct + "%"; jauge.style.backgroundColor = pct > 80 ? "#e74c3c" : (pct > 50 ? "#f39c12" : "#27ae60"); }
 }
 // ==========================================
-// 4. ONGLET 1 : PLAN & SUIVI ÉLÈVES (SANS LES LEÇONS PROF, AVEC RITUELS & ADAPTATION PARCOURS)
+// 3B. ARCHITECTURE PROGRAMMATION PAR PÉRIODE / SEMAINE / JOUR & DÉCALAGE DYNAMIQUE
+// ==========================================
+const GROUPES_NIVEAUX_PROF = ["CP", "CE1", "CE2", "CM1", "CM2"];
+const OPTIONS_NIVEAUX_PROF_SELECT = ["CP", "CE1", "CE2", "CM1", "CM2", "CM1-CM2"];
+const NB_SLOTS_PASSAGES_PROF = 5;
+
+function creerSemaineProgVide(indexSem = 0, dateDebutISO = "") {
+    let calc = dateDebutISO ? calculerVendrediDepuisISO(dateDebutISO) : { debutFR: "", finFR: "" };
+    let niveauxData = {};
+    NIVEAUX_LISTE.forEach(niv => {
+        niveauxData[niv] = {
+            francais: {
+                sequences: [],
+                jours: {
+                    "Lundi": { texte: "", lien: "", pageProf: "", fait: false },
+                    "Mardi": { texte: "", lien: "", pageProf: "", fait: false },
+                    "Jeudi": { texte: "", lien: "", pageProf: "", fait: false },
+                    "Vendredi": { texte: "", lien: "", pageProf: "", fait: false }
+                }
+            },
+            maths: {
+                sequences: [],
+                jours: {
+                    "Lundi": { texte: "", lien: "", pageProf: "", fait: false },
+                    "Mardi": { texte: "", lien: "", pageProf: "", fait: false },
+                    "Jeudi": { texte: "", lien: "", pageProf: "", fait: false },
+                    "Vendredi": { texte: "", lien: "", pageProf: "", fait: false }
+                }
+            }
+        };
+    });
+
+    let ordrePassages = { francais: {}, maths: {} };
+    ["francais", "maths"].forEach(pole => {
+        JOURS_SEMAINE_PROF.forEach(j => {
+            ordrePassages[pole][j] = [...GROUPES_NIVEAUX_PROF];
+        });
+    });
+
+    return {
+        numero: indexSem + 1,
+        dateDebutISO: dateDebutISO || "",
+        dateDebut: calc.debutFR || "",
+        dateFin: calc.finFR || "",
+        niveaux: niveauxData,
+        ordrePassages: ordrePassages
+    };
+}
+
+function assurerStructureProgPeriodes() {
+    if (!progPeriodesData || typeof progPeriodesData !== 'object') {
+        progPeriodesData = {
+            periodeActiveDash: 'P1',
+            semaineIndexDash: 0,
+            periodes: {}
+        };
+    }
+    if (!PERIODES_LISTE.includes(progPeriodesData.periodeActiveDash)) {
+        progPeriodesData.periodeActiveDash = 'P1';
+    }
+    if (!progPeriodesData.periodes || typeof progPeriodesData.periodes !== 'object') {
+        progPeriodesData.periodes = {};
+    }
+
+    PERIODES_LISTE.forEach(per => {
+        if (!progPeriodesData.periodes[per]) {
+            progPeriodesData.periodes[per] = {
+                nbSemaines: 7,
+                dateDebutP_ISO: "",
+                semaines: []
+            };
+        }
+        let pObj = progPeriodesData.periodes[per];
+        let nbCible = Math.max(1, Math.min(15, parseInt(pObj.nbSemaines) || 7));
+        pObj.nbSemaines = nbCible;
+        if (!Array.isArray(pObj.semaines)) pObj.semaines = [];
+
+        while (pObj.semaines.length < nbCible) {
+            pObj.semaines.push(creerSemaineProgVide(pObj.semaines.length, ""));
+        }
+
+        pObj.semaines.forEach((sem, idx) => {
+            sem.numero = idx + 1;
+            if (!sem.niveaux) sem.niveaux = {};
+            NIVEAUX_LISTE.forEach(niv => {
+                if (!sem.niveaux[niv]) sem.niveaux[niv] = {};
+                ["francais", "maths"].forEach(pole => {
+                    if (!sem.niveaux[niv][pole]) sem.niveaux[niv][pole] = { sequences: [], jours: {} };
+                    if (!Array.isArray(sem.niveaux[niv][pole].sequences)) sem.niveaux[niv][pole].sequences = [];
+                    if (!sem.niveaux[niv][pole].jours) sem.niveaux[niv][pole].jours = {};
+                    JOURS_SEMAINE_PROF.forEach(j => {
+                        let c = sem.niveaux[niv][pole].jours[j];
+                        if (!c || typeof c !== 'object') {
+                            sem.niveaux[niv][pole].jours[j] = { texte: "", lien: "", pageProf: "", fait: false };
+                        } else {
+                            if (c.texte === undefined) c.texte = "";
+                            if (c.lien === undefined) c.lien = "";
+                            if (c.pageProf === undefined) c.pageProf = "";
+                            c.fait = Boolean(c.fait);
+                        }
+                    });
+                });
+            });
+            if (!sem.ordrePassages) sem.ordrePassages = { francais: {}, maths: {} };
+            ["francais", "maths"].forEach(pole => {
+                if (!sem.ordrePassages[pole]) sem.ordrePassages[pole] = {};
+                JOURS_SEMAINE_PROF.forEach(j => {
+                    if (!Array.isArray(sem.ordrePassages[pole][j]) || sem.ordrePassages[pole][j].length < NB_SLOTS_PASSAGES_PROF) {
+                        sem.ordrePassages[pole][j] = [...GROUPES_NIVEAUX_PROF];
+                    }
+                });
+            });
+        });
+    });
+
+    // Migration automatique de l'ancien planningLeconsProf vers P1 s'il contenait déjà des leçons saisies
+    if (!progPeriodesData.migratedFromLegacy && planningLeconsProf && Array.isArray(planningLeconsProf.semaines) && planningLeconsProf.semaines.length > 0) {
+        let p1 = progPeriodesData.periodes['P1'];
+        planningLeconsProf.semaines.forEach((oldSem, sIdx) => {
+            if (sIdx >= p1.semaines.length) {
+                p1.semaines.push(creerSemaineProgVide(sIdx, oldSem.dateDebutISO || ""));
+                p1.nbSemaines = p1.semaines.length;
+            }
+            let targetSem = p1.semaines[sIdx];
+            if (oldSem.dateDebutISO && !targetSem.dateDebutISO) {
+                targetSem.dateDebutISO = oldSem.dateDebutISO;
+                targetSem.dateDebut = oldSem.dateDebut || "";
+                targetSem.dateFin = oldSem.dateFin || "";
+            }
+            ["francais", "maths"].forEach(pole => {
+                if (!oldSem[pole]) return;
+                JOURS_SEMAINE_PROF.forEach(j => {
+                    let slots = oldSem[pole][j];
+                    if (Array.isArray(slots)) {
+                        slots.forEach((sl, slIdx) => {
+                            if (sl && sl.texte && sl.texte.trim() !== "") {
+                                let nivCib = sl.niveau === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(sl.niveau) ? sl.niveau : GROUPES_NIVEAUX_PROF[slIdx] || "CP");
+                                let dest = targetSem.niveaux[nivCib][pole].jours[j];
+                                if (!dest.texte) {
+                                    dest.texte = sl.texte;
+                                    dest.lien = sl.lien || "";
+                                    dest.fait = Boolean(sl.fait);
+                                }
+                            }
+                        });
+                    }
+                });
+            });
+        });
+        progPeriodesData.migratedFromLegacy = true;
+        localStorage.setItem(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData));
+    }
+
+    let pAct = progPeriodesData.periodes[progPeriodesData.periodeActiveDash];
+    if (progPeriodesData.semaineIndexDash < 0 || progPeriodesData.semaineIndexDash >= pAct.semaines.length) {
+        progPeriodesData.semaineIndexDash = 0;
+    }
+}
+
+function recalculerDatesPeriode(per) {
+    assurerStructureProgPeriodes();
+    let pObj = progPeriodesData.periodes[per];
+    if (!pObj || !pObj.dateDebutP_ISO) return;
+    let couranteISO = pObj.dateDebutP_ISO;
+    pObj.semaines.forEach(sem => {
+        if (couranteISO) {
+            let calc = calculerVendrediDepuisISO(couranteISO);
+            sem.dateDebutISO = couranteISO;
+            sem.dateDebut = calc.debutFR;
+            sem.dateFin = calc.finFR;
+            couranteISO = calc.lundiSuivantISO || "";
+        }
+    });
+}
+
+// Recherche dans la base de données si une leçon (ou activité) correspond au texte saisi et renvoie { lien, pageProf }
+function trouverInfosDepuisBaseLecon(pole, niveauGroupe, texteSaisi) {
+    if (!texteSaisi || !texteSaisi.trim()) return { lien: "", pageProf: "" };
+    let txtNorm = texteSaisi.trim().toLowerCase();
+    let nivCibles = niveauGroupe === "CM1-CM2" ? ["CM1", "CM2"] : (niveauGroupe ? [niveauGroupe] : ["CP", "CE1", "CE2", "CM1", "CM2"]);
+
+    let candidats = baseDonnees.filter(a => {
+        if (!a) return false;
+        let matNorm = (a.matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        let estBonPole = (pole === 'francais')
+            ? (matNorm.includes('francais') || matNorm.includes('grammaire') || matNorm.includes('conjugaison') || matNorm.includes('orthographe') || matNorm.includes('lexique') || matNorm.includes('vocabulaire') || matNorm.includes('ecriture'))
+            : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('programmation'));
+        if (!estBonPole) return false;
+        let nivAct = (a.niveau || "").toUpperCase();
+        if (nivAct && !nivCibles.some(n => nivAct.includes(n))) return false;
+
+        let prefix = a.lecon ? `${a.lecon} - `.toLowerCase() : "";
+        let titre1 = `${prefix}${a.ressource || ''}`.trim().toLowerCase();
+        let titre2 = (a.ressource || '').trim().toLowerCase();
+        let titre3 = `${prefix}${a.sequence || ''}`.trim().toLowerCase();
+        let titre4 = `${prefix}${a.competence || ''}`.trim().toLowerCase();
+        return txtNorm === titre1 || txtNorm === titre2 || txtNorm === titre3 || txtNorm === titre4;
+    });
+
+    let matchPrio = candidats.find(a => estLeconProf(a) && (a.lienExterne || a.pageProf)) || candidats.find(a => estLeconProf(a)) || candidats[0];
+    return {
+        lien: (matchPrio && matchPrio.lienExterne) ? matchPrio.lienExterne.trim() : "",
+        pageProf: (matchPrio && matchPrio.pageProf) ? matchPrio.pageProf.trim() : ""
+    };
+}
+
+// ==========================================
+// SYSTÈME DE DÉCALAGE DYNAMIQUE (RETARD ⏭️ & AVANCE ⏮️)
+// ==========================================
+
+// 1. En cas de RETARD (Clôture de semaine ou bouton "⏭️ Reporter non-faits & Décaler") :
+// Les séquences et les leçons non cochées de la semaine S se déplacent en S+1 et décalent en cascade toutes les semaines suivantes !
+function reporterEtDecalerSemaine(per, semIdx, niveauFiltre = null, poleFiltre = null) {
+    assurerStructureProgPeriodes();
+    let pObj = progPeriodesData.periodes[per];
+    if (!pObj || semIdx < 0 || semIdx >= pObj.semaines.length) return 0;
+
+    let niveauxCibles = niveauFiltre ? [niveauFiltre] : NIVEAUX_LISTE;
+    let polesCibles = poleFiltre ? [poleFiltre] : ["francais", "maths"];
+    let nbDecales = 0;
+
+    niveauxCibles.forEach(niv => {
+        polesCibles.forEach(pole => {
+            let blocActuel = pObj.semaines[semIdx].niveaux[niv][pole];
+
+            // A. Séquences non faites de la semaine S
+            let seqsNonFaites = (blocActuel.sequences || []).filter(s => !s.fait);
+            let seqsFaites = (blocActuel.sequences || []).filter(s => s.fait);
+
+            // B. Jours ayant une leçon non faite en semaine S
+            let joursNonFaits = JOURS_SEMAINE_PROF.filter(j => {
+                let cell = blocActuel.jours[j];
+                return cell && cell.texte && cell.texte.trim() !== "" && !cell.fait;
+            });
+
+            if (seqsNonFaites.length === 0 && joursNonFaits.length === 0) return;
+
+            // Vérifier si la dernière semaine de la période contient déjà des éléments qui risqueraient de déborder
+            let derniereSem = pObj.semaines[pObj.semaines.length - 1].niveaux[niv][pole];
+            let derniereADesSeqs = (seqsNonFaites.length > 0) && (derniereSem.sequences && derniereSem.sequences.length > 0);
+            let derniereADesJours = joursNonFaits.some(j => derniereSem.jours[j] && derniereSem.jours[j].texte.trim() !== "");
+
+            if (semIdx === pObj.semaines.length - 1 || derniereADesSeqs || derniereADesJours) {
+                pObj.semaines.push(creerSemaineProgVide(pObj.semaines.length, ""));
+                pObj.nbSemaines = pObj.semaines.length;
+                recalculerDatesPeriode(per);
+            }
+
+            // Décalage en cascade des séquences de la fin vers semIdx + 1
+            if (seqsNonFaites.length > 0) {
+                for (let k = pObj.semaines.length - 1; k > semIdx + 1; k--) {
+                    let prevSeqs = pObj.semaines[k - 1].niveaux[niv][pole].sequences || [];
+                    if (prevSeqs.length > 0) {
+                        pObj.semaines[k].niveaux[niv][pole].sequences = [
+                            ...prevSeqs,
+                            ...(pObj.semaines[k].niveaux[niv][pole].sequences || [])
+                        ];
+                        pObj.semaines[k - 1].niveaux[niv][pole].sequences = [];
+                    }
+                }
+                let nextSeqs = pObj.semaines[semIdx + 1].niveaux[niv][pole].sequences || [];
+                seqsNonFaites.forEach(snf => {
+                    if (!nextSeqs.some(ex => ex.nom.toLowerCase() === snf.nom.toLowerCase())) {
+                        nextSeqs.unshift({ nom: snf.nom, fait: false });
+                    }
+                });
+                pObj.semaines[semIdx + 1].niveaux[niv][pole].sequences = nextSeqs;
+                blocActuel.sequences = seqsFaites;
+                nbDecales += seqsNonFaites.length;
+            }
+
+            // Décalage en cascade des leçons jour par jour de la fin vers semIdx + 1
+            joursNonFaits.forEach(j => {
+                for (let k = pObj.semaines.length - 1; k > semIdx + 1; k--) {
+                    let cellPrev = pObj.semaines[k - 1].niveaux[niv][pole].jours[j];
+                    pObj.semaines[k].niveaux[niv][pole].jours[j] = { ...cellPrev };
+                }
+                pObj.semaines[semIdx + 1].niveaux[niv][pole].jours[j] = {
+                    texte: blocActuel.jours[j].texte,
+                    lien: blocActuel.jours[j].lien || "",
+                    pageProf: blocActuel.jours[j].pageProf || "",
+                    fait: false
+                };
+                blocActuel.jours[j] = { texte: "", lien: "", pageProf: "", fait: false };
+                nbDecales++;
+            });
+        });
+    });
+
+    sauvegarderProgPeriodes();
+    return nbDecales;
+}
+
+// 2. En cas d'AVANCE / RATTRAPAGE (Bouton "⏮️ Recaler / Avancer la suite") :
+// Si une leçon ou une séquence de S+1 a été faite en avance (ou si un créneau est libre), toute la suite remonte d'une semaine !
+function recalerAvanceSemaine(per, semIdx, niveauFiltre = null, poleFiltre = null) {
+    assurerStructureProgPeriodes();
+    let pObj = progPeriodesData.periodes[per];
+    if (!pObj || semIdx < 0 || semIdx >= pObj.semaines.length - 1) return 0;
+
+    let niveauxCibles = niveauFiltre ? [niveauFiltre] : NIVEAUX_LISTE;
+    let polesCibles = poleFiltre ? [poleFiltre] : ["francais", "maths"];
+    let nbRemontes = 0;
+
+    niveauxCibles.forEach(niv => {
+        polesCibles.forEach(pole => {
+            for (let k = semIdx; k < pObj.semaines.length - 1; k++) {
+                let curr = pObj.semaines[k].niveaux[niv][pole];
+                let next = pObj.semaines[k + 1].niveaux[niv][pole];
+
+                // Si la semaine k n'a plus de séquences non faites (ou est vide) et que k+1 en a, on remonte
+                if ((curr.sequences || []).length === 0 && (next.sequences || []).length > 0) {
+                    curr.sequences = [...next.sequences];
+                    next.sequences = [];
+                    nbRemontes++;
+                }
+
+                // Pour chaque jour : si le jour de la semaine k est vide (ou si le jour de k+1 a déjà été coché fait en avance), on remonte la file
+                JOURS_SEMAINE_PROF.forEach(j => {
+                    let cCurr = curr.jours[j];
+                    let cNext = next.jours[j];
+                    if ((!cCurr.texte || cCurr.texte.trim() === "") && cNext && cNext.texte && cNext.texte.trim() !== "") {
+                        curr.jours[j] = { ...cNext };
+                        next.jours[j] = { texte: "", lien: "", pageProf: "", fait: false };
+                        nbRemontes++;
+                    }
+                });
+            }
+        });
+    });
+
+    sauvegarderProgPeriodes();
+    return nbRemontes;
+}
+
+// Récupère pour un élève donné :
+// - Les séquences programmées cette semaine (Semaine S) -> Entraînement
+// - Les séquences programmées et vues la semaine précédente (Semaine S-1) -> Évaluations à passer en S+1 !
+function getSuggestionsSequencesEtEvalsPourEleve(eleve) {
+    assurerStructureProgPeriodes();
+    if (!eleve) return { per: 'P1', semNum: 1, seqsSemaineCourante: [], seqsSemainePrecedentePourEval: [] };
+
+    let niv = (eleve.niveau || "CP").toUpperCase();
+    if (!NIVEAUX_LISTE.includes(niv)) niv = "CP";
+
+    let per = progPeriodesData.periodeActiveDash || 'P1';
+    let semIdx = progPeriodesData.semaineIndexDash || 0;
+    let pObj = progPeriodesData.periodes[per];
+    if (!pObj || !pObj.semaines[semIdx]) return { per, semNum: 1, seqsSemaineCourante: [], seqsSemainePrecedentePourEval: [] };
+
+    let semCourante = pObj.semaines[semIdx];
+    let seqsCourantes = [];
+    ["francais", "maths"].forEach(pole => {
+        let b = semCourante.niveaux[niv] ? semCourante.niveaux[niv][pole] : null;
+        if (b && Array.isArray(b.sequences)) {
+            b.sequences.forEach(s => {
+                if (s && s.nom && !seqsCourantes.includes(s.nom)) seqsCourantes.push(s.nom);
+            });
+        }
+    });
+
+    // Chercher la semaine précédente (soit semIdx - 1 dans la même période, soit la dernière semaine de la période précédente)
+    let semPrecedente = null;
+    if (semIdx > 0) {
+        semPrecedente = pObj.semaines[semIdx - 1];
+    } else {
+        let idxPer = PERIODES_LISTE.indexOf(per);
+        if (idxPer > 0) {
+            let perPrec = progPeriodesData.periodes[PERIODES_LISTE[idxPer - 1]];
+            if (perPrec && perPrec.semaines.length > 0) {
+                semPrecedente = perPrec.semaines[perPrec.semaines.length - 1];
+            }
+        }
+    }
+
+    let seqsEvalSPlusUn = [];
+    if (semPrecedente && semPrecedente.niveaux[niv]) {
+        ["francais", "maths"].forEach(pole => {
+            let bPrev = semPrecedente.niveaux[niv][pole];
+            if (bPrev && Array.isArray(bPrev.sequences)) {
+                bPrev.sequences.forEach(s => {
+                    // Si la séquence était en S-1 (et n'a pas été reportée en S faute d'avoir été faite), son évaluation tombe cette semaine !
+                    if (s && s.nom && !seqsEvalSPlusUn.includes(s.nom)) {
+                        seqsEvalSPlusUn.push(s.nom);
+                    }
+                });
+            }
+        });
+    }
+
+    return {
+        per,
+        semNum: semIdx + 1,
+        seqsSemaineCourante: seqsCourantes,
+        seqsSemainePrecedentePourEval: seqsEvalSPlusUn
+    };
+}
+
+// ==========================================
+// 4. ONGLET 1 : PLAN & SUIVI ÉLÈVES (AVEC BANDEAU SÉQUENCES SEMAINE S & ÉVALUATIONS S+1)
 // ==========================================
 function majVisibiliteParcoursCreation(niveau) {
     let selParc = document.getElementById('nouvelEleveParcours');
@@ -983,6 +1412,60 @@ function afficherBandeauRecurrentsEleve() {
             <span class="comp-tag-remove" title="Ne plus répéter chaque semaine" onclick="toggleRecurrentEleve('${a.id}')">✖</span>
         </span>
     `).join('');
+}
+
+function filtrerDirectementSequenceEleve(nomSeq) {
+    let selMat = document.getElementById('selectMatiere');
+    let selSeq = document.getElementById('selectSequence');
+    if (selMat) selMat.value = 'TOUTES_MATIERES';
+    changementMatiereSelection();
+    if (selSeq) {
+        selSeq.value = nomSeq;
+        afficherRessourcesDisponibles();
+    }
+}
+
+// Affiche les séquences de la semaine (Entraînement) et les Évaluations prêtes à passer (Séquences vues en S-1)
+function afficherBandeauSuggestionsProgEleve() {
+    let bloc = document.getElementById('blocSuggestionsProgEleve');
+    if (!bloc || !idEleveCourant || !eleves[idEleveCourant]) return;
+    let eleve = eleves[idEleveCourant];
+    let sugg = getSuggestionsSequencesEtEvalsPourEleve(eleve);
+    let nivEleve = (eleve.niveau || "CP").toUpperCase();
+
+    // Trouver les activités d'évaluation disponibles pour les séquences de S-1
+    let evalsAPasser = baseDonnees.filter(a => {
+        if (!a || !a.estEvaluation || estLeconProf(a)) return false;
+        let nivAct = (a.niveau || "").toUpperCase();
+        if (nivAct && !nivAct.includes(nivEleve) && nivAct !== "TOUS") return false;
+        if (eleve.planHebdo.includes(a.id)) return false;
+        return sugg.seqsSemainePrecedentePourEval.some(sNom => activiteAppartientASequence(a, sNom) && !estActiviteValideePourSequence(eleve, a, sNom));
+    });
+
+    if (sugg.seqsSemaineCourante.length === 0 && evalsAPasser.length === 0) {
+        bloc.style.display = 'none';
+        return;
+    }
+
+    bloc.style.display = 'block';
+    let html = `<div style="display:flex; flex-direction:column; gap:8px;">`;
+
+    if (sugg.seqsSemaineCourante.length > 0) {
+        html += `<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+            <strong style="color:#7d6608; font-size:13px;">📌 Séquences programmées cette semaine (${escHTML(sugg.per)} - Semaine ${sugg.semNum} — Entraînement) :</strong>` +
+            sugg.seqsSemaineCourante.map(sNom => `<button type="button" class="filter-btn" style="background:#fff; border-color:#f39c12; color:#7d6608; font-size:12px; padding:3px 8px;" onclick="filtrerDirectementSequenceEleve('${escJS(sNom)}')" title="Afficher les ateliers d'entraînement de cette séquence">📑 ${escHTML(sNom)} ➔</button>`).join('') +
+        `</div>`;
+    }
+
+    if (evalsAPasser.length > 0) {
+        html += `<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-top:6px; border-top:1px dashed #f5b041;">
+            <strong style="color:#c0392b; font-size:13px;">🎯 Évaluation(s) à passer cette semaine (Séquences vues en Semaine ${Math.max(1, sugg.semNum - 1)}) :</strong>` +
+            evalsAPasser.map(ev => `<button type="button" class="btn-action" style="background:#e74c3c !important; color:#fff !important; font-size:12px; padding:3px 9px;" onclick="ajouterAuPlan('${ev.id}')" title="Ajouter directement cette évaluation au plan de ${escHTML(eleve.nom)}">➕🎯 ${escHTML(ev.ressource)} (${escHTML(ev.sequence)})</button>`).join('') +
+        `</div>`;
+    }
+
+    html += `</div>`;
+    bloc.innerHTML = html;
 }
 
 function majListeEleves() {
@@ -1183,7 +1666,7 @@ function chargerEleve() {
         if (estEleveCM(e)) { blocParc.style.display = 'inline-block'; selParc.value = e.parcours || (e.niveau.toUpperCase() === "CM2" ? "orange" : "jaune"); }
         else { blocParc.style.display = 'none'; }
     }
-    initialiserSelectsFormulaire(); majBarreSemainesUI(); afficherPlanHebdo(); afficherHistorique(); afficherRessourcesDisponibles();
+    initialiserSelectsFormulaire(); majBarreSemainesUI(); afficherBandeauSuggestionsProgEleve(); afficherPlanHebdo(); afficherHistorique(); afficherRessourcesDisponibles();
 }
 
 function initialiserSelectsFormulaire() {
@@ -1218,8 +1701,16 @@ function changementMatiereSelection() {
         extraireListeSequences(b.sequence).forEach(s => toutesSeqs.push(s));
     });
     let sequences = [...new Set(toutesSeqs.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+
+    let sugg = (idEleveCourant && eleves[idEleveCourant]) ? getSuggestionsSequencesEtEvalsPourEleve(eleves[idEleveCourant]) : { seqsSemaineCourante: [], seqsSemainePrecedentePourEval: [] };
+
     let html = '<option value="TOUTES_SEQUENCES">-- Toutes les séquences --</option>';
-    sequences.forEach(s => { html += `<option value="${escHTML(s)}">${escHTML(s)}</option>`; });
+    sequences.forEach(s => {
+        let prefix = "";
+        if (sugg.seqsSemaineCourante.includes(s)) prefix = "📌 [Cette semaine] ";
+        else if (sugg.seqsSemainePrecedentePourEval.includes(s)) prefix = "🎯 [Éval S-1] ";
+        html += `<option value="${escHTML(s)}">${escHTML(prefix + s)}</option>`;
+    });
     selSeq.innerHTML = html; afficherRessourcesDisponibles();
 }
 
@@ -1232,17 +1723,16 @@ function filtrerEtoilesDispo(nb) {
 function afficherRessourcesDisponibles() {
     const tbody = document.getElementById('tableRessourcesDispo'); if (!tbody || !idEleveCourant || !eleves[idEleveCourant]) return;
     const eleve = eleves[idEleveCourant];
+    afficherBandeauSuggestionsProgEleve();
     const mat = document.getElementById('selectMatiere') ? document.getElementById('selectMatiere').value : "";
     const seq = document.getElementById('selectSequence') ? document.getElementById('selectSequence').value : "";
     const per = document.getElementById('selectPeriodeDispo') ? document.getElementById('selectPeriodeDispo').value : "Toutes";
 
-    if (!mat) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#7f8c8d;">Choisissez une matière ci-dessus.</td></tr>'; return; }
+    if (!mat) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#7f8c8d;">Choisissez une matière ci-dessus (ou cliquez sur une séquence suggérée ci-dessus).</td></tr>'; return; }
 
     let nivEleve = (eleve.niveau || "CP").toUpperCase();
     let liste = baseDonnees.filter(a => {
-        if (!a) return false;
-        // Les leçons explicites (réservées au tableau de bord prof) n'apparaissent jamais dans le plan élève
-        if (estLeconProf(a)) return false;
+        if (!a || estLeconProf(a)) return false;
 
         let nivAct = (a.niveau || "").toUpperCase();
         if (nivAct && !nivAct.includes(nivEleve) && nivAct !== "TOUS") return false;
@@ -1300,13 +1790,14 @@ function afficherRessourcesDisponibles() {
             seqAfficheHtml = `<span style="color:#e67e22; font-weight:bold;">⚠️ Sans séquence</span><input type="hidden" id="seq_dispo_${a.id}" value="">`;
         }
 
+        let badgeGuide = (a.pageProf && a.pageProf.trim()) ? ` <span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ${escHTML(a.pageProf.trim())}</span>` : '';
         let badgeLien = (a.lienExterne && a.lienExterne.trim()) ? ` <a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 5px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir le lien direct">🔗 Anton ↗</a>` : '';
         let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
         html += `<tr>
             <td><strong>${escHTML(a.niveau)}</strong><br><small style="color:#7f8c8d;">${escHTML(perAct)}</small></td>
             <td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${coul.bg}; margin-right:4px;"></span><strong>${escHTML(a.matiere)}</strong><br>${seqAfficheHtml} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
             <td>${formaterAffichageCompetences(a.competence)}</td>
-            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infos.badgeLivre}${badgeLien} ${a.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : ''}</td>
+            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infos.badgeLivre}${badgeGuide}${badgeLien} ${a.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : ''}</td>
             <td style="text-align:center; background:${rep.bg};">${rep.html}</td>
             <td>
                 <select id="jour_dispo_${a.id}" style="width:100%; padding:4px; font-size:12px;">
@@ -1538,7 +2029,7 @@ let activiteAssignationEnCours = null;
 function assignerActivite(idActivite) {
     let act = baseDonnees.find(a => a.id === idActivite); if (!act) return;
     if (estLeconProf(act)) {
-        showToast("👩‍🏫 Cet élément est une Leçon explicite (enseignante) : elle s'utilise directement dans le Tableau de bord.", "error");
+        showToast("👩‍🏫 Cet élément est une Leçon explicite (enseignante) : elle s'utilise dans la Programmation et le Tableau de bord.", "error");
         return;
     }
     activiteAssignationEnCours = idActivite;
@@ -1647,7 +2138,7 @@ function commencerNouvelleSemaine() {
 }
 
 function cloturerSemaineClasseGlobale() {
-    if (confirm("🏁 Clôturer la semaine en cours pour TOUTE la classe ?")) {
+    if (confirm("🏁 Clôturer la semaine en cours pour les Plans de travail de TOUTE la classe ?")) {
         Object.values(eleves).forEach(e => cloreSemainePourUnEleve(e));
         localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
         sauvegarderEleves(); if (idEleveCourant) chargerEleve(); rafraichirDashboard();
@@ -1841,6 +2332,7 @@ function desarchiverActivite(idActivite, seqSpecifique = "") {
 function afficherPlanHebdo() {
     const eleve = eleves[idEleveCourant], tbodyApercu = document.getElementById('tableApercuPlan'); if (!tbodyApercu || !eleve) return; tbodyApercu.innerHTML = '';
     afficherBandeauRecurrentsEleve();
+    afficherBandeauSuggestionsProgEleve();
     let planObjects = getListeTrie(eleve.planHebdo, eleve.priorites || [], eleve);
     document.getElementById('compteurAteliersEleve').innerText = planObjects.length; document.getElementById('maxAteliersAffiche').innerText = eleve.maxAteliers || 15;
     let nbTabCount = planObjects.filter(b => b && estActiviteTablette(b)).length;
@@ -1851,6 +2343,7 @@ function afficherPlanHebdo() {
         let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
         let badge = a.estEvaluation ? `<span class="badge-eval">🎯 Éval</span>` : '';
         let badgeRecHtml = isRec ? ` <span class="badge-recurrent" title="Revient automatiquement chaque semaine">🔄 Hebdo</span>` : '';
+        let badgeGuide = (a.pageProf && a.pageProf.trim()) ? ` <span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ${escHTML(a.pageProf.trim())}</span>` : '';
         let badgeLien = (a.lienExterne && a.lienExterne.trim()) ? ` <a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 5px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir sur Anton">🔗 Anton ↗</a>` : '';
         let estValide = eleve.valides && eleve.valides[a.id];
         let rowClass = a.estEvaluation ? 'row-eval' : (estValide ? 'row-valide' : '');
@@ -1890,7 +2383,7 @@ function afficherPlanHebdo() {
             <td class="${jourActuel ? 'col-num num-jour-impose' : 'col-num'}">${logoDebutLigne}${num}</td>
             <td><span style="display:inline-block; padding:2px 8px; border-radius:4px; background:${coulMat.bg}; color:${coulMat.text}; font-weight:bold; font-size:12px; margin-bottom:3px;">${escHTML(a.matiere)}</span><br>${seqPlanHtml}</td>
             <td>${a.lecon ? '<strong>'+escHTML(a.lecon)+'</strong> - ' : ''}${formaterAffichageCompetences(a.competence)}</td>
-            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infosL.badgeLivre}${badgeLien} ${badge}${badgeRecHtml} ${suiviHtml}</td>
+            <td>${formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${infosL.badgeLivre}${badgeGuide}${badgeLien} ${badge}${badgeRecHtml} ${suiviHtml}</td>
             <td style="text-align:center; background:${rep.bg};">${rep.html}</td>
             <td style="text-align:center;">${selectJourHtml}</td>
             <td>${actionHtml}</td>
@@ -2141,13 +2634,8 @@ function rafraichirFicheImpression() {
 }
 
 // ==========================================
-// 6. ONGLET 3 : TABLEAU DE BORD & PLAN DE TRAVAIL ENSEIGNANTE (5 PASSAGES : CP / CE1 / CE2 / CM1 / CM2 + LIENS PDF / PPT)
+// 6. ONGLET 3 : TABLEAU DE BORD SYNCHRONISÉ AVEC LA PROGRAMMATION (P1..P5, SEMAINES, DÉCALAGE & PDF/PPT/GUIDE)
 // ==========================================
-const JOURS_SEMAINE_PROF = ["Lundi", "Mardi", "Jeudi", "Vendredi"];
-const GROUPES_NIVEAUX_PROF = ["CP", "CE1", "CE2", "CM1", "CM2"];
-const OPTIONS_NIVEAUX_PROF_SELECT = ["CP", "CE1", "CE2", "CM1", "CM2", "CM1-CM2"];
-const NB_SLOTS_PASSAGES_PROF = 5;
-
 function getStyleNiveauProf(pole, niv) {
     if (pole === 'francais') {
         if (niv === 'CP') return { bg: '#d5a6bd', text: '#2c3e50' };
@@ -2165,255 +2653,162 @@ function getStyleNiveauProf(pole, niv) {
     return { bg: '#ecf0f1', text: '#2c3e50' };
 }
 
-function creerSemaineProfVide(dateDebutISO = "", dateDebut = "", dateFin = "") {
-    let grilles = { francais: {}, maths: {} };
-    ["francais", "maths"].forEach(mat => {
-        JOURS_SEMAINE_PROF.forEach(j => {
-            grilles[mat][j] = GROUPES_NIVEAUX_PROF.map(niv => ({
-                niveau: niv,
-                texte: "",
-                lien: "",
-                fait: false
-            }));
-        });
-    });
-    return {
-        id: 'semprof_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-        dateDebutISO: dateDebutISO,
-        dateDebut: dateDebut,
-        dateFin: dateFin,
-        francais: grilles.francais,
-        maths: grilles.maths
-    };
+function changerPeriodeDashboard(nouvPer) {
+    assurerStructureProgPeriodes();
+    progPeriodesData.periodeActiveDash = nouvPer;
+    progPeriodesData.semaineIndexDash = 0;
+    sauvegarderProgPeriodes();
+    rafraichirDashboard();
 }
 
-function assurerStructurePlanningProf() {
-    if (!planningLeconsProf || typeof planningLeconsProf !== 'object') {
-        planningLeconsProf = { semaineIndex: 0, semaines: [] };
-    }
-    if (!Array.isArray(planningLeconsProf.semaines) || planningLeconsProf.semaines.length === 0) {
-        planningLeconsProf.semaines = [creerSemaineProfVide()];
-        planningLeconsProf.semaineIndex = 0;
-    }
-    if (planningLeconsProf.semaineIndex < 0 || planningLeconsProf.semaineIndex >= planningLeconsProf.semaines.length) {
-        planningLeconsProf.semaineIndex = 0;
-    }
-
-    planningLeconsProf.semaines.forEach(s => {
-        ["francais", "maths"].forEach(mat => {
-            if (!s[mat]) s[mat] = {};
-            if (!Array.isArray(s[mat]["Lundi"])) {
-                let ancien = s[mat];
-                let nouvMat = {};
-                JOURS_SEMAINE_PROF.forEach(j => {
-                    let temp = [];
-                    GROUPES_NIVEAUX_PROF.forEach((niv, idx) => {
-                        let oldCell = (ancien[niv] && ancien[niv][j]) ? ancien[niv][j] : { texte: "", lien: "", ordre: "", fait: false };
-                        let rang = parseInt(oldCell.ordre) || (idx + 1);
-                        temp.push({ niveau: niv, texte: oldCell.texte || "", lien: oldCell.lien || "", fait: Boolean(oldCell.fait), rang: rang });
-                    });
-                    temp.sort((a, b) => a.rang - b.rang);
-                    nouvMat[j] = temp.map(x => ({ niveau: x.niveau, texte: x.texte, lien: x.lien || "", fait: x.fait }));
-                });
-                s[mat] = nouvMat;
-            }
-            JOURS_SEMAINE_PROF.forEach(j => {
-                if (!Array.isArray(s[mat][j])) s[mat][j] = [];
-                while (s[mat][j].length < NB_SLOTS_PASSAGES_PROF) {
-                    let idx = s[mat][j].length;
-                    let defNiv = GROUPES_NIVEAUX_PROF[idx] || "CM2";
-                    s[mat][j].push({ niveau: defNiv, texte: "", lien: "", fait: false });
-                }
-                s[mat][j].forEach(slot => {
-                    if (slot.lien === undefined) slot.lien = "";
-                    // Si une ancienne case vide était sur CM1-CM2 et que la 5e case vient d'être ajoutée, séparer proprement CM1 et CM2
-                    if (slot.niveau === "CM1-CM2" && !slot.texte) slot.niveau = "CM1";
-                });
-            });
-        });
-    });
-}
-
-function sauvegarderPlanningProf() {
-    assurerStructurePlanningProf();
-    localStorage.setItem(KEY_LECONS_PROF, JSON.stringify(planningLeconsProf));
-    declencherAutoSaveFirebase();
-}
-
-function changerSemaineProf(nouvIdx) {
-    assurerStructurePlanningProf();
-    planningLeconsProf.semaineIndex = parseInt(nouvIdx) || 0;
-    sauvegarderPlanningProf();
+function changerSemaineDashboard(nouvIdx) {
+    assurerStructureProgPeriodes();
+    progPeriodesData.semaineIndexDash = parseInt(nouvIdx) || 0;
+    sauvegarderProgPeriodes();
     rafraichirDashboard();
 }
 
 function appliquerDateSemaineProf(dateISO) {
-    assurerStructurePlanningProf();
-    let sem = planningLeconsProf.semaines[planningLeconsProf.semaineIndex];
-    let calc = calculerVendrediDepuisISO(dateISO);
-    sem.dateDebutISO = dateISO || "";
-    sem.dateDebut = calc.debutFR;
-    sem.dateFin = calc.finFR;
-    sauvegarderPlanningProf();
-    rafraichirDashboard();
-}
-
-function ajouterSemaineProfAvance() {
-    assurerStructurePlanningProf();
-    let derniere = planningLeconsProf.semaines[planningLeconsProf.semaines.length - 1];
-    let nouvISO = "", nouvDeb = "", nouvFin = "";
-    if (derniere && derniere.dateDebutISO) {
-        let calcPrec = calculerVendrediDepuisISO(derniere.dateDebutISO);
-        if (calcPrec.lundiSuivantISO) {
-            nouvISO = calcPrec.lundiSuivantISO;
-            let calcNouv = calculerVendrediDepuisISO(nouvISO);
-            nouvDeb = calcNouv.debutFR;
-            nouvFin = calcNouv.finFR;
-        }
-    }
-    let nouvSem = creerSemaineProfVide(nouvISO, nouvDeb, nouvFin);
-    planningLeconsProf.semaines.push(nouvSem);
-    planningLeconsProf.semaineIndex = planningLeconsProf.semaines.length - 1;
-    sauvegarderPlanningProf();
-    rafraichirDashboard();
-    showToast(`📅 Semaine ${planningLeconsProf.semaines.length} de leçons créée !`, "success");
-}
-
-function supprimerSemaineProfActive() {
-    assurerStructurePlanningProf();
-    if (planningLeconsProf.semaines.length <= 1) return;
-    if (confirm(`Supprimer la Semaine ${planningLeconsProf.semaineIndex + 1} de votre agenda de leçons ?`)) {
-        planningLeconsProf.semaines.splice(planningLeconsProf.semaineIndex, 1);
-        planningLeconsProf.semaineIndex = Math.max(0, planningLeconsProf.semaineIndex - 1);
-        sauvegarderPlanningProf();
-        rafraichirDashboard();
-        showToast("Semaine de leçons supprimée.", "success");
-    }
-}
-
-function cloreSemaineProfActive() {
-    assurerStructurePlanningProf();
-    let idx = planningLeconsProf.semaineIndex;
-    let semActuelle = planningLeconsProf.semaines[idx];
-    if (!confirm(`Clôturer la Semaine ${idx + 1} de vos leçons explicites ?\n\n💡 Les leçons non cochées (non faites) seront automatiquement reportées sur la semaine suivante avec leur lien PDF/PPT et leur ordre de passage.`)) return;
-
-    let cibleSem = null;
-    if (planningLeconsProf.semaines.length > 1 && idx < planningLeconsProf.semaines.length - 1) {
-        cibleSem = planningLeconsProf.semaines[idx + 1];
+    assurerStructureProgPeriodes();
+    let per = progPeriodesData.periodeActiveDash;
+    let idx = progPeriodesData.semaineIndexDash;
+    let pObj = progPeriodesData.periodes[per];
+    if (!pObj || !pObj.semaines[idx]) return;
+    if (idx === 0) {
+        pObj.dateDebutP_ISO = dateISO || "";
+        recalculerDatesPeriode(per);
     } else {
-        let nouvISO = "", nouvDeb = "", nouvFin = "";
-        if (semActuelle.dateDebutISO) {
-            let c = calculerVendrediDepuisISO(semActuelle.dateDebutISO);
-            if (c.lundiSuivantISO) {
-                nouvISO = c.lundiSuivantISO;
-                let c2 = calculerVendrediDepuisISO(nouvISO);
-                nouvDeb = c2.debutFR;
-                nouvFin = c2.finFR;
-            }
-        }
-        cibleSem = creerSemaineProfVide(nouvISO, nouvDeb, nouvFin);
-        planningLeconsProf.semaines.push(cibleSem);
+        let calc = calculerVendrediDepuisISO(dateISO);
+        pObj.semaines[idx].dateDebutISO = dateISO || "";
+        pObj.semaines[idx].dateDebut = calc.debutFR;
+        pObj.semaines[idx].dateFin = calc.finFR;
+    }
+    sauvegarderProgPeriodes();
+    rafraichirDashboard();
+}
+
+// Modification d'un créneau depuis le Tableau de bord -> met à jour directement la Programmation de la période !
+function majSlotLeconProf(pole, jour, slotIdx, champ, valeur) {
+    assurerStructureProgPeriodes();
+    let per = progPeriodesData.periodeActiveDash;
+    let sIdx = progPeriodesData.semaineIndexDash;
+    let sem = progPeriodesData.periodes[per].semaines[sIdx];
+    if (!sem) return;
+
+    let nivActuel = sem.ordrePassages[pole][jour][slotIdx] || GROUPES_NIVEAUX_PROF[slotIdx];
+
+    if (champ === 'niveau') {
+        sem.ordrePassages[pole][jour][slotIdx] = valeur;
+        sauvegarderProgPeriodes();
+        rafraichirDashboard();
+        return;
     }
 
-    ["francais", "maths"].forEach(mat => {
-        JOURS_SEMAINE_PROF.forEach(j => {
-            for (let slot = 0; slot < NB_SLOTS_PASSAGES_PROF; slot++) {
-                let cellOld = semActuelle[mat][j][slot];
-                if (cellOld && cellOld.texte.trim() !== "" && !cellOld.fait) {
-                    if (!cibleSem[mat][j][slot].texte) {
-                        cibleSem[mat][j][slot].niveau = cellOld.niveau;
-                        cibleSem[mat][j][slot].texte = cellOld.texte;
-                        cibleSem[mat][j][slot].lien = cellOld.lien || "";
-                    }
-                }
-            }
-        });
-    });
-
-    planningLeconsProf.semaines.splice(idx, 1);
-    planningLeconsProf.semaineIndex = Math.min(idx, planningLeconsProf.semaines.length - 1);
-    sauvegarderPlanningProf();
-    rafraichirDashboard();
-    showToast("✅ Semaine de leçons clôturée (non faites reportées) !", "success");
-}
-
-// Recherche si une leçon de la base de données correspond au texte saisi et possède un lien PDF / PowerPoint à projeter
-function trouverLienDepuisBaseLecon(pole, niveauGroupe, texteSaisi) {
-    if (!texteSaisi || !texteSaisi.trim()) return "";
-    let txtNorm = texteSaisi.trim().toLowerCase();
-    let nivCibles = niveauGroupe === "CM1-CM2" ? ["CM1", "CM2"] : (niveauGroupe ? [niveauGroupe] : ["CP", "CE1", "CE2", "CM1", "CM2"]);
-
-    // Priorité aux éléments cochés "Leçon explicite" dans la base
-    let candidats = baseDonnees.filter(a => {
-        if (!a || !a.lienExterne || !a.lienExterne.trim()) return false;
-        let matNorm = (a.matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        let estBonPole = (pole === 'francais')
-            ? (matNorm.includes('francais') || matNorm.includes('grammaire') || matNorm.includes('conjugaison') || matNorm.includes('orthographe') || matNorm.includes('lexique') || matNorm.includes('vocabulaire') || matNorm.includes('ecriture'))
-            : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('programmation'));
-        if (!estBonPole) return false;
-        let nivAct = (a.niveau || "").toUpperCase();
-        if (nivAct && !nivCibles.some(n => nivAct.includes(n))) return false;
-
-        let prefix = a.lecon ? `${a.lecon} - `.toLowerCase() : "";
-        let titre1 = `${prefix}${a.ressource || ''}`.trim().toLowerCase();
-        let titre2 = (a.ressource || '').trim().toLowerCase();
-        let titre3 = `${prefix}${a.sequence || ''}`.trim().toLowerCase();
-        let titre4 = `${prefix}${a.competence || ''}`.trim().toLowerCase();
-        return txtNorm === titre1 || txtNorm === titre2 || txtNorm === titre3 || txtNorm === titre4;
-    });
-
-    let leconPrio = candidats.find(a => estLeconProf(a)) || candidats[0];
-    return leconPrio ? leconPrio.lienExterne.trim() : "";
-}
-
-function majSlotLeconProf(pole, jour, slotIdx, champ, valeur) {
-    assurerStructurePlanningProf();
-    let sem = planningLeconsProf.semaines[planningLeconsProf.semaineIndex];
-    if (!sem || !sem[pole] || !sem[pole][jour] || !sem[pole][jour][slotIdx]) return;
-    let slotObj = sem[pole][jour][slotIdx];
-    slotObj[champ] = valeur;
+    let nivCible = nivActuel === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivActuel) ? nivActuel : "CP");
+    let cell = sem.niveaux[nivCible][pole].jours[jour];
+    cell[champ] = valeur;
 
     if (champ === 'texte') {
-        // Si la leçon choisie correspond à une leçon de la base ayant un lien PDF/PPT, on l'associe automatiquement !
-        let lienAuto = trouverLienDepuisBaseLecon(pole, slotObj.niveau, valeur);
-        if (lienAuto && (!slotObj.lien || slotObj.lien !== lienAuto)) {
-            slotObj.lien = lienAuto;
-            sauvegarderPlanningProf();
+        let infos = trouverInfosDepuisBaseLecon(pole, nivCible, valeur);
+        let doitRafraichir = false;
+        if (infos.lien && cell.lien !== infos.lien) { cell.lien = infos.lien; doitRafraichir = true; }
+        if (infos.pageProf && cell.pageProf !== infos.pageProf) { cell.pageProf = infos.pageProf; doitRafraichir = true; }
+        sauvegarderProgPeriodes();
+        if (doitRafraichir) {
             rafraichirDashboard();
-            return;
+        } else {
+            let spanPrint = document.getElementById(`print_txt_${pole}_${jour}_${slotIdx}`);
+            if (spanPrint) spanPrint.innerText = valeur || "—";
         }
-        sauvegarderPlanningProf();
-        let spanPrint = document.getElementById(`print_txt_${pole}_${jour}_${slotIdx}`);
-        if (spanPrint) spanPrint.innerText = valeur || "—";
     } else {
-        sauvegarderPlanningProf();
+        sauvegarderProgPeriodes();
         rafraichirDashboard();
     }
 }
 
 function definirLienSlotLeconProf(pole, jour, slotIdx) {
-    assurerStructurePlanningProf();
-    let sem = planningLeconsProf.semaines[planningLeconsProf.semaineIndex];
-    if (!sem || !sem[pole] || !sem[pole][jour] || !sem[pole][jour][slotIdx]) return;
-    let slotObj = sem[pole][jour][slotIdx];
-    let url = prompt(`Collez ici le lien vers votre PDF, PowerPoint, Google Slides ou Canva à projeter pour "${slotObj.texte || slotObj.niveau}" :`, slotObj.lien || "");
+    assurerStructureProgPeriodes();
+    let per = progPeriodesData.periodeActiveDash;
+    let sIdx = progPeriodesData.semaineIndexDash;
+    let sem = progPeriodesData.periodes[per].semaines[sIdx];
+    let nivActuel = sem.ordrePassages[pole][jour][slotIdx] || GROUPES_NIVEAUX_PROF[slotIdx];
+    let nivCible = nivActuel === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivActuel) ? nivActuel : "CP");
+    let cell = sem.niveaux[nivCible][pole].jours[jour];
+
+    let url = prompt(`Collez ici le lien vers votre PDF, PowerPoint, Google Slides ou Canva à projeter pour "${cell.texte || nivCible}" :`, cell.lien || "");
     if (url !== null) {
-        slotObj.lien = url.trim();
-        sauvegarderPlanningProf();
+        cell.lien = url.trim();
+        sauvegarderProgPeriodes();
         rafraichirDashboard();
-        showToast(slotObj.lien ? "📽️ Lien du document à projeter enregistré !" : "Lien retiré.", "success");
+        showToast(cell.lien ? "📽️ Lien du document à projeter enregistré !" : "Lien retiré.", "success");
     }
 }
 
 function deplacerSlotLeconProf(pole, jour, slotIdx, direction) {
-    assurerStructurePlanningProf();
-    let sem = planningLeconsProf.semaines[planningLeconsProf.semaineIndex];
+    assurerStructureProgPeriodes();
+    let per = progPeriodesData.periodeActiveDash;
+    let sIdx = progPeriodesData.semaineIndexDash;
+    let sem = progPeriodesData.periodes[per].semaines[sIdx];
     let nouvIdx = slotIdx + direction;
     if (nouvIdx < 0 || nouvIdx >= NB_SLOTS_PASSAGES_PROF) return;
-    let temp = sem[pole][jour][slotIdx];
-    sem[pole][jour][slotIdx] = sem[pole][jour][nouvIdx];
-    sem[pole][jour][nouvIdx] = temp;
-    sauvegarderPlanningProf();
+    let arr = sem.ordrePassages[pole][jour];
+    let temp = arr[slotIdx];
+    arr[slotIdx] = arr[nouvIdx];
+    arr[nouvIdx] = temp;
+    sauvegarderProgPeriodes();
+    rafraichirDashboard();
+}
+
+function cloreEtDecalerDepuisDashboard() {
+    assurerStructureProgPeriodes();
+    let per = progPeriodesData.periodeActiveDash;
+    let idx = progPeriodesData.semaineIndexDash;
+    if (!confirm(`Clôturer la Semaine ${idx + 1} (${per}) ?\n\n⏭️ Toutes les leçons et séquences NON COCHÉES seront automatiquement déplacées sur la Semaine ${idx + 2} et décaleront la suite de votre programmation d'une semaine.`)) return;
+
+    let nb = reporterEtDecalerSemaine(per, idx, null, null);
+    let pObj = progPeriodesData.periodes[per];
+    if (idx + 1 < pObj.semaines.length) {
+        progPeriodesData.semaineIndexDash = idx + 1;
+    }
+    sauvegarderProgPeriodes();
+    rafraichirDashboard();
+    if (idEleveCourant) afficherPlanHebdo();
+    showToast(`✅ Semaine clôturée (${nb} élément(s) non fait(s) reporté(s) avec décalage) !`, "success");
+}
+
+function recalerAvanceDepuisDashboard() {
+    assurerStructureProgPeriodes();
+    let per = progPeriodesData.periodeActiveDash;
+    let idx = progPeriodesData.semaineIndexDash;
+    let nb = recalerAvanceSemaine(per, idx, null, null);
+    rafraichirDashboard();
+    showToast(nb > 0 ? `⏮️ ${nb} créneau(x) de la semaine suivante remonté(s) !` : "ℹ️ Aucun créneau libre à remonter sur cette semaine.", "success");
+}
+
+function toggleApercuSemaineSuivanteDash() {
+    afficherSemaineSuivanteDash = !afficherSemaineSuivanteDash;
+    rafraichirDashboard();
+}
+
+// Cocher en avance une leçon ou une séquence de la semaine S+1 directement depuis le Tableau de bord et recaler la suite
+function cocherElementSemaineSuivanteDash(per, nextSemIdx, niv, pole, typeElem, cleJourOuSeq, isChecked) {
+    assurerStructureProgPeriodes();
+    let pObj = progPeriodesData.periodes[per];
+    if (!pObj || !pObj.semaines[nextSemIdx]) return;
+    let bloc = pObj.semaines[nextSemIdx].niveaux[niv][pole];
+    if (typeElem === 'seq') {
+        let sq = (bloc.sequences || []).find(s => s.nom === cleJourOuSeq);
+        if (sq) sq.fait = Boolean(isChecked);
+    } else if (typeElem === 'jour') {
+        if (bloc.jours[cleJourOuSeq]) {
+            bloc.jours[cleJourOuSeq].fait = Boolean(isChecked);
+            if (isChecked && confirm(`Vous avez coché en avance la leçon de ${cleJourOuSeq} (${niv}).\nVoulez-vous la vider de la Semaine ${nextSemIdx + 1} et remonter automatiquement les séances des semaines suivantes ?`)) {
+                bloc.jours[cleJourOuSeq] = { texte: "", lien: "", pageProf: "", fait: false };
+                recalerAvanceSemaine(per, nextSemIdx, niv, pole);
+            }
+        }
+    }
+    sauvegarderProgPeriodes();
     rafraichirDashboard();
 }
 
@@ -2425,10 +2820,11 @@ function imprimerPlanningLeconsProf() {
     }, 600);
 }
 
-// Génère la liste de suggestions de leçons depuis la base de données (en mettant en priorité les Leçons explicites 👩‍🏫 enregistrées dans la base)
-function genererDatalistSuggestionsLecons(pole, niveauGroupe) {
-    let suggestionsLeconsProf = new Set();
-    let suggestionsAutres = new Set();
+// Génère les suggestions de leçons pour un pôle et un niveau (en priorisant les leçons des séquences programmées cette semaine !)
+function genererDatalistSuggestionsLecons(pole, niveauGroupe, seqsPrioritaires = []) {
+    let suggPrio = new Set();
+    let suggLeconsProf = new Set();
+    let suggAutres = new Set();
     let nivCibles = niveauGroupe === "CM1-CM2" ? ["CM1", "CM2"] : (niveauGroupe ? [niveauGroupe] : ["CP", "CE1", "CE2", "CM1", "CM2"]);
 
     baseDonnees.forEach(a => {
@@ -2442,26 +2838,38 @@ function genererDatalistSuggestionsLecons(pole, niveauGroupe) {
         if (!nivCibles.some(n => nivAct.includes(n))) return;
 
         let prefixLecon = a.lecon ? `${a.lecon} - ` : "";
+        let estDansSeqSemaine = seqsPrioritaires.some(sNom => activiteAppartientASequence(a, sNom));
+
         if (estLeconProf(a)) {
-            if (a.ressource) suggestionsLeconsProf.add(`${prefixLecon}${a.ressource}`);
-            extraireListeCompetences(a.competence).forEach(c => suggestionsLeconsProf.add(`${prefixLecon}${c}`));
-            extraireListeSequences(a.sequence).forEach(s => suggestionsLeconsProf.add(`${prefixLecon}${s}`));
+            let label = `${prefixLecon}${a.ressource || a.competence || a.sequence}`;
+            if (estDansSeqSemaine) suggPrio.add(label);
+            else suggLeconsProf.add(label);
         } else {
-            extraireListeCompetences(a.competence).forEach(c => suggestionsAutres.add(`${prefixLecon}${c}`));
-            extraireListeSequences(a.sequence).forEach(s => suggestionsAutres.add(`${prefixLecon}${s}`));
+            extraireListeCompetences(a.competence).forEach(c => {
+                if (estDansSeqSemaine) suggPrio.add(`${prefixLecon}${c}`);
+                else suggAutres.add(`${prefixLecon}${c}`);
+            });
+            extraireListeSequences(a.sequence).forEach(s => {
+                suggAutres.add(`${prefixLecon}${s}`);
+            });
         }
     });
 
-    let tab1 = Array.from(suggestionsLeconsProf).sort((a, b) => a.localeCompare(b, 'fr'));
-    let tab2 = Array.from(suggestionsAutres).filter(x => !suggestionsLeconsProf.has(x)).sort((a, b) => a.localeCompare(b, 'fr'));
-    return [...tab1, ...tab2];
+    let t1 = Array.from(suggPrio);
+    let t2 = Array.from(suggLeconsProf).filter(x => !suggPrio.has(x)).sort((a, b) => a.localeCompare(b, 'fr'));
+    let t3 = Array.from(suggAutres).filter(x => !suggPrio.has(x) && !suggLeconsProf.has(x)).sort((a, b) => a.localeCompare(b, 'fr'));
+    return [...t1, ...t2, ...t3];
 }
 
 function genererTableauLeconsPoleHtml(pole, titre, couleurBandeau, sem) {
     let datalistsHtml = "";
     OPTIONS_NIVEAUX_PROF_SELECT.forEach(niv => {
         let idDl = `dl_prof_${pole}_${niv.replace('-', '_')}`;
-        let suggs = genererDatalistSuggestionsLecons(pole, niv);
+        let nivClean = niv === "CM1-CM2" ? "CM1" : niv;
+        let seqsSem = (sem.niveaux[nivClean] && sem.niveaux[nivClean][pole])
+            ? (sem.niveaux[nivClean][pole].sequences || []).map(s => s.nom)
+            : [];
+        let suggs = genererDatalistSuggestionsLecons(pole, niv, seqsSem);
         datalistsHtml += `<datalist id="${idDl}">${suggs.map(s => `<option value="${escHTML(s)}">`).join('')}</datalist>`;
     });
 
@@ -2469,28 +2877,50 @@ function genererTableauLeconsPoleHtml(pole, titre, couleurBandeau, sem) {
 
     let rowsHtml = [0, 1, 2, 3, 4].map(slotIdx => {
         let cellsHtml = JOURS_SEMAINE_PROF.map(jour => {
-            let cell = (sem[pole][jour] && sem[pole][jour][slotIdx]) ? sem[pole][jour][slotIdx] : { niveau: GROUPES_NIVEAUX_PROF[slotIdx], texte: "", lien: "", fait: false };
-            let stNiv = getStyleNiveauProf(pole, cell.niveau);
-            let idDl = cell.niveau ? `dl_prof_${pole}_${cell.niveau.replace('-', '_')}` : '';
+            let nivSlot = (sem.ordrePassages[pole] && sem.ordrePassages[pole][jour] && sem.ordrePassages[pole][jour][slotIdx] !== undefined)
+                ? sem.ordrePassages[pole][jour][slotIdx]
+                : GROUPES_NIVEAUX_PROF[slotIdx];
+            let nivDataKey = nivSlot === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivSlot) ? nivSlot : "");
+            let cell = (nivDataKey && sem.niveaux[nivDataKey] && sem.niveaux[nivDataKey][pole])
+                ? sem.niveaux[nivDataKey][pole].jours[jour]
+                : { texte: "", lien: "", pageProf: "", fait: false };
+
+            let seqsDuNiveau = (nivDataKey && sem.niveaux[nivDataKey] && sem.niveaux[nivDataKey][pole])
+                ? (sem.niveaux[nivDataKey][pole].sequences || [])
+                : [];
+            let rappelSeqHtml = seqsDuNiveau.length > 0
+                ? `<div style="font-size:10.5px; color:#7d6608; background:#fef9e7; border:1px solid #f5b041; border-radius:4px; padding:1px 4px; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="Séquence(s) programmée(s) : ${escHTML(seqsDuNiveau.map(s => s.nom).join(', '))}">📑 ${escHTML(seqsDuNiveau.map(s => s.nom).join(', '))}</div>`
+                : '';
+
+            let stNiv = getStyleNiveauProf(pole, nivSlot);
+            let idDl = nivSlot ? `dl_prof_${pole}_${nivSlot.replace('-', '_')}` : '';
             let bgCell = cell.fait ? "#d4efdf" : "#ffffff";
 
-            let optionsNiv = `<option value="" ${!cell.niveau ? 'selected' : ''}>-- Pause / Libre --</option>` +
-                OPTIONS_NIVEAUX_PROF_SELECT.map(n => `<option value="${n}" ${cell.niveau === n ? 'selected' : ''}>${n}</option>`).join('');
+            let optionsNiv = `<option value="" ${!nivSlot ? 'selected' : ''}>-- Pause / Libre --</option>` +
+                OPTIONS_NIVEAUX_PROF_SELECT.map(n => `<option value="${n}" ${nivSlot === n ? 'selected' : ''}>${n}</option>`).join('');
 
-            // Lien PDF / PowerPoint (soit stocké sur le créneau, soit hérité automatiquement de la leçon dans la base)
-            let lienDoc = (cell.lien && cell.lien.trim()) ? cell.lien.trim() : trouverLienDepuisBaseLecon(pole, cell.niveau, cell.texte);
+            let infosBase = trouverInfosDepuisBaseLecon(pole, nivSlot, cell.texte);
+            let lienDoc = (cell.lien && cell.lien.trim()) ? cell.lien.trim() : infosBase.lien;
+            let pageGuide = (cell.pageProf && cell.pageProf.trim()) ? cell.pageProf.trim() : infosBase.pageProf;
+
+            let badgeGuideHtml = pageGuide
+                ? `<span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ${escHTML(pageGuide)}</span>`
+                : '';
+
             let btnDocHtml = lienDoc
-                ? `<div style="display:flex; gap:3px; align-items:center; margin-top:4px;">
-                       <a href="${escHTML(lienDoc)}" target="_blank" rel="noopener noreferrer" class="btn-action" style="flex:1; text-align:center; text-decoration:none; padding:2px 6px; font-size:11px; background:#8e44ad !important; color:#fff !important; border-radius:4px;" title="Ouvrir le PDF ou PowerPoint à projeter dans un nouvel onglet">📽️ Projeter PDF/PPT ↗</a>
-                       <button type="button" class="filter-btn" style="padding:2px 5px; font-size:10px;" title="Modifier ou supprimer le lien du document" onclick="definirLienSlotLeconProf('${pole}', '${jour}', ${slotIdx})">✏️</button>
+                ? `<div style="display:flex; gap:3px; align-items:center; margin-top:4px; flex-wrap:wrap;">
+                       ${badgeGuideHtml}
+                       <a href="${escHTML(lienDoc)}" target="_blank" rel="noopener noreferrer" class="btn-action" style="flex:1; text-align:center; text-decoration:none; padding:2px 6px; font-size:11px; background:#8e44ad !important; color:#fff !important; border-radius:4px;" title="Ouvrir le PDF ou PowerPoint à projeter">📽️ Projeter ↗</a>
+                       <button type="button" class="filter-btn" style="padding:2px 5px; font-size:10px;" title="Modifier le lien" onclick="definirLienSlotLeconProf('${pole}', '${jour}', ${slotIdx})">✏️</button>
                    </div>`
-                : `<div style="margin-top:3px; text-align:right;">
-                       <button type="button" class="filter-btn" style="padding:1px 5px; font-size:10px; opacity:0.8;" title="Ajouter un lien PDF ou PowerPoint à projeter pour cette leçon" onclick="definirLienSlotLeconProf('${pole}', '${jour}', ${slotIdx})">➕📎 PDF/PPT</button>
+                : `<div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
+                       <span>${badgeGuideHtml}</span>
+                       <button type="button" class="filter-btn" style="padding:1px 5px; font-size:10px; opacity:0.8;" title="Ajouter un lien PDF ou PowerPoint à projeter" onclick="definirLienSlotLeconProf('${pole}', '${jour}', ${slotIdx})">➕📎 PDF/PPT</button>
                    </div>`;
 
             return `<td style="background:${bgCell}; padding:6px; vertical-align:top; border:1px solid #cbd5e1;">
                 <div class="no-print">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; gap:3px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:3px;">
                         <select onchange="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'niveau', this.value)" style="background:${stNiv.bg}; color:${stNiv.text}; font-weight:bold; font-size:12px; padding:2px 6px; border-radius:5px; border:1px solid rgba(0,0,0,0.18); cursor:pointer;">
                             ${optionsNiv}
                         </select>
@@ -2503,12 +2933,13 @@ function genererTableauLeconsPoleHtml(pole, titre, couleurBandeau, sem) {
                             </label>
                         </div>
                     </div>
+                    ${rappelSeqHtml}
                     <input type="text" list="${idDl}" value="${escHTML(cell.texte || '')}" placeholder="Leçon / notion..." oninput="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'texte', this.value)" style="width:100%; padding:5px 7px; font-size:12.5px; font-weight:${cell.texte ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:5px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;'}">
                     ${btnDocHtml}
                 </div>
 
                 <div class="only-print-lecons" style="text-align:center; padding:3px 2px;">
-                    ${cell.niveau ? `<div style="display:inline-block; background:${stNiv.bg} !important; color:${stNiv.text} !important; font-weight:bold; font-size:11.5pt; padding:2px 10px; border-radius:6px; border:1px solid #2c3e50; margin-bottom:4px;">${escHTML(cell.niveau)}</div>` : ''}
+                    ${nivSlot ? `<div style="display:inline-block; background:${stNiv.bg} !important; color:${stNiv.text} !important; font-weight:bold; font-size:11.5pt; padding:2px 10px; border-radius:6px; border:1px solid #2c3e50; margin-bottom:4px;">${escHTML(nivSlot)}</div>` : ''}
                     <div id="print_txt_${pole}_${jour}_${slotIdx}" style="font-size:11pt; font-weight:bold; color:#1e293b; line-height:1.2; ${cell.fait ? 'text-decoration:line-through; opacity:0.6;' : ''}">
                         ${escHTML(cell.texte || '—')}
                     </div>
@@ -2584,15 +3015,59 @@ function definirLienRapideDepuisDash(idAct) {
 
 function rafraichirDashboard() {
     const cont = document.getElementById('dashboardContent'); if (!cont) return;
-    assurerStructurePlanningProf();
-    let semProf = planningLeconsProf.semaines[planningLeconsProf.semaineIndex];
+    assurerStructureProgPeriodes();
 
-    let optionsSemProf = planningLeconsProf.semaines.map((s, idx) => {
+    let perActive = progPeriodesData.periodeActiveDash;
+    let semIdx = progPeriodesData.semaineIndexDash;
+    let pObj = progPeriodesData.periodes[perActive];
+    let semProf = pObj.semaines[semIdx];
+
+    let optionsPeriodesHtml = PERIODES_LISTE.map(p => `<option value="${p}" ${p === perActive ? 'selected' : ''}>📅 ${p}</option>`).join('');
+    let optionsSemProf = pObj.semaines.map((s, idx) => {
         let dTxt = (s.dateDebut && s.dateFin) ? ` (du ${s.dateDebut} au ${s.dateFin})` : '';
-        return `<option value="${idx}" ${idx === planningLeconsProf.semaineIndex ? 'selected' : ''}>Semaine ${idx + 1}${dTxt}${idx === 0 ? ' [En cours]' : ' [D\'avance]'}</option>`;
+        return `<option value="${idx}" ${idx === semIdx ? 'selected' : ''}>Semaine ${idx + 1}${dTxt}</option>`;
     }).join('');
 
-    let titreDatesAffiche = (semProf.dateDebut && semProf.dateFin) ? `Semaine du ${semProf.dateDebut} au ${semProf.dateFin}` : `Semaine ${planningLeconsProf.semaineIndex + 1}`;
+    let titreDatesAffiche = (semProf.dateDebut && semProf.dateFin)
+        ? `${perActive} — Semaine ${semIdx + 1} (du ${semProf.dateDebut} au ${semProf.dateFin})`
+        : `${perActive} — Semaine ${semIdx + 1}`;
+
+    // Encadré optionnel permettant de cocher en avance une leçon ou séquence de la semaine suivante (S+1)
+    let blocSemaineSuivanteHtml = '';
+    if (afficherSemaineSuivanteDash && semIdx + 1 < pObj.semaines.length) {
+        let semNext = pObj.semaines[semIdx + 1];
+        let itemsNextHtml = NIVEAUX_LISTE.map(niv => {
+            let lignesNiv = [];
+            ["francais", "maths"].forEach(pole => {
+                let bNext = semNext.niveaux[niv][pole];
+                let badgePole = pole === 'francais' ? '📘 Fr.' : '📕 Maths';
+                (bNext.sequences || []).forEach(sq => {
+                    lignesNiv.push(`<label style="display:inline-flex; align-items:center; gap:4px; background:#fff; border:1px solid #cbd5e1; padding:2px 7px; border-radius:12px; font-size:11.5px; cursor:pointer;">
+                        <input type="checkbox" ${sq.fait ? 'checked' : ''} onchange="cocherElementSemaineSuivanteDash('${perActive}', ${semIdx + 1}, '${niv}', '${pole}', 'seq', '${escJS(sq.nom)}', this.checked)">
+                        <strong>${badgePole}</strong> 📑 ${escHTML(sq.nom)}
+                    </label>`);
+                });
+                JOURS_SEMAINE_PROF.forEach(j => {
+                    let cj = bNext.jours[j];
+                    if (cj && cj.texte) {
+                        lignesNiv.push(`<label style="display:inline-flex; align-items:center; gap:4px; background:#fff; border:1px solid #cbd5e1; padding:2px 7px; border-radius:12px; font-size:11.5px; cursor:pointer;">
+                            <input type="checkbox" ${cj.fait ? 'checked' : ''} onchange="cocherElementSemaineSuivanteDash('${perActive}', ${semIdx + 1}, '${niv}', '${pole}', 'jour', '${j}', this.checked)">
+                            <strong>${badgePole} (${j.slice(0,3)})</strong> : ${escHTML(cj.texte)}
+                        </label>`);
+                    }
+                });
+            });
+            return `<div style="margin-bottom:6px;"><strong>[${niv}] :</strong> ${lignesNiv.length > 0 ? lignesNiv.join(' ') : '<em style="color:#888; font-size:11.5px;">Rien de programmé en S+1</em>'}</div>`;
+        }).join('');
+
+        blocSemaineSuivanteHtml = `<div class="card-panel no-print" style="margin-bottom:14px; background:#e8f8f5; border:1px solid #48c9b0;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                <strong style="color:#0e6251;">⚡ Prendre de l'avance / Rattraper : Cocher des éléments de la Semaine ${semIdx + 2} (${perActive})</strong>
+                <button type="button" class="filter-btn" onclick="toggleApercuSemaineSuivanteDash()">✖ Masquer S+1</button>
+            </div>
+            ${itemsNextHtml}
+        </div>`;
+    }
 
     let blocAgendaProfHtml = `
     <div id="blocPlanningLeconsPrint" class="card-panel" style="margin-bottom:22px; background:#f8fbff; border:2px solid #1b4f72;">
@@ -2602,9 +3077,12 @@ function rafraichirDashboard() {
         </div>
 
         <div class="semaines-flex no-print" style="margin-bottom:14px; padding-bottom:10px; border-bottom:1px dashed #bdc3c7;">
-            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                <h3 style="margin:0; color:#1b4f72;">👩‍🏫 Planning des Leçons Explicites (CP / CE1 / CE2 / CM1 / CM2)</h3>
-                <select onchange="changerSemaineProf(this.value)" style="font-weight:bold; padding:6px 10px; border-radius:6px; border:1px solid #1b4f72;">
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <h3 style="margin:0; color:#1b4f72;">👩‍🏫 Leçons de la semaine (reliées à la Programmation) :</h3>
+                <select onchange="changerPeriodeDashboard(this.value)" style="font-weight:bold; padding:6px 10px; border-radius:6px; border:1px solid #d35400; background:#fef9e7; color:#a04000;">
+                    ${optionsPeriodesHtml}
+                </select>
+                <select onchange="changerSemaineDashboard(this.value)" style="font-weight:bold; padding:6px 10px; border-radius:6px; border:1px solid #1b4f72;">
                     ${optionsSemProf}
                 </select>
             </div>
@@ -2613,12 +3091,14 @@ function rafraichirDashboard() {
                 <span style="font-weight:bold; color:#1b4f72; font-size:13px;">${semProf.dateFin ? `➔ au Vendredi ${escHTML(semProf.dateFin)}` : '➔ Vendredi : --/--'}</span>
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                <button type="button" class="btn-action" onclick="imprimerPlanningLeconsProf()" style="background:#8e44ad !important; color:#fff !important;" title="Imprimer ce planning de leçons pour l'afficher aux élèves">🖨️ Imprimer l'affichage élèves</button>
-                <button type="button" class="btn-action" onclick="ajouterSemaineProfAvance()">➕ Semaine d'avance</button>
-                ${planningLeconsProf.semaines.length > 1 ? `<button type="button" class="btn-danger" onclick="supprimerSemaineProfActive()">🗑️ Suppr.</button>` : ''}
-                <button type="button" class="btn-valid" onclick="cloreSemaineProfActive()">🏁 Clôturer & Suivante</button>
+                <button type="button" class="btn-action" onclick="imprimerPlanningLeconsProf()" style="background:#8e44ad !important; color:#fff !important;" title="Imprimer ce planning de leçons pour l'afficher aux élèves">🖨️ Affiche élèves</button>
+                <button type="button" class="filter-btn" onclick="toggleApercuSemaineSuivanteDash()" title="Voir et cocher en avance les séances de la semaine suivante">👀 S+1 (Avance)</button>
+                <button type="button" class="btn-action" onclick="recalerAvanceDepuisDashboard()" title="Remonter les séances de la semaine suivante sur les créneaux vides">⏮️ Recaler l'avance</button>
+                <button type="button" class="btn-valid" onclick="cloreEtDecalerDepuisDashboard()" title="Clôturer cette semaine : les non-cochés glissent en S+1 et décalent toute la suite">⏭️ Clôturer & Décaler non-faits</button>
             </div>
         </div>
+
+        ${blocSemaineSuivanteHtml}
 
         <div class="grid-2-cols grid-lecons-poles">
             ${genererTableauLeconsPoleHtml('francais', '📘 FRANÇAIS — Ordre des leçons explicites', '#1b4f72', semProf)}
@@ -2699,10 +3179,9 @@ function rafraichirDashboard() {
     cont.innerHTML = html + `</div>`;
 }
 // ==========================================
-// 7. ONGLET 4 : BASE DE DONNÉES, TAGS MULTI-SÉQUENCES & MULTI-COMPÉTENCES (SANS AUTO-VALIDATION), LEÇONS PROF & SÉQUENCES
+// 7. ONGLET 4 : BASE DE DONNÉES, PAGE GUIDE ENSEIGNANT, TYPES CORRIGÉS & TAGS SANS AUTO-VALIDATION
 // ==========================================
 
-// --- Pastilles (Tags) de SÉQUENCES en Saisie Simple (Validation manuelle via Entrée ou bouton ➕) ---
 function renderTagsSequencesSimple() {
     let cont = document.getElementById('tagsSequencesSimple');
     let hidden = document.getElementById('inputSequence');
@@ -2740,7 +3219,6 @@ function retirerTagSequenceSimple(idx) {
     renderTagsSequencesSimple();
 }
 
-// --- Pastilles (Tags) de SÉQUENCES communes en Saisie Multiple ---
 function renderTagsSequencesMulti() {
     let cont = document.getElementById('tagsSequencesMulti');
     let hidden = document.getElementById('multiSequence');
@@ -2778,7 +3256,6 @@ function retirerTagSequenceMulti(idx) {
     renderTagsSequencesMulti();
 }
 
-// --- Pastilles (Tags) de COMPÉTENCES en Saisie Simple (Validation uniquement via Entrée ou ➕, jamais au fil de la frappe) ---
 function renderTagsCompetencesSimple() {
     let cont = document.getElementById('tagsCompetencesSimple');
     let hidden = document.getElementById('inputCompetence');
@@ -2818,7 +3295,6 @@ function retirerTagCompetenceSimple(idx) {
     renderTagsCompetencesSimple();
 }
 
-// --- Pastilles (Tags) de COMPÉTENCES par ligne en Saisie Multiple (Validation uniquement via Entrée ou ➕) ---
 function getTagsLigneMulti(tr) {
     try {
         return JSON.parse(tr.dataset.compTags || "[]");
@@ -2883,7 +3359,6 @@ function mettreAJourSaisieCompMulti(inputElem) {
     gererSaisieChampMulti(tr.querySelector('.m-comp'), 'comp');
 }
 
-// Quand on coche "👩‍🏫 Est une Leçon explicite" en saisie simple, pré-remplit Support="Leçon" et Étoiles="0" si vides
 function gererCocheEstLeconSimple(isChecked) {
     if (isChecked) {
         let cbEval = document.getElementById('cbEstEvaluation');
@@ -3044,7 +3519,7 @@ function gererCocheLeconLigneMulti(cbElem) {
 function ajouterLigneSaisieMultiple(nbLignes = 1) {
     const tbody = document.getElementById('tbodySaisieMultiple'); if (!tbody) return;
     let isCM = estCMSelectionneFormMulti();
-    let optsTypes = `<option value="">-- Support * --</option>` + Object.keys(imagesParType || {}).map(t => `<option value="${escHTML(t)}">${escHTML((imagesParType[t].emoji ? imagesParType[t].emoji + ' ' : '') + t)}</option>`).join('');
+    let optsTypes = `<option value="">-- Support * --</option>` + Object.keys(imagesParType || {}).map(t => `<option value="${escHTML(t)}">${escHTML(((imagesParType[t] && imagesParType[t].emoji) ? imagesParType[t].emoji + ' ' : '') + t)}</option>`).join('');
 
     let premiereLigne = tbody.querySelector('.ligne-saisie-multi');
     let getValSiCoche = (champ) => {
@@ -3061,6 +3536,7 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
     let defPage = getValSiCoche('page');
     let defOrange = isCM ? getValSiCoche('orange') : "";
     let defJaune = getValSiCoche('jaune');
+    let defPageProf = getValSiCoche('pageprof');
     let defDiff = getValSiCoche('diff');
 
     for (let i = 0; i < nbLignes; i++) {
@@ -3083,6 +3559,7 @@ function ajouterLigneSaisieMultiple(nbLignes = 1) {
             <td><input type="text" class="m-page" value="${escHTML(defPage)}" placeholder="p9" oninput="gererSaisieChampMulti(this, 'page')" style="width:100%;"></td>
             <td><input type="text" class="m-orange" value="${escHTML(defOrange)}" placeholder="p10" ${isCM ? '' : 'disabled'} oninput="gererSaisieChampMulti(this, 'orange')" style="width:100%;"></td>
             <td><input type="text" class="m-jaune" value="${escHTML(defJaune)}" placeholder="1 p4" oninput="gererSaisieChampMulti(this, 'jaune')" style="width:100%;"></td>
+            <td><input type="text" class="m-pageprof" value="${escHTML(defPageProf)}" placeholder="Guide p12" oninput="gererSaisieChampMulti(this, 'pageprof')" style="width:100%;"></td>
             <td><input type="text" class="m-lien" placeholder="URL Anton / PDF / PPT..." style="width:100%;"></td>
             <td>
                 <select class="m-diff" onchange="gererSaisieChampMulti(this, 'diff')" style="width:100%;">
@@ -3164,6 +3641,7 @@ function enregistrerSaisieMultiple() {
         let pageManuel = tr.querySelector('.m-page').value.trim();
         let pageOrange = isCM ? (tr.querySelector('.m-orange').value.trim()) : "";
         let varianteJaune = tr.querySelector('.m-jaune').value.trim();
+        let pageProf = tr.querySelector('.m-pageprof') ? tr.querySelector('.m-pageprof').value.trim() : "";
         let lienExterne = tr.querySelector('.m-lien') ? tr.querySelector('.m-lien').value.trim() : "";
         let difficulte = parseInt(tr.querySelector('.m-diff').value) || 0;
         let estEval = !estLecon && tr.querySelector('.m-eval').checked;
@@ -3172,7 +3650,7 @@ function enregistrerSaisieMultiple() {
 
         baseDonnees.push({
             id: newId, matiere, sequence, lecon, competence, ressource, typeRes,
-            symbole, personnes, pageManuel, pageOrange, varianteJaune, lienExterne, periode,
+            symbole, personnes, pageManuel, pageOrange, varianteJaune, pageProf, lienExterne, periode,
             difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: "", estEvaluation: estEval, estLecon: estLecon
         });
         if (periode) programmations[newId] = periode;
@@ -3206,9 +3684,6 @@ function sauvegarderToutesMatieres() {
 }
 function supprimerMatiereModal(m) { if (confirm(`Supprimer toutes les activités de la matière "${m}" ?`)) { baseDonnees = baseDonnees.filter(b => (b.matiere || "").trim() !== m); postEditGlobal(); afficherListeMatieresModal(); } }
 
-// ==========================================
-// MODALE SÉQUENCES : RENOMMER + CHANGER LA MATIÈRE D'UNE SÉQUENCE COMPLÈTE + RÉASSIGNER
-// ==========================================
 function ouvrirModalGestionSequences() {
     let sel = document.getElementById('filtreMatiereModalSeq');
     let mats = ['Toutes', ...new Set([...MATIERES_DEFAUT_LISTE, ...baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean)])];
@@ -3479,59 +3954,117 @@ function sauvegarderToutesCompetences() {
     postEditGlobal(); fermerModal('modalCompetences'); showToast("Compétences mises à jour !", "success");
 }
 
+// ==========================================
+// MODALE TYPES DE SUPPORTS CORRIGÉE (CRÉATION + ÉDITION FLUIDES)
+// ==========================================
 function ouvrirModalGestionTypes() {
     afficherListeTypesModal();
     ouvrirModal('modalTypes');
 }
 
+function lireModificationsTypesEnCoursDansDOM() {
+    document.querySelectorAll('.ligne-type-modal').forEach(div => {
+        let k = div.getAttribute('data-key');
+        if (k && imagesParType[k]) {
+            let emInput = div.querySelector('.t-emoji');
+            let imgInput = div.querySelector('.t-img');
+            let rempInput = div.querySelector('.t-remp');
+            let coulInput = div.querySelector('.t-coul');
+            let tabInput = div.querySelector('.t-tab');
+            imagesParType[k].emoji = emInput ? emInput.value.trim() : "";
+            imagesParType[k].img = imgInput ? imgInput.value.trim() : "";
+            imagesParType[k].remplacerNum = Boolean(rempInput && rempInput.checked);
+            imagesParType[k].appliquerCouleur = Boolean(coulInput && coulInput.checked);
+            imagesParType[k].isTablette = Boolean(tabInput && tabInput.checked);
+        }
+    });
+}
+
 function afficherListeTypesModal() {
     const cont = document.getElementById('listeTypesModalContainer'); if (!cont || !imagesParType) return;
     cont.innerHTML = Object.keys(imagesParType).map(k => {
-        let t = imagesParType[k];
+        let t = imagesParType[k] || {};
         return `<div class="ligne-type-modal" data-key="${escHTML(k)}" style="display:flex; gap:8px; align-items:center; margin-bottom:8px; padding-bottom:6px; border-bottom:1px solid #eee; flex-wrap:wrap;">
             <strong style="width:130px;">${escHTML(k)}</strong>
             <input type="text" class="t-emoji" value="${escHTML(t.emoji || '')}" placeholder="Émoji (🎲)" title="Émoji affiché en premier sur l'étiquette" style="width:75px; text-align:center;">
             <input type="text" class="t-img" value="${escHTML(t.img || '')}" placeholder="ou URL image/logo..." style="flex:1; min-width:140px;">
-            <label style="font-size:12px;"><input type="checkbox" class="t-remp" ${t.remplacerNum ? 'checked' : ''}> Logo seul</label>
-            <label style="font-size:12px;"><input type="checkbox" class="t-coul" ${t.appliquerCouleur !== false ? 'checked' : ''}> Colorer</label>
-            <label style="font-size:12px;"><input type="checkbox" class="t-tab" ${t.isTablette ? 'checked' : ''}> 📱 Tablette</label>
+            <label style="font-size:12px; cursor:pointer;"><input type="checkbox" class="t-remp" ${t.remplacerNum ? 'checked' : ''}> Logo seul</label>
+            <label style="font-size:12px; cursor:pointer;"><input type="checkbox" class="t-coul" ${t.appliquerCouleur !== false ? 'checked' : ''}> Colorer</label>
+            <label style="font-size:12px; cursor:pointer;"><input type="checkbox" class="t-tab" ${t.isTablette ? 'checked' : ''}> 📱 Tablette</label>
             <button type="button" class="btn-remove" style="padding:3px 7px;" onclick="supprimerTypeRessource('${escJS(k)}')">🗑️</button>
         </div>`;
     }).join('');
 }
 
 function sauvegarderTousLesTypes() {
-    document.querySelectorAll('.ligne-type-modal').forEach(div => {
-        let k = div.getAttribute('data-key');
-        if (imagesParType[k]) {
-            let emInput = div.querySelector('.t-emoji');
-            imagesParType[k].emoji = emInput ? emInput.value.trim() : "";
-            imagesParType[k].img = div.querySelector('.t-img').value.trim();
-            imagesParType[k].remplacerNum = div.querySelector('.t-remp').checked;
-            imagesParType[k].appliquerCouleur = div.querySelector('.t-coul').checked;
-            imagesParType[k].isTablette = div.querySelector('.t-tab').checked;
-        }
-    });
+    // Si l'utilisatrice a écrit un nouveau type en haut sans avoir cliqué sur "➕ Créer ce type", on l'ajoute aussi automatiquement !
+    let inpNew = document.getElementById('inputNouveauTypeNom');
+    if (inpNew && inpNew.value.trim() !== "") {
+        ajouterOuModifierType(true);
+    } else {
+        lireModificationsTypesEnCoursDansDOM();
+    }
     localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
-    declencherAutoSaveFirebase(); majListeTypesSelect(); fermerModal('modalTypes'); afficherBase();
-    showToast("Types, émojis et logos mis à jour !", "success");
+    declencherAutoSaveFirebase();
+    majListeTypesSelect();
+    initNiveaux();
+    fermerModal('modalTypes');
+    afficherBase();
+    showToast("✅ Types, émojis et logos mis à jour !", "success");
 }
 
-function ajouterOuModifierType() {
-    let nom = document.getElementById('inputNouveauTypeNom').value.trim(); if (!nom) { showToast("Indiquez un nom de type.", "error"); return; }
-    let em = document.getElementById('inputNouveauTypeEmoji') ? document.getElementById('inputNouveauTypeEmoji').value.trim() : "";
-    let img = document.getElementById('inputNouveauTypeImg').value.trim();
-    let remp = document.getElementById('cbNouveauTypeRempNum') ? document.getElementById('cbNouveauTypeRempNum').checked : false;
-    let isTab = document.getElementById('cbNouveauTypeTablette').checked, appCoul = document.getElementById('cbNouveauTypeCouleur').checked;
-    imagesParType[nom] = { img: img, emoji: em, remplacerNum: remp, appliquerCouleur: appCoul, isTablette: isTab };
+function ajouterOuModifierType(silencieux = false) {
+    lireModificationsTypesEnCoursDansDOM();
+    let inpNom = document.getElementById('inputNouveauTypeNom');
+    let nom = inpNom ? inpNom.value.trim() : "";
+    if (!nom) {
+        if (!silencieux) showToast("⚠️ Écrivez le nom du nouveau type dans la première case (ex: Manipulation).", "error");
+        if (inpNom) inpNom.focus();
+        return;
+    }
+    let inpEm = document.getElementById('inputNouveauTypeEmoji');
+    let inpImg = document.getElementById('inputNouveauTypeImg');
+    let cbRemp = document.getElementById('cbNouveauTypeRempNum');
+    let cbCoul = document.getElementById('cbNouveauTypeCouleur');
+    let cbTab = document.getElementById('cbNouveauTypeTablette');
+
+    imagesParType[nom] = {
+        img: inpImg ? inpImg.value.trim() : "",
+        emoji: inpEm ? inpEm.value.trim() : "",
+        remplacerNum: Boolean(cbRemp && cbRemp.checked),
+        appliquerCouleur: cbCoul ? Boolean(cbCoul.checked) : true,
+        isTablette: Boolean(cbTab && cbTab.checked)
+    };
+
     localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
-    declencherAutoSaveFirebase(); majListeTypesSelect(); afficherListeTypesModal(); afficherBase();
-    document.getElementById('inputNouveauTypeNom').value = '';
-    if (document.getElementById('inputNouveauTypeEmoji')) document.getElementById('inputNouveauTypeEmoji').value = '';
-    document.getElementById('inputNouveauTypeImg').value = '';
-    showToast(`Type "${nom}" enregistré !`, "success");
+    declencherAutoSaveFirebase();
+    majListeTypesSelect();
+    initNiveaux();
+    afficherListeTypesModal();
+    afficherBase();
+
+    if (inpNom) inpNom.value = '';
+    if (inpEm) inpEm.value = '';
+    if (inpImg) inpImg.value = '';
+    if (cbRemp) cbRemp.checked = false;
+    if (cbCoul) cbCoul.checked = true;
+    if (cbTab) cbTab.checked = false;
+
+    if (!silencieux) showToast(`✅ Nouveau type "${nom}" créé et disponible dans tous les menus !`, "success");
 }
-function supprimerTypeRessource(nom) { if (confirm(`Supprimer le type "${nom}" ?`)) { delete imagesParType[nom]; localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType)); majListeTypesSelect(); afficherListeTypesModal(); } }
+
+function supprimerTypeRessource(nom) {
+    lireModificationsTypesEnCoursDansDOM();
+    if (confirm(`Supprimer le type "${nom}" ?`)) {
+        delete imagesParType[nom];
+        localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
+        majListeTypesSelect();
+        initNiveaux();
+        afficherListeTypesModal();
+        afficherBase();
+    }
+}
+
 function changerCouleurDB(idAct, nouvCouleur) { let a = baseDonnees.find(b => b.id === idAct); if (a) { a.visuel = nouvCouleur; sauvegarderBase(); afficherBase(); } }
 function changerImageDB(idAct) { let a = baseDonnees.find(b => b.id === idAct); if (!a) return; let url = prompt("URL de l'image spécifique :", a.imageSpecifique || ""); if (url !== null) { a.imageSpecifique = url.trim(); sauvegarderBase(); afficherBase(); } }
 function viderBase() { if (confirm("⚠️ Vider l'intégralité de la base de données ?")) { baseDonnees = []; postEditGlobal(); showToast("Base de données vidée.", "success"); } }
@@ -3556,6 +4089,7 @@ function enregistrerActiviteBase() {
     let isCM = nivArr.includes('CM1') || nivArr.includes('CM2');
     let pageOrange = isCM && document.getElementById('inputPageOrange') ? document.getElementById('inputPageOrange').value.trim() : "";
     let varianteJaune = document.getElementById('inputVarianteJaune').value.trim();
+    let pageProf = document.getElementById('inputPageProf') ? document.getElementById('inputPageProf').value.trim() : "";
     let periode = document.getElementById('selectPeriodeForm').value;
     let diffRaw = document.getElementById('selectDifficulte').value;
     let difficulte = parseInt(diffRaw) || 0;
@@ -3580,7 +4114,7 @@ function enregistrerActiviteBase() {
     if (idEnCoursEdition) {
         let act = baseDonnees.find(b => b.id === idEnCoursEdition);
         if (act) {
-            Object.assign(act, { matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, lienExterne, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval, estLecon: estLecon });
+            Object.assign(act, { matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, pageProf, lienExterne, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval, estLecon: estLecon });
             if (periode) programmations[act.id] = periode;
         }
         idEnCoursEdition = null;
@@ -3589,7 +4123,7 @@ function enregistrerActiviteBase() {
         showToast("Élément modifié !", "success");
     } else {
         let newId = 'act_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
-        baseDonnees.push({ id: newId, matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, lienExterne, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval, estLecon: estLecon });
+        baseDonnees.push({ id: newId, matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, pageProf, lienExterne, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval, estLecon: estLecon });
         if (periode) programmations[newId] = periode;
         showToast(estLecon ? "👩‍🏫 Nouvelle leçon enregistrée !" : "Nouvelle activité ajoutée !", "success");
     }
@@ -3605,6 +4139,7 @@ function enregistrerActiviteBase() {
     document.getElementById('inputPageManuel').value = '';
     if (document.getElementById('inputPageOrange')) document.getElementById('inputPageOrange').value = '';
     document.getElementById('inputVarianteJaune').value = '';
+    if (document.getElementById('inputPageProf')) document.getElementById('inputPageProf').value = '';
     if (document.getElementById('inputLienExterne')) document.getElementById('inputLienExterne').value = '';
     if (document.getElementById('inputCompetencePickerSimple')) document.getElementById('inputCompetencePickerSimple').value = '';
     if (document.getElementById('inputSequencePickerSimple')) document.getElementById('inputSequencePickerSimple').value = '';
@@ -3631,6 +4166,7 @@ function editerActiviteBase(idAct) {
     document.getElementById('inputPageManuel').value = a.pageManuel || '';
     if (document.getElementById('inputPageOrange')) document.getElementById('inputPageOrange').value = a.pageOrange || '';
     document.getElementById('inputVarianteJaune').value = a.varianteJaune || '';
+    if (document.getElementById('inputPageProf')) document.getElementById('inputPageProf').value = a.pageProf || '';
     if (document.getElementById('inputLienExterne')) document.getElementById('inputLienExterne').value = a.lienExterne || '';
     document.getElementById('selectPeriodeForm').value = programmations[a.id] || a.periode || '';
     document.getElementById('selectDifficulte').value = (a.difficulte !== undefined && a.difficulte !== null) ? String(a.difficulte) : "0";
@@ -3699,9 +4235,10 @@ function appliquerModificationGroupeeBase() {
     let nouvPer = document.getElementById('bulkSelectPeriode')?.value || "";
     let nouvEt = document.getElementById('bulkSelectEtoiles')?.value ?? "";
     let nouvRole = document.getElementById('bulkSelectRole')?.value || "";
+    let nouvPageProf = document.getElementById('bulkInputPageProf')?.value.trim() || "";
     let nouvPers = document.getElementById('bulkInputPersonnes')?.value.trim() || "";
 
-    if (!nouvType && !nouvMat && !nouvSeq && !addSeq && !nouvPer && nouvEt === "" && !nouvRole && !nouvPers) {
+    if (!nouvType && !nouvMat && !nouvSeq && !addSeq && !nouvPer && nouvEt === "" && !nouvRole && !nouvPageProf && !nouvPers) {
         showToast("Choisissez au moins un élément à appliquer aux éléments cochés.", "error");
         return;
     }
@@ -3741,6 +4278,7 @@ function appliquerModificationGroupeeBase() {
                 a.estLecon = false;
                 a.estEvaluation = false;
             }
+            if (nouvPageProf) a.pageProf = nouvPageProf;
             if (nouvPers) a.personnes = nouvPers;
             a.visuel = calculerCouleurAutomatique(a.matiere, a.niveau, a.typeRes);
             count++;
@@ -3760,6 +4298,7 @@ function appliquerModificationGroupeeBase() {
     document.getElementById('bulkSelectPeriode').value = "";
     document.getElementById('bulkSelectEtoiles').value = "";
     if (document.getElementById('bulkSelectRole')) document.getElementById('bulkSelectRole').value = "";
+    if (document.getElementById('bulkInputPageProf')) document.getElementById('bulkInputPageProf').value = "";
     document.getElementById('bulkInputPersonnes').value = "";
 
     selectionGroupeeBase.clear();
@@ -3823,7 +4362,7 @@ function afficherBase() {
         if (filtreCourantSequenceDB === 'SANS_SEQUENCE' && extraireListeSequences(a.sequence).length > 0) return false;
         if (filtreCourantSequenceDB !== 'Toutes' && filtreCourantSequenceDB !== 'SANS_SEQUENCE' && !activiteAppartientASequence(a, filtreCourantSequenceDB)) return false;
         if (filtreCourantTypeDB !== 'Tous' && (a.typeRes || "").trim() !== filtreCourantTypeDB) return false;
-        if (q && !`${a.matiere} ${a.sequence} ${a.lecon} ${a.competence} ${a.ressource} ${a.symbole || ''} ${a.pageManuel} ${a.pageOrange || ''}`.toLowerCase().includes(q)) return false;
+        if (q && !`${a.matiere} ${a.sequence} ${a.lecon} ${a.competence} ${a.ressource} ${a.symbole || ''} ${a.pageManuel} ${a.pageOrange || ''} ${a.pageProf || ''}`.toLowerCase().includes(q)) return false;
         return true;
     });
 
@@ -3842,13 +4381,14 @@ function afficherBase() {
         } else if (a.pageOrange) {
             badgePages = `<span style="background:#fdebd0; color:#9c640c; padding:1px 5px; border-radius:4px; font-size:11px; border:1px solid #f39c12;">🟠 ${escHTML(a.pageOrange)}</span> `;
         }
-        let detailsLivres = `${badgePages}${a.varianteJaune ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 5px; border-radius:4px; font-size:11px;">📒 ${escHTML(a.varianteJaune)}</span> ` : ''}`;
+        let badgeGuideProf = (a.pageProf && a.pageProf.trim()) ? `<span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ${escHTML(a.pageProf.trim())}</span> ` : '';
+        let detailsLivres = `${badgePages}${a.varianteJaune ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 5px; border-radius:4px; font-size:11px;">📒 ${escHTML(a.varianteJaune)}</span> ` : ''}${badgeGuideProf}`;
         let labelBtnLien = isLecon ? "📽️ PDF/PPT ↗" : "🔗 Anton ↗";
         let badgeLien = (a.lienExterne && a.lienExterne.trim())
             ? `<a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir le lien">${labelBtnLien}</a> `
             : '';
         let badgeRoleHtml = isLecon
-            ? ` <span class="badge-lecon-prof" title="Leçon explicite : visible uniquement dans votre Tableau de bord enseignante">👩‍🏫 Leçon Prof</span>`
+            ? ` <span class="badge-lecon-prof" title="Leçon explicite : visible uniquement dans votre Programmation et votre Tableau de bord enseignante">👩‍🏫 Leçon Prof</span>`
             : (a.estEvaluation ? ` <span class="badge-eval">🎯 Éval</span>` : '');
 
         let rep = getRepereAtelierHtml(a, null, 26);
@@ -3889,13 +4429,146 @@ function afficherBase() {
 }
 
 // ==========================================
-// 8. ONGLETS 5, 6, 7 & 8 : PROGRAMMATION PAR SÉQUENCES MULTI-PÉRIODES, ÉTIQUETTES 3x8, MATRICE & BILANS
+// 8. ONGLET 5 : PROGRAMMATION (SOUS-ONGLETS ANNUEL + P1 À P5, SEMAINES, JOURS & DÉCALAGE)
 // ==========================================
 function initProgFilters() {
     const selMat = document.getElementById('selectMatiereProg'); if (!selMat) return;
     let val = selMat.value || 'Toutes';
     selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
     selMat.value = val;
+}
+
+function changerSousOngletProg(nouvOnglet) {
+    sousOngletProgActif = nouvOnglet;
+    document.querySelectorAll('#barreSousOngletsProg .subtab-btn').forEach(btn => btn.classList.remove('active'));
+    let btnActif = document.getElementById('btnSubProg_' + nouvOnglet);
+    if (btnActif) btnActif.classList.add('active');
+
+    let blocFiltresAnnuel = document.getElementById('blocFiltresProgAnnuel');
+    if (blocFiltresAnnuel) {
+        blocFiltresAnnuel.style.display = (nouvOnglet === 'ANNUEL') ? 'flex' : 'none';
+    }
+    afficherProgrammation();
+}
+
+function changerNiveauActifProgPeriode(niv) {
+    niveauActifProgPeriode = niv;
+    afficherProgrammation();
+}
+
+function modifierNbSemainesPeriode(per, nb) {
+    assurerStructureProgPeriodes();
+    let val = Math.max(1, Math.min(15, parseInt(nb) || 7));
+    let pObj = progPeriodesData.periodes[per];
+    pObj.nbSemaines = val;
+    while (pObj.semaines.length < val) {
+        pObj.semaines.push(creerSemaineProgVide(pObj.semaines.length, ""));
+    }
+    if (pObj.semaines.length > val) {
+        pObj.semaines.length = val;
+    }
+    recalculerDatesPeriode(per);
+    sauvegarderProgPeriodes();
+    afficherProgrammation();
+}
+
+function modifierDateDebutPeriode(per, dateISO) {
+    assurerStructureProgPeriodes();
+    let pObj = progPeriodesData.periodes[per];
+    pObj.dateDebutP_ISO = dateISO || "";
+    recalculerDatesPeriode(per);
+    sauvegarderProgPeriodes();
+    afficherProgrammation();
+}
+
+function ajouterSequenceDansSemaineProg(per, semIdx, niv, pole, nomSeq) {
+    if (!nomSeq || !nomSeq.trim()) return;
+    assurerStructureProgPeriodes();
+    let clean = nomSeq.trim();
+    let bloc = progPeriodesData.periodes[per].semaines[semIdx].niveaux[niv][pole];
+    if (!bloc.sequences.some(s => s.nom.toLowerCase() === clean.toLowerCase())) {
+        bloc.sequences.push({ nom: clean, fait: false });
+        sauvegarderProgPeriodes();
+        afficherProgrammation();
+        rafraichirDashboard();
+    }
+}
+
+function retirerSequenceDeSemaineProg(per, semIdx, niv, pole, idxSeq) {
+    assurerStructureProgPeriodes();
+    let bloc = progPeriodesData.periodes[per].semaines[semIdx].niveaux[niv][pole];
+    bloc.sequences.splice(idxSeq, 1);
+    sauvegarderProgPeriodes();
+    afficherProgrammation();
+    rafraichirDashboard();
+}
+
+function toggleFaitSequenceSemaineProg(per, semIdx, niv, pole, idxSeq) {
+    assurerStructureProgPeriodes();
+    let bloc = progPeriodesData.periodes[per].semaines[semIdx].niveaux[niv][pole];
+    if (bloc.sequences[idxSeq]) {
+        bloc.sequences[idxSeq].fait = !bloc.sequences[idxSeq].fait;
+        sauvegarderProgPeriodes();
+        afficherProgrammation();
+        rafraichirDashboard();
+    }
+}
+
+function majLeconJourProg(per, semIdx, niv, pole, jour, champ, valeur) {
+    assurerStructureProgPeriodes();
+    let cell = progPeriodesData.periodes[per].semaines[semIdx].niveaux[niv][pole].jours[jour];
+    cell[champ] = valeur;
+
+    if (champ === 'texte') {
+        let infos = trouverInfosDepuisBaseLecon(pole, niv, valeur);
+        let doitReafficher = false;
+        if (infos.lien && cell.lien !== infos.lien) { cell.lien = infos.lien; doitReafficher = true; }
+        if (infos.pageProf && cell.pageProf !== infos.pageProf) { cell.pageProf = infos.pageProf; doitReafficher = true; }
+        sauvegarderProgPeriodes();
+        rafraichirDashboard();
+        if (doitReafficher) afficherProgrammation();
+    } else {
+        sauvegarderProgPeriodes();
+        afficherProgrammation();
+        rafraichirDashboard();
+    }
+}
+
+function definirLienJourProg(per, semIdx, niv, pole, jour) {
+    assurerStructureProgPeriodes();
+    let cell = progPeriodesData.periodes[per].semaines[semIdx].niveaux[niv][pole].jours[jour];
+    let url = prompt(`Collez ici le lien vers votre PDF / PowerPoint à projeter (${niv} - ${jour}) :`, cell.lien || "");
+    if (url !== null) {
+        cell.lien = url.trim();
+        sauvegarderProgPeriodes();
+        afficherProgrammation();
+        rafraichirDashboard();
+    }
+}
+
+function actionReporterEtDecalerDepuisProg(per, semIdx, niv, pole) {
+    let nb = reporterEtDecalerSemaine(per, semIdx, niv, pole);
+    afficherProgrammation();
+    rafraichirDashboard();
+    if (nb > 0) showToast(`⏭️ ${nb} élément(s) non fait(s) reporté(s) sur la Semaine ${semIdx + 2} (avec décalage de la suite) !`, "success");
+    else showToast("ℹ️ Tout est déjà coché fait (ou vide) sur cette semaine.", "success");
+}
+
+function actionRecalerAvanceDepuisProg(per, semIdx, niv, pole) {
+    let nb = recalerAvanceSemaine(per, semIdx, niv, pole);
+    afficherProgrammation();
+    rafraichirDashboard();
+    if (nb > 0) showToast(`⏮️ ${nb} élément(s) des semaines suivantes remonté(s) !`, "success");
+    else showToast("ℹ️ Aucun créneau vide à combler depuis la semaine suivante.", "success");
+}
+
+function envoyerSemaineProgVersDashboard(per, semIdx) {
+    assurerStructureProgPeriodes();
+    progPeriodesData.periodeActiveDash = per;
+    progPeriodesData.semaineIndexDash = semIdx;
+    sauvegarderProgPeriodes();
+    changerOnglet('pageDashboard', document.querySelectorAll('.nav-btn')[2]);
+    showToast(`📊 Tableau de bord positionné sur ${per} — Semaine ${semIdx + 1} !`, "success");
 }
 
 function toggleProgSequence(matiere, sequence, per) {
@@ -3943,8 +4616,201 @@ function toggleProgSequence(matiere, sequence, per) {
     afficherBase();
 }
 
+// Récupère toutes les séquences affectées à une période donnée pour un niveau et un pôle ('francais' ou 'maths')
+function getSequencesAffecteesPeriodePole(per, niv, pole) {
+    let seqMap = new Map();
+    baseDonnees.forEach(a => {
+        if (!a) return;
+        let nivAct = (a.niveau || "").toUpperCase();
+        if (nivAct && !nivAct.includes(niv) && nivAct !== "TOUS") return;
+
+        let matNorm = (a.matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        let estBonPole = (pole === 'francais')
+            ? (matNorm.includes('francais') || matNorm.includes('grammaire') || matNorm.includes('conjugaison') || matNorm.includes('orthographe') || matNorm.includes('lexique') || matNorm.includes('vocabulaire') || matNorm.includes('ecriture') || matNorm.includes('lecture'))
+            : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('proportionnalite') || matNorm.includes('programmation') || matNorm.includes('probleme'));
+        if (!estBonPole) return;
+
+        extraireListeSequences(a.sequence).forEach(s => {
+            let pSeq = getPeriodesSequence(a.matiere, s);
+            if (pSeq.includes(per)) {
+                if (!seqMap.has(s)) seqMap.set(s, { nom: s, matiere: a.matiere });
+            }
+        });
+    });
+    return Array.from(seqMap.values()).sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+}
+
+function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPole, pObj) {
+    let seqsPeriode = getSequencesAffecteesPeriodePole(per, niv, pole);
+
+    // Datalist des séquences de ce pôle (celles de la période en priorité + toutes les autres du pôle)
+    let toutesSeqsPoleSet = new Set(seqsPeriode.map(x => x.nom));
+    baseDonnees.forEach(a => {
+        if (!a) return;
+        let nivAct = (a.niveau || "").toUpperCase();
+        if (nivAct && !nivAct.includes(niv) && nivAct !== "TOUS") return;
+        let matNorm = (a.matiere || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+        let estBonPole = (pole === 'francais')
+            ? (matNorm.includes('francais') || matNorm.includes('grammaire') || matNorm.includes('conjugaison') || matNorm.includes('orthographe') || matNorm.includes('lexique') || matNorm.includes('vocabulaire') || matNorm.includes('ecriture'))
+            : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('programmation'));
+        if (estBonPole) extraireListeSequences(a.sequence).forEach(s => toutesSeqsPoleSet.add(s));
+    });
+
+    let idDlSeq = `dl_prog_seq_${per}_${niv}_${pole}`;
+    let dlSeqHtml = `<datalist id="${idDlSeq}">` + Array.from(toutesSeqsPoleSet).map(s => `<option value="${escHTML(s)}">`).join('') + `</datalist>`;
+
+    // Réservoir visuel des séquences affectées à cette période
+    let reservoirHtml = seqsPeriode.length > 0
+        ? `<div style="margin-bottom:10px; padding:8px 10px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:6px; font-size:12px;">
+               <strong style="color:${couleurPole};">📌 Séquences affectées en ${per} (${niv}) :</strong> ` +
+               seqsPeriode.map(sp => {
+                   // Vérifier dans quelle(s) semaine(s) cette séquence est placée
+                   let semsPlacees = [];
+                   pObj.semaines.forEach((sm, idx) => {
+                       let b = sm.niveaux[niv][pole];
+                       if ((b.sequences || []).some(x => x.nom.toLowerCase() === sp.nom.toLowerCase())) semsPlacees.push(`S${idx + 1}`);
+                   });
+                   let badgeSem = semsPlacees.length > 0 ? ` <strong style="color:#27ae60;">[${semsPlacees.join(', ')}]</strong>` : ` <em style="color:#e67e22;">(à placer)</em>`;
+                   return `<span class="seq-tag-pill" style="margin:2px;">📑 ${escHTML(sp.nom)}${badgeSem}</span>`;
+               }).join(' ') +
+           `</div>`
+        : `<div style="margin-bottom:10px; padding:6px 10px; background:#fef9e7; border-radius:6px; font-size:12px; color:#7d6608;">
+               ℹ️ Aucune séquence de ${niv} n'est encore cochée en <strong>${per}</strong> dans la <em>Répartition annuelle</em> (vous pouvez tout de même en ajouter librement ci-dessous).
+           </div>`;
+
+    let rowsHtml = pObj.semaines.map((sem, semIdx) => {
+        let bloc = sem.niveaux[niv][pole];
+        let seqsSem = bloc.sequences || [];
+        let nomsSeqsSem = seqsSem.map(s => s.nom);
+
+        // Datalist des leçons pour cette semaine (priorisant les leçons des séquences choisies sur cette semaine !)
+        let idDlLec = `dl_prog_lec_${per}_${semIdx}_${niv}_${pole}`;
+        let suggsLecons = genererDatalistSuggestionsLecons(pole, niv, nomsSeqsSem);
+        let dlLecHtml = `<datalist id="${idDlLec}">${suggsLecons.map(l => `<option value="${escHTML(l)}">`).join('')}</datalist>`;
+
+        let pillsSeqHtml = seqsSem.map((sq, sqIdx) => `
+            <span class="seq-tag-pill ${sq.fait ? 'done' : ''}" style="display:inline-flex; align-items:center; gap:4px; margin:2px 0;">
+                <input type="checkbox" ${sq.fait ? 'checked' : ''} onchange="toggleFaitSequenceSemaineProg('${per}', ${semIdx}, '${niv}', '${pole}', ${sqIdx})" title="Cocher quand la séquence est faite (si non cochée, elle glissera en S+1 lors du report)">
+                <span>📑 ${escHTML(sq.nom)}</span>
+                <span class="comp-tag-remove" onclick="retirerSequenceDeSemaineProg('${per}', ${semIdx}, '${niv}', '${pole}', ${sqIdx})" title="Retirer de cette semaine">✖</span>
+            </span>
+        `).join(' ');
+
+        let idInputAddSeq = `inp_add_seq_${per}_${semIdx}_${niv}_${pole}`;
+
+        let cellsJoursHtml = JOURS_SEMAINE_PROF.map(jour => {
+            let cell = bloc.jours[jour] || { texte: "", lien: "", pageProf: "", fait: false };
+            let infosAuto = trouverInfosDepuisBaseLecon(pole, niv, cell.texte);
+            let lienEff = (cell.lien && cell.lien.trim()) ? cell.lien.trim() : infosAuto.lien;
+            let guideEff = (cell.pageProf && cell.pageProf.trim()) ? cell.pageProf.trim() : infosAuto.pageProf;
+
+            return `<td style="background:${cell.fait ? '#e8f8f5' : '#fff'}; vertical-align:top; padding:6px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                    <label style="font-size:11px; font-weight:bold; color:${cell.fait ? '#1e8449' : '#7f8c8d'}; cursor:pointer; display:flex; align-items:center; gap:3px;" title="Cocher quand la leçon est faite">
+                        <input type="checkbox" ${cell.fait ? 'checked' : ''} onchange="majLeconJourProg('${per}', ${semIdx}, '${niv}', '${pole}', '${jour}', 'fait', this.checked)">
+                        ${cell.fait ? '✅ Fait' : 'À faire'}
+                    </label>
+                    <div style="display:flex; gap:3px; align-items:center;">
+                        ${guideEff ? `<span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ${escHTML(guideEff)}</span>` : ''}
+                        ${lienEff ? `<a href="${escHTML(lienEff)}" target="_blank" rel="noopener noreferrer" style="background:#8e44ad; color:#fff; padding:1px 5px; border-radius:4px; font-size:10.5px; text-decoration:none; font-weight:bold;" title="Ouvrir le PDF / PowerPoint">📽️↗</a>` : ''}
+                        <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Ajouter ou modifier le lien PDF / PowerPoint" onclick="definirLienJourProg('${per}', ${semIdx}, '${niv}', '${pole}', '${jour}')">📎</button>
+                    </div>
+                </div>
+                <input type="text" list="${idDlLec}" value="${escHTML(cell.texte || '')}" placeholder="Leçon ${jour}..." oninput="majLeconJourProg('${per}', ${semIdx}, '${niv}', '${pole}', '${jour}', 'texte', this.value)" style="width:100%; padding:5px 6px; font-size:12px; font-weight:${cell.texte ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:4px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449;' : ''}">
+            </td>`;
+        }).join('');
+
+        let datesLabel = (sem.dateDebut && sem.dateFin) ? `<br><small style="color:#555;">${escHTML(sem.dateDebut)} ➔ ${escHTML(sem.dateFin)}</small>` : '';
+
+        return `<tr>
+            <td style="background:#f8fafc; text-align:center; vertical-align:top; width:115px;">
+                <strong style="color:${couleurPole}; font-size:13.5px;">Semaine ${semIdx + 1}</strong>${datesLabel}
+                <div style="margin-top:6px; display:flex; flex-direction:column; gap:3px;">
+                    <button type="button" class="filter-btn" style="font-size:10.5px; padding:2px 5px;" onclick="envoyerSemaineProgVersDashboard('${per}', ${semIdx})" title="Ouvrir cette semaine sur le Tableau de bord">📊 Tableau de bord</button>
+                    <button type="button" class="btn-action" style="font-size:10.5px; padding:2px 5px;" onclick="actionReporterEtDecalerDepuisProg('${per}', ${semIdx}, '${niv}', '${pole}')" title="Reporter les non-cochés de cette semaine sur S+1 et décaler toutes les semaines suivantes">⏭️ Reporter non-faits</button>
+                    <button type="button" class="filter-btn" style="font-size:10.5px; padding:2px 5px;" onclick="actionRecalerAvanceDepuisProg('${per}', ${semIdx}, '${niv}', '${pole}')" title="Si vous avez pris de l'avance, remonte les séances de S+1 sur les créneaux libres">⏮️ Recaler l'avance</button>
+                </div>
+            </td>
+            <td style="vertical-align:top; width:215px;">
+                ${dlLecHtml}
+                <div style="margin-bottom:5px; display:flex; flex-direction:column; gap:3px;">${pillsSeqHtml}</div>
+                <div style="display:flex; gap:3px;">
+                    <input type="text" id="${idInputAddSeq}" list="${idDlSeq}" placeholder="+ Séquence..." style="flex:1; padding:4px 6px; font-size:11.5px;" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterSequenceDansSemaineProg('${per}', ${semIdx}, '${niv}', '${pole}', this.value); this.value='';}">
+                    <button type="button" class="btn-action" style="padding:3px 7px; font-size:11.5px;" onclick="let inp=document.getElementById('${idInputAddSeq}'); ajouterSequenceDansSemaineProg('${per}', ${semIdx}, '${niv}', '${pole}', inp.value); inp.value='';">➕</button>
+                </div>
+            </td>
+            ${cellsJoursHtml}
+        </tr>`;
+    }).join('');
+
+    return `<div class="card-panel" style="border-top:4px solid ${couleurPole}; margin-bottom:22px; padding:14px 16px;">
+        <div style="background:${couleurPole} !important; color:#fff !important; padding:7px 12px; border-radius:6px; font-weight:bold; font-size:14.5px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
+            <span>${titrePole} — Niveau ${niv} (${per})</span>
+            <small style="font-weight:normal; opacity:0.95;">Synchronisé en direct avec le Tableau de bord (Onglet 3)</small>
+        </div>
+        ${dlSeqHtml}
+        ${reservoirHtml}
+        <div style="overflow-x:auto;">
+            <table class="table-classique" style="table-layout:fixed; min-width:820px;">
+                <thead>
+                    <tr>
+                        <th style="width:115px; text-align:center;">Semaine & Actions</th>
+                        <th style="width:215px;">Séquence(s) de la semaine</th>
+                        <th style="text-align:center;">LUNDI (Leçon)</th>
+                        <th style="text-align:center;">MARDI (Leçon)</th>
+                        <th style="text-align:center;">JEUDI (Leçon)</th>
+                        <th style="text-align:center;">VENDREDI (Leçon)</th>
+                    </tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+        </div>
+    </div>`;
+}
+
+function afficherProgrammationPeriodeDetail(per) {
+    const cont = document.getElementById('contenuProgrammation'); if (!cont) return;
+    assurerStructureProgPeriodes();
+    let pObj = progPeriodesData.periodes[per];
+
+    let barreNiveauxHtml = NIVEAUX_LISTE.map(n =>
+        `<button type="button" class="filter-btn ${niveauActifProgPeriode === n ? 'active' : ''}" style="font-size:14px; padding:7px 16px;" onclick="changerNiveauActifProgPeriode('${n}')">🎓 Niveau ${n}</button>`
+    ).join('');
+
+    let html = `
+    <div class="card-panel no-print" style="margin-bottom:16px; background:#f8fbff; border:1px solid #d6eaf8;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px; padding-bottom:10px; border-bottom:1px dashed #bdc3c7;">
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                <strong style="color:#1b4f72;">1. Choisir le niveau à programmer :</strong>
+                ${barreNiveauxHtml}
+            </div>
+            <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                <label style="font-size:13px; font-weight:bold;">Nombre de semaines (${per}) :
+                    <input type="number" min="1" max="15" value="${pObj.nbSemaines}" onchange="modifierNbSemainesPeriode('${per}', this.value)" style="width:60px; font-weight:bold;">
+                </label>
+                <label style="font-size:13px; font-weight:bold;">Lundi de la Semaine 1 :
+                    <input type="date" min="2025-01-01" max="2035-12-31" value="${escHTML(pObj.dateDebutP_ISO || '')}" onchange="modifierDateDebutPeriode('${per}', this.value)">
+                </label>
+            </div>
+        </div>
+        <p style="font-size:12.5px; color:#555; margin:0;">
+            💡 <strong>Fonctionnement :</strong> Ajoutez les séquences dans chaque semaine puis répartissez vos leçons explicites sur <em>Lundi, Mardi, Jeudi, Vendredi</em>. Cochez <code>✅</code> quand c'est fait : si une leçon ou une séquence n'est pas faite, cliquez sur <strong>« ⏭️ Reporter non-faits »</strong> pour la glisser en Semaine suivante et décaler automatiquement toute la suite !
+        </p>
+    </div>` +
+    genererTableauProgPeriodePoleHtml(per, niveauActifProgPeriode, 'francais', '📘 PROGRAMMATION FRANÇAIS', '#1b4f72', pObj) +
+    genererTableauProgPeriodePoleHtml(per, niveauActifProgPeriode, 'maths', '📕 PROGRAMMATION MATHÉMATIQUES', '#c0392b', pObj);
+
+    cont.innerHTML = html;
+}
+
 function afficherProgrammation() {
     const cont = document.getElementById('contenuProgrammation'); if (!cont) return;
+
+    if (sousOngletProgActif !== 'ANNUEL' && PERIODES_LISTE.includes(sousOngletProgActif)) {
+        afficherProgrammationPeriodeDetail(sousOngletProgActif);
+        return;
+    }
+
     let niv = document.getElementById('selectNiveauProg') ? document.getElementById('selectNiveauProg').value : 'Tous';
     let mat = document.getElementById('selectMatiereProg') ? document.getElementById('selectMatiereProg').value : 'Toutes';
     let perFiltre = document.getElementById('selectPeriodeProg') ? document.getElementById('selectPeriodeProg').value : 'Toutes';
@@ -4006,7 +4872,7 @@ function afficherProgrammation() {
                 <th style="width:200px;">Matière</th>
                 <th style="width:230px;">Séquence</th>
                 <th>Compétence(s) & Contenu</th>
-                <th style="width:310px; text-align:center;">Périodes (multi-sélection possible)</th>
+                <th style="width:310px; text-align:center;">Périodes (cliquez ensuite sur l'onglet P1..P5 en haut)</th>
             </tr>
         </thead>
         <tbody>` + listeSeqs.map(g => {
@@ -4033,6 +4899,9 @@ function afficherProgrammation() {
         }).join('') + `</tbody></table>`;
 }
 
+// ==========================================
+// ÉTIQUETTES 3x8 (66x33,8mm), MATRICE & BILANS
+// ==========================================
 function afficherChoixEtiquettes() {
     const selMat = document.getElementById('selectMatiereEtiquettes');
     if (selMat && selMat.options.length <= 1) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
@@ -4207,6 +5076,7 @@ function changerOnglet(idPage, element) {
 }
 
 document.addEventListener("DOMContentLoaded", function() {
+    assurerStructureProgPeriodes();
     appliquerThemeVisuel(localStorage.getItem(KEY_THEME) || 'pastel');
     majVisibiliteParcoursCreation(document.getElementById('nouvelEleveNiveau')?.value || 'CP');
     let inpMat = document.getElementById('inputMatiere');
