@@ -1,1070 +1,773 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GestionClasse - Plans de Travail & Suivi</title>
-    <link rel="stylesheet" href="style.css?v=20261106">
-    <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#2c3e50">
-</head>
-<body class="theme-pastel">
+/* ========================================== */
+/* 1. BASE & THÈME CLASSIQUE (ORIGINE)        */
+/* ========================================== */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
 
-    <div id="toast-container"></div>
+body {
+    background-color: #f4f6f7;
+    color: #2c3e50;
+    line-height: 1.45;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
 
-    <!-- Barre de navigation principale -->
-    <div class="navbar no-print">
-        <button class="nav-btn active" onclick="changerOnglet('pageSuivi', this)">🧑‍🎓 1. Plan & Suivi</button>
-        <button class="nav-btn" onclick="changerOnglet('pageImpression', this)">🖨️ 2. Fiche Élève</button>
-        <button class="nav-btn" onclick="changerOnglet('pageDashboard', this)" style="background:#f39c12;">📊 3. Tableau de bord</button>
-        <button class="nav-btn" onclick="changerOnglet('pageBase', this)">📁 4. Base de données</button>
-        <button class="nav-btn" onclick="changerOnglet('pageProg', this)" style="background:#d35400;">📅 5. Programmation</button>
-        <button class="nav-btn" onclick="changerOnglet('pageEtiquettes', this)" style="background:#8e44ad;">🏷️ 6. Étiquettes</button>
-        <button class="nav-btn" onclick="changerOnglet('pageMatrice', this)" style="background:#16a085;">🧮 7. Matrice</button>
-        <button class="nav-btn" onclick="changerOnglet('pageBilan', this)" style="background:#9b59b6;">📝 8. Bilans</button>
-        <button class="nav-btn" onclick="changerOnglet('pageSave', this)" style="background:#c0392b;">💾 9. Sauvegarde</button>
-        <button class="btn-theme-config no-print" onclick="ouvrirModal('modalDesign')" title="Personnaliser le graphisme">🎨 Design</button>
-    </div>
+.navbar {
+    background-color: #2c3e50;
+    padding: 12px 18px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.18);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
 
-    <main class="container">
+.nav-btn {
+    background-color: #34495e;
+    color: #ffffff;
+    border: none;
+    padding: 9px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13.5px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
 
-        <!-- ========================================== -->
-        <!-- 1. PLAN & SUIVI ÉLÈVES                     -->
-        <!-- ========================================== -->
-        <div id="pageSuivi" class="page active">
-            <div class="panel">
-                <h2>🧑‍🎓 1. Plan de travail & Suivi individualisé</h2>
+.nav-btn:hover {
+    filter: brightness(1.12);
+    transform: translateY(-1px);
+}
 
-                <div class="card-panel" style="margin-bottom: 18px;">
-                    <div class="selection-eleve-bar">
-                        <select id="selectEleveProfile" onchange="chargerEleve()">
-                            <option value="">-- Sélectionner un élève --</option>
-                        </select>
-                        <button type="button" class="btn-action" id="btnEditEleve" style="display:none;" onclick="ouvrirModalEditionEleve()">✏️ Modifier l'élève</button>
-                        <button type="button" class="btn-danger" id="btnSupprEleve" style="display:none;" onclick="supprimerEleve()">🗑️ Supprimer</button>
-                    </div>
+.nav-btn.active {
+    background-color: #2980b9 !important;
+    color: #ffffff !important;
+    font-weight: 700;
+    outline: 2px solid #ffffff;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.25);
+}
 
-                    <div class="ajout-eleve-bar">
-                        <strong>➕ Nouvel élève :</strong>
-                        <input type="text" id="nouvelEleveNom" placeholder="Prénom de l'élève">
-                        <select id="nouvelEleveNiveau" onchange="majVisibiliteParcoursCreation(this.value)">
-                            <option value="CP">CP</option>
-                            <option value="CE1">CE1</option>
-                            <option value="CE2">CE2</option>
-                            <option value="CM1">CM1</option>
-                            <option value="CM2">CM2</option>
-                        </select>
-                        <select id="nouvelEleveParcours" style="display:none;" title="Parcours manuel CM (Jaune par défaut en CM1, Orange en CM2)">
-                            <option value="jaune">🟡 Parcours Jaune</option>
-                            <option value="orange">🟠 Parcours Orange</option>
-                        </select>
-                        <label style="cursor:pointer; font-size:13px;">
-                            <input type="checkbox" id="nouvelEleveFichierJaune"> 📒 Fichier Jaune
-                        </label>
-                        <button type="button" class="btn-valid" onclick="creerEleve()">Ajouter l'élève</button>
-                    </div>
-                </div>
+.btn-theme-config {
+    margin-left: auto;
+    background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+    color: #2c3e50;
+    border: 2px solid #ffffff;
+    padding: 8px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 13px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    transition: transform 0.2s ease;
+}
+.btn-theme-config:hover { transform: scale(1.05); }
 
-                <div id="messageSelectEleve" class="empty-state">
-                    <h3>👆 Sélectionnez un élève ci-dessus (ou créez-en un) pour gérer son plan de travail.</h3>
-                </div>
+/* ========================================== */
+/* 2. THÈMES PASTEL POUDRÉ & DOODLES ÉCOLE    */
+/* ========================================== */
+body.theme-pastel, body.theme-doodles {
+    background-color: #faf6f2;
+    color: #4a4e69;
+}
 
-                <div id="zoneTravail" style="display: none;">
-                    <div class="panel-semaines">
-                        <div class="semaines-flex">
-                            <div>
-                                <strong id="labelSemaineTitre" style="font-size:16px; color:#1b4f72;">Semaine 1</strong>
-                                <select id="selectSemaineEleve" onchange="changerSemaineActive(this.value)" style="margin-left:10px; padding:6px; border-radius:6px;"></select>
-                            </div>
-                            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                                <label>Début (Lundi) : <input type="date" min="2025-01-01" max="2035-12-31" id="dateDebutSemaineInput" onchange="appliquerDateDebutSemaine(this.value)"></label>
-                                <span id="dateFinSemaineAffiche" style="font-weight:bold; color:#1b4f72;">➔ Vendredi : --/--</span>
-                            </div>
-                            <div style="display:flex; gap:6px; flex-wrap:wrap;">
-                                <button type="button" class="btn-action" onclick="ajouterSemaineAvance()">➕ Semaine d'avance</button>
-                                <button type="button" class="btn-danger" id="btnSupprimerSemaine" onclick="supprimerSemaineActive()" style="display:none;">🗑️ Suppr. Semaine</button>
-                                <button type="button" class="btn-valid" onclick="commencerNouvelleSemaine()">🏁 Clôturer & Suivante</button>
-                            </div>
-                        </div>
-                    </div>
+body.theme-doodles {
+    background-image: url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23d8c8e8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' opacity='0.65'%3E%3Cpath d='M25 15 l3 6 6 1 -4 4 1 6 -6 -3 -6 3 1 -6 -4 -4 6 -1 z'/%3E%3Cpath d='M85 28 a8 8 0 0 1 14 2 a6 6 0 0 1 2 11 h-22 a6 6 0 0 1 6 -13 z'/%3E%3Cpath d='M20 85 l15 -15 l5 5 l-15 15 l-7 2 z'/%3E%3Cpath d='M75 75 v16 c6 -3 12 -3 18 0 v-16 c-6 -3 -12 -3 -18 0 z M93 75 v16 c6 -3 12 -3 18 0 v-16 c-6 -3 -12 -3 -18 0 z'/%3E%3Ccircle cx='55' cy='55' r='4'/%3E%3Ccircle cx='55' cy='47' r='3'/%3E%3Ccircle cx='55' cy='63' r='3'/%3E%3Ccircle cx='47' cy='55' r='3'/%3E%3Ccircle cx='63' cy='55' r='3'/%3E%3C/g%3E%3C/svg%3E");
+    background-attachment: fixed;
+}
 
-                    <!-- Quotas, Parcours (uniquement CM1/CM2) et Fichier Jaune -->
-                    <div class="quotas-bar">
-                        <div style="display:flex; gap:18px; align-items:center; flex-wrap:wrap;">
-                            <span class="badge-quota">📌 Ateliers : <strong id="compteurAteliersEleve">0</strong> / <span id="maxAteliersAffiche">15</span></span>
-                            <label style="font-size:13px;">Max Ateliers : <input type="number" id="inputMaxAteliersEleve" min="1" max="25" value="15" onchange="modifierMaxAteliersEleve()" style="width:55px;"></label>
-                            <span class="badge-quota tablette">📱 Tablettes : <strong id="compteurTablettesEleve">0/2</strong></span>
-                            <label style="font-size:13px;">Max Tablettes : <input type="number" id="inputMaxTablettesEleve" min="0" max="10" value="2" onchange="modifierMaxTablettesEleve()" style="width:55px;"></label>
-                        </div>
-                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                            <label id="blocParcoursEleveSuivi" style="display:none; background:#fdf2e9; color:#784212; padding:5px 10px; border-radius:6px; border:1px solid #f5b041; font-weight:bold; font-size:13.5px;">
-                                Parcours CM :
-                                <select id="selectParcoursEleve" onchange="changerParcoursEleve(this.value)" style="padding:3px 6px; font-weight:bold; border-radius:4px; border:1px solid #d35400;">
-                                    <option value="jaune">🟡 Parcours Jaune</option>
-                                    <option value="orange">🟠 Parcours Orange</option>
-                                </select>
-                            </label>
-                            <label class="badge-jaune-toggle">
-                                <input type="checkbox" id="cbFichierJauneEleve" onchange="toggleFichierJauneEleve(this.checked)"> 📒 Mode Fichier Jaune
-                            </label>
-                        </div>
-                    </div>
+body.theme-pastel .navbar, body.theme-doodles .navbar {
+    background-color: #e8dff5;
+    box-shadow: 0 4px 12px rgba(150, 130, 180, 0.15);
+    border-bottom: 2px solid #dcd0ff;
+}
 
-                    <!-- Encadré Rituels / Activités récurrentes de l'élève -->
-                    <div id="blocRecurrentsEleve" class="card-panel" style="margin-bottom:14px; background:#f4ecf7; border:1px solid #d7bde2; display:none;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                            <strong style="color:#6c3483; font-size:13.5px;">🔄 Rituels hebdomadaires de <span class="nomEleveAffiche"></span> (reviennent automatiquement chaque semaine) :</strong>
-                            <div id="listeBadgesRecurrentsEleve" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
-                        </div>
-                    </div>
+body.theme-pastel .nav-btn, body.theme-doodles .nav-btn {
+    background-color: #ffffff !important;
+    color: #4a4e69 !important;
+    border-radius: 18px;
+    border: 1px solid #dcd0ff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+}
 
-                    <!-- Encadré intelligent : Séquences de la semaine (S) & Évaluations à passer cette semaine (S-1) -->
-                    <div id="blocSuggestionsProgEleve" class="card-panel" style="margin-bottom:16px; background:#fef9e7; border:1px solid #f5b041; display:none;"></div>
+body.theme-pastel .nav-btn:hover, body.theme-doodles .nav-btn:hover {
+    background-color: #f3ebff !important;
+}
 
-                    <!-- Sélecteur de ressources pour ajouter au plan -->
-                    <div class="card-panel" style="margin-bottom:20px;">
-                        <h3 style="margin-bottom:12px; color:#1b4f72;">➕ Choisir des activités pour <span class="nomEleveAffiche"></span></h3>
-                        <div class="filtres-ajout-plan">
-                            <select id="selectPeriodeDispo" onchange="afficherRessourcesDisponibles()">
-                                <option value="Toutes">📅 Toutes les périodes</option>
-                                <option value="P1">Période 1</option>
-                                <option value="P2">Période 2</option>
-                                <option value="P3">Période 3</option>
-                                <option value="P4">Période 4</option>
-                                <option value="P5">Période 5</option>
-                            </select>
-                            <select id="selectMatiere" onchange="changementMatiereSelection()">
-                                <option value="">-- 1. Choisir une matière --</option>
-                            </select>
-                            <select id="selectSequence" onchange="afficherRessourcesDisponibles()">
-                                <option value="">-- 2. Choisir une séquence (ou Toutes) --</option>
-                            </select>
-                            <div class="etoiles-filter">
-                                <span>Difficulté :</span>
-                                <button type="button" class="filter-btn active" id="btnEtoile0" onclick="filtrerEtoilesDispo(0)">Toutes</button>
-                                <button type="button" class="filter-btn" id="btnEtoile1" onclick="filtrerEtoilesDispo(1)">⭐</button>
-                                <button type="button" class="filter-btn" id="btnEtoile2" onclick="filtrerEtoilesDispo(2)">⭐⭐</button>
-                                <button type="button" class="filter-btn" id="btnEtoile3" onclick="filtrerEtoilesDispo(3)">⭐⭐⭐</button>
-                            </div>
-                        </div>
-                        <div id="zoneRessourcesDispo" style="max-height:290px; overflow-y:auto; margin-top:10px;">
-                            <table class="table-classique">
-                                <thead>
-                                    <tr>
-                                        <th style="width:65px;">Niv./Pér.</th>
-                                        <th style="width:165px;">Séquence Cible / Leçon</th>
-                                        <th>Compétence(s)</th>
-                                        <th>Ressource & Support</th>
-                                        <th style="width:75px; text-align:center;">N° Atelier</th>
-                                        <th style="width:105px;">Jour imposé</th>
-                                        <th style="width:205px;">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tableRessourcesDispo">
-                                    <tr><td colspan="7" style="text-align:center; color:#7f8c8d;">Sélectionnez une matière ci-dessus pour afficher les activités disponibles.</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
+body.theme-pastel .nav-btn.active, body.theme-doodles .nav-btn.active {
+    background-color: #b8c0ff !important;
+    color: #2b2d42 !important;
+    outline: none;
+    border-color: #9fa8da;
+    box-shadow: 0 3px 8px rgba(184, 192, 255, 0.5);
+}
 
-                    <!-- Tableau du Plan Hebdomadaire -->
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:10px;">
-                        <h3>📋 Plan de travail en cours (<span class="nomEleveAffiche"></span>)</h3>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                            <button type="button" class="btn-valid" onclick="validerSelectionPlan()">✅ Valider les cases cochées</button>
-                            <button type="button" class="btn-action" onclick="ouvrirModalDuplication()">📋 Dupliquer ce plan vers d'autres élèves</button>
-                        </div>
-                    </div>
+body.theme-pastel .panel, body.theme-doodles .panel,
+body.theme-pastel .card-panel, body.theme-doodles .card-panel,
+body.theme-pastel .dash-card, body.theme-doodles .dash-card {
+    background-color: rgba(255, 255, 255, 0.95);
+    border-radius: 16px;
+    border: 1px solid #f2e9e4;
+    box-shadow: 0 6px 20px rgba(74, 78, 105, 0.05);
+}
 
-                    <table class="table-classique">
-                        <thead>
-                            <tr>
-                                <th style="width:36px; text-align:center;"><input type="checkbox" onchange="cocherToutPlan(this)" title="Tout cocher"></th>
-                                <th style="width:40px; text-align:center;">Prio</th>
-                                <th style="width:48px; text-align:center;">N°</th>
-                                <th style="width:160px;">Matière / Séquence</th>
-                                <th>Compétence(s)</th>
-                                <th>Ressource & Suivi</th>
-                                <th style="width:85px; text-align:center;">N° Atelier</th>
-                                <th style="width:110px;">Jour imposé</th>
-                                <th style="width:135px;">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tableApercuPlan"></tbody>
-                    </table>
+body.theme-pastel .panel-semaines, body.theme-doodles .panel-semaines {
+    background-color: #f3ebff;
+    border: 1px solid #dcd0ff;
+    border-radius: 12px;
+}
 
-                    <!-- File d'attente -->
-                    <div id="blocEnAttenteEleve" style="margin-top:20px; display:none;">
-                        <h3 style="color:#d35400; margin-bottom:8px;">⏳ Activités en réserve pour la semaine suivante (<span id="compteurAttenteEleve">0</span>)</h3>
-                        <table class="table-classique">
-                            <thead>
-                                <tr>
-                                    <th style="width:170px;">Matière / Séquence</th>
-                                    <th>Compétence(s)</th>
-                                    <th>Ressource</th>
-                                    <th style="width:180px;">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tableEnAttente"></tbody>
-                        </table>
-                    </div>
+body.theme-pastel .btn-action, body.theme-doodles .btn-action {
+    background-color: #a2d2ff !important;
+    color: #1e3a8a !important;
+    border-radius: 10px;
+    border: 1px solid #7cc0ff !important;
+}
 
-                    <!-- Historique et masquées -->
-                    <div class="grid-2-cols" style="margin-top:30px;">
-                        <div>
-                            <h3>✅ Historique des activités validées</h3>
-                            <div style="max-height:260px; overflow-y:auto;">
-                                <table class="table-classique">
-                                    <thead>
-                                        <tr>
-                                            <th style="width:85px;">Date</th>
-                                            <th style="width:55px;">Niv.</th>
-                                            <th>Matière / Séquence validée</th>
-                                            <th>Compétence(s)</th>
-                                            <th>Ressource</th>
-                                            <th style="width:50px;">Rest.</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tableHistorique"></tbody>
-                                </table>
-                            </div>
-                        </div>
-                        <div>
-                            <h3>🙈 Activités masquées pour cet élève</h3>
-                            <div style="max-height:260px; overflow-y:auto;">
-                                <table class="table-classique">
-                                    <thead>
-                                        <tr>
-                                            <th style="width:55px;">Niv.</th>
-                                            <th>Matière / Séquence</th>
-                                            <th>Compétence(s)</th>
-                                            <th>Ressource</th>
-                                            <th style="width:50px;">Rest.</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tableMasquees"></tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+body.theme-pastel .btn-valid, body.theme-doodles .btn-valid {
+    background-color: #b7e4c7 !important;
+    color: #1b4332 !important;
+    border-radius: 10px;
+    border: 1px solid #95d5b2 !important;
+}
 
-        <!-- ========================================== -->
-        <!-- 2. FICHE ÉLÈVE (IMPRESSION PLANS)          -->
-        <!-- ========================================== -->
-        <div id="pageImpression" class="page">
-            <div class="panel no-print">
-                <h2>🖨️ 2. Fiche Élève — Impression des Plans de Travail</h2>
+body.theme-pastel .btn-danger, body.theme-doodles .btn-danger,
+body.theme-pastel .btn-remove, body.theme-doodles .btn-remove {
+    background-color: #ffcad4 !important;
+    color: #800f2f !important;
+    border-radius: 10px;
+    border: 1px solid #f4acb7 !important;
+}
 
-                <div class="card-panel" style="margin-bottom:15px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
-                    <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-                        <label><strong>Élève ou Groupe :</strong>
-                            <select id="selectEleveImpression" onchange="changementEleveImpression()"></select>
-                        </label>
-                        <label id="labelSelectSemaineImp"><strong>Semaine :</strong>
-                            <select id="selectSemaineImpression" onchange="changerSemaineDepuisImpression(this.value)">
-                                <option value="0">Semaine 1 [En cours]</option>
-                            </select>
-                        </label>
-                        <label><strong>Date Lundi :</strong>
-                            <input type="date" min="2025-01-01" max="2035-12-31" id="dateImpressionInput" onchange="appliquerDateImpression(this.value)">
-                        </label>
-                        <label><strong>Format :</strong>
-                            <select id="selectFormatImpression" onchange="rafraichirFicheImpression()">
-                                <option value="A4">📄 A4 Standard (1 ou 2 par page)</option>
-                                <option value="A5">📑 Deux colonnes côte-à-côte</option>
-                            </select>
-                        </label>
-                    </div>
-                    <div style="display:flex; gap:8px;">
-                        <button type="button" class="btn-action" onclick="rafraichirFicheImpression()">🔄 Actualiser</button>
-                        <button type="button" class="btn-valid" onclick="window.print()">🖨️ Imprimer</button>
-                    </div>
-                </div>
+body.theme-pastel .table-classique th, body.theme-doodles .table-classique th {
+    background-color: #f3ebff;
+    color: #4a4e69;
+}
 
-                <details class="card-panel" style="margin-bottom:15px; background:#f8fbff; border:1px solid #d6eaf8;">
-                    <summary style="cursor:pointer; font-weight:bold; color:#1b4f72;">🎨 Personnaliser l'en-tête et la consigne de la fiche imprimée</summary>
-                    <div style="margin-top:14px;">
-                        <div class="form-grid-base" style="margin-bottom:12px;">
-                            <div>
-                                <label>Titre de la fiche :</label>
-                                <input type="text" id="printInputTitre" value="Plan de travail" placeholder="Ex: Plan de travail" oninput="sauvegarderConfigImpression()">
-                            </div>
-                            <div style="grid-column: span 2;">
-                                <label>Consigne affichée sous l'en-tête :</label>
-                                <input type="text" id="printInputConsigne" placeholder="Laissez vide pour la consigne par défaut (numéros soulignés, 👩‍🏫, entourer/barrer)" oninput="sauvegarderConfigImpression()">
-                            </div>
-                            <div>
-                                <label>Bilan météo (optionnel) :</label>
-                                <select id="printSelectMeteo" onchange="sauvegarderConfigImpression()">
-                                    <option value="aucun">🚫 Masqué (Format d'origine)</option>
-                                    <option value="meteo">☀️ ⛅ 🌧️ (Météo)</option>
-                                    <option value="smileys">😊 😐 😟 (Smileys)</option>
-                                    <option value="etoiles">⭐ ⭐ ⭐ (Étoiles)</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div style="display:flex; gap:18px; align-items:center; flex-wrap:wrap; font-size:13px; padding-top:8px; border-top:1px dashed #bdc3c7;">
-                            <label style="cursor:pointer;"><input type="checkbox" id="printCbCompteur" onchange="sauvegarderConfigImpression()"> 📊 Afficher « Ateliers réussis : ___ / Total »</label>
-                            <label style="cursor:pointer;"><input type="checkbox" id="printCbSignature" onchange="sauvegarderConfigImpression()"> ✍️ Afficher « Signature : ________ »</label>
-                            <label style="cursor:pointer;"><input type="checkbox" id="printCbCommentaire" onchange="sauvegarderConfigImpression()"> 💬 Ajouter un encadré « Mot de l'enseignante » en bas</label>
-                        </div>
-                    </div>
-                </details>
-            </div>
-            <div id="zoneFichesImpression"></div>
-        </div>
+/* ========================================== */
+/* 3. THÈME NATURE & SAUGE                    */
+/* ========================================== */
+body.theme-nature {
+    background-color: #f4f5f0;
+    color: #2f3e46;
+}
 
-        <!-- ========================================== -->
-        <!-- 3. TABLEAU DE BORD                         -->
-        <!-- ========================================== -->
-        <div id="pageDashboard" class="page">
-            <div class="panel">
-                <div class="page-header-flex no-print">
-                    <h2>📊 3. Tableau de bord de la classe</h2>
-                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                        <button type="button" class="btn-valid" onclick="cloturerSemaineClasseGlobale()">🏁 Clôturer la semaine des Plans Élèves</button>
-                        <button type="button" class="filter-btn" id="btnToggleArchivesDash" onclick="toggleAfficherArchives()">👁️ Voir les archives</button>
-                        <button type="button" class="filter-btn" onclick="viderArchives()">🗑️ Vider les archives</button>
-                        <button type="button" class="btn-action" onclick="rafraichirDashboard()">🔄 Actualiser</button>
-                    </div>
-                </div>
-                <div id="dashboardContent"></div>
-            </div>
-        </div>
+body.theme-nature .navbar {
+    background-color: #cad2c5;
+    border-bottom: 2px solid #84a98c;
+}
 
-        <!-- ========================================== -->
-        <!-- 4. BASE DE DONNÉES DES ATELIERS & LEÇONS   -->
-        <!-- ========================================== -->
-        <div id="pageBase" class="page">
-            <div class="panel">
-                <div class="page-header-flex">
-                    <h2>📁 4. Base de données des activités, ateliers et leçons</h2>
-                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                        <button type="button" class="filter-btn" onclick="ouvrirModalGestionMatieres()">⚙️ Matières</button>
-                        <button type="button" class="filter-btn" onclick="ouvrirModalGestionSequences()">⚙️ Séquences & Matières liées</button>
-                        <button type="button" class="filter-btn" onclick="ouvrirModalGestionCompetences()">⚙️ Compétences</button>
-                        <button type="button" class="filter-btn" onclick="ouvrirModalGestionTypes()">⚙️ Types & Logos</button>
-                    </div>
-                </div>
+body.theme-nature .nav-btn {
+    background-color: #ffffff !important;
+    color: #2f3e46 !important;
+    border-radius: 14px;
+    border: 1px solid #84a98c;
+}
 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
-                    <div style="display:flex; gap:8px;">
-                        <button type="button" class="btn-action" id="btnToggleSaisieMulti" onclick="toggleModeSaisieMultiple()">⚡ Passer en mode Saisie Multiple (plusieurs éléments d'un coup)</button>
-                    </div>
-                    <button type="button" class="btn-danger" onclick="viderBase()" style="font-size:12px;">🗑️ Vider toute la base</button>
-                </div>
+body.theme-nature .nav-btn:hover { background-color: #e9edc9 !important; }
 
-                <!-- MODE 1 : SAISIE SIMPLE -->
-                <div id="blocSaisieSimpleBase" class="card-panel" style="margin-bottom:20px;">
-                    <h2 id="titreFormulaireBase" style="font-size:16px; margin-bottom:12px; color:#1b4f72; border:none; padding:0;">➕ Ajouter ou modifier une activité / une leçon</h2>
-                    <div class="form-grid-base">
-                        <div>
-                            <label>Matière * :</label>
-                            <input type="text" id="inputMatiere" list="listeMatieresConnues" placeholder="Ex: 🔤Français - Grammaire">
-                            <datalist id="listeMatieresConnues"></datalist>
-                        </div>
-                        <div style="grid-column: span 2;">
-                            <label>Séquence(s) / Sous-matière(s) * <small style="font-weight:normal; color:#666;">(Tapez ou choisissez puis appuyez sur <strong>Entrée</strong> ou cliquez sur <strong>➕ Séq.</strong>)</small> :</label>
-                            <div id="tagsSequencesSimple" class="comp-tags-container"></div>
-                            <div style="display:flex; gap:6px;">
-                                <input type="text" id="inputSequencePickerSimple" list="listeSequencesConnues" placeholder="🔍 Rechercher ou créer une séquence..." style="flex:1;" oninput="renderTagsSequencesSimple()" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterTagSequenceSimple();}">
-                                <button type="button" class="btn-action" onclick="ajouterTagSequenceSimple()" title="Rattacher cette séquence">➕ Séq.</button>
-                            </div>
-                            <input type="hidden" id="inputSequence">
-                            <datalist id="listeSequencesConnues"></datalist>
-                        </div>
-                        <div>
-                            <label>Code Leçon (optionnel) :</label>
-                            <input type="text" id="inputLecon" placeholder="Ex: N1, G2...">
-                        </div>
-                        <div style="grid-column: span 2;">
-                            <label>Compétence(s) * <small style="font-weight:normal; color:#666;">(Tapez un mot-clé ou une nouvelle compétence puis appuyez sur <strong>Entrée</strong> ou cliquez sur <strong>➕ Comp.</strong>)</small> :</label>
-                            <div id="tagsCompetencesSimple" class="comp-tags-container"></div>
-                            <div style="display:flex; gap:6px;">
-                                <input type="text" id="inputCompetencePickerSimple" list="listeCompetencesConnues" placeholder="🔍 Rechercher par mot-clé ou écrire une nouvelle compétence..." style="flex:1;" oninput="renderTagsCompetencesSimple()" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterTagCompetenceSimple();}">
-                                <button type="button" class="btn-action" onclick="ajouterTagCompetenceSimple()" title="Ajouter cette compétence">➕ Comp.</button>
-                            </div>
-                            <input type="hidden" id="inputCompetence">
-                            <datalist id="listeCompetencesConnues"></datalist>
-                        </div>
-                        <div>
-                            <label>Nom de la ressource / Exercice / Titre Leçon * :</label>
-                            <input type="text" id="inputRessource" placeholder="Ex: Ex 1 ou Leçon : La phrase">
-                        </div>
-                        <div>
-                            <label>Type de matériel (Support) * :</label>
-                            <select id="selectTypeRessource"></select>
-                        </div>
-                        <div>
-                            <label>N° Atelier / Boîte (ex: 1, 2, A1) :</label>
-                            <input type="text" id="inputSymbole" placeholder="Ex: 1 (donnera 🎲🔤1)">
-                        </div>
-                        <div>
-                            <label>Nb Pers. :</label>
-                            <input type="text" id="inputPersonnes" placeholder="Ex: 👤, 👥, 👨‍👩‍👧...">
-                        </div>
-                        <div>
-                            <label>📘 Page Manuel Élève (ou 🟡 Jaune CM) :</label>
-                            <input type="text" id="inputPageManuel" placeholder="Ex: p9">
-                        </div>
-                        <div id="blocPageOrangeSimple">
-                            <label>🟠 Page Parcours Orange CM :</label>
-                            <input type="text" id="inputPageOrange" placeholder="Ex: p10 (uniquement CM)">
-                        </div>
-                        <div>
-                            <label>📒 Variante Fichier Jaune :</label>
-                            <input type="text" id="inputVarianteJaune" placeholder="Ex: Fichier p. 18">
-                        </div>
-                        <div>
-                            <label>👩‍🏫 Page Manuel / Guide Enseignant :</label>
-                            <input type="text" id="inputPageProf" placeholder="Ex: Guide p. 42">
-                        </div>
-                        <div>
-                            <label>Période :</label>
-                            <select id="selectPeriodeForm">
-                                <option value="">-- Automatique selon la séquence --</option>
-                                <option value="P1">Période 1</option>
-                                <option value="P2">Période 2</option>
-                                <option value="P3">Période 3</option>
-                                <option value="P4">Période 4</option>
-                                <option value="P5">Période 5</option>
-                                <option value="P1, P2, P3, P4, P5">🌟 Toute l'année (P1 à P5)</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label>Difficulté (Étoiles) * :</label>
-                            <select id="selectDifficulte">
-                                <option value="">-- Choisir les étoiles --</option>
-                                <option value="0">0 étoile (Sans étoile)</option>
-                                <option value="1">⭐ (Niveau 1)</option>
-                                <option value="2">⭐⭐ (Niveau 2)</option>
-                                <option value="3">⭐⭐⭐ (Niveau 3)</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label>Couleur étiquette :</label>
-                            <select id="selectCouleurRapide"></select>
-                        </div>
-                        <div>
-                            <label>Lien image spécifique :</label>
-                            <input type="text" id="inputImageAct" placeholder="URL image ou lien Google Drive">
-                        </div>
-                        <div>
-                            <label>🔗 Lien Anton / 📽️ Lien PDF ou PowerPoint à projeter :</label>
-                            <input type="text" id="inputLienExterne" placeholder="URL Anton, PDF, PowerPoint, Drive, Canva...">
-                        </div>
-                    </div>
+body.theme-nature .nav-btn.active {
+    background-color: #52796f !important;
+    color: #ffffff !important;
+    outline: none;
+    border-color: #354f52;
+}
 
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:15px; margin-top:15px; padding-top:12px; border-top:1px dashed #ccc;">
-                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                            <strong>Niveaux :</strong>
-                            <label><input type="checkbox" class="cb-niveau-form" value="CP" checked onchange="verifierNiveauxCMFormSimple()"> CP</label>
-                            <label><input type="checkbox" class="cb-niveau-form" value="CE1" onchange="verifierNiveauxCMFormSimple()"> CE1</label>
-                            <label><input type="checkbox" class="cb-niveau-form" value="CE2" onchange="verifierNiveauxCMFormSimple()"> CE2</label>
-                            <label><input type="checkbox" class="cb-niveau-form" value="CM1" onchange="verifierNiveauxCMFormSimple()"> CM1</label>
-                            <label><input type="checkbox" class="cb-niveau-form" value="CM2" onchange="verifierNiveauxCMFormSimple()"> CM2</label>
-                            <label style="margin-left:8px; background:#fcf3cf; padding:4px 8px; border-radius:4px; border:1px solid #f1c40f; cursor:pointer; font-size:12.5px;">
-                                <input type="checkbox" id="cbEstEvaluation" onchange="if(this.checked) document.getElementById('cbEstLecon').checked=false;"> 🎯 Est une Évaluation
-                            </label>
-                            <label style="background:#e8f8f5; color:#117864; padding:4px 8px; border-radius:4px; border:1px solid #48c9b0; cursor:pointer; font-weight:bold; font-size:12.5px;" title="N'apparaît pas dans le plan des élèves : sert uniquement à remplir votre tableau des leçons à donner (avec lien PDF/PPT et page manuel prof)">
-                                <input type="checkbox" id="cbEstLecon" onchange="gererCocheEstLeconSimple(this.checked)"> 👩‍🏫 Est une Leçon explicite (Tableau de bord prof uniquement)
-                            </label>
-                        </div>
-                        <div style="display:flex; gap:8px;">
-                            <button type="button" class="btn-remove" id="btnAnnulerEditBase" style="display:none;" onclick="annulerEditionBase()">Annuler</button>
-                            <button type="button" class="btn-valid" id="btnSubmitBase" onclick="enregistrerActiviteBase()">💾 Enregistrer</button>
-                        </div>
-                    </div>
-                </div>
+body.theme-nature .panel, body.theme-nature .card-panel, body.theme-nature .dash-card {
+    background-color: #ffffff;
+    border-radius: 14px;
+    border: 1px solid #cad2c5;
+}
 
-                <!-- MODE 2 : SAISIE MULTIPLE D'EXERCICES OU DE LEÇONS -->
-                <div id="blocSaisieMultipleBase" class="card-panel" style="margin-bottom:20px; display:none; border:2px solid #2980b9; background:#f8fbff;">
-                    <h3 style="color:#1b4f72; margin-bottom:6px;">⚡ Saisie multiple d'exercices ou de leçons</h3>
-                    <p style="font-size:12.5px; color:#555; margin-bottom:12px;">
-                        💡 <strong>Astuce :</strong> Cochez <strong>« 📋 Copier L1 »</strong> en haut d'une colonne pour dupliquer la 1<sup>re</sup> ligne sur toute la colonne. Cochez la colonne <strong>👩‍🏫</strong> si la ligne est une leçon pour votre tableau de bord (invisible dans le plan des élèves). Pour valider une compétence en pastille, cliquez sur <code>➕</code> ou appuyez sur <code>Entrée</code>.
-                    </p>
+body.theme-nature .panel-semaines {
+    background-color: #e9edc9;
+    border: 1px solid #ccd5ae;
+}
 
-                    <div class="form-grid-base" style="margin-bottom:14px; padding-bottom:12px; border-bottom:1px dashed #bdc3c7;">
-                        <div>
-                            <label><strong>1. Niveaux communs * :</strong></label>
-                            <div style="display:flex; gap:8px; padding-top:5px; flex-wrap:wrap;">
-                                <label><input type="checkbox" class="cb-niveau-multi" value="CP" checked onchange="verifierNiveauxCMMulti()"> CP</label>
-                                <label><input type="checkbox" class="cb-niveau-multi" value="CE1" onchange="verifierNiveauxCMMulti()"> CE1</label>
-                                <label><input type="checkbox" class="cb-niveau-multi" value="CE2" onchange="verifierNiveauxCMMulti()"> CE2</label>
-                                <label><input type="checkbox" class="cb-niveau-multi" value="CM1" onchange="verifierNiveauxCMMulti()"> CM1</label>
-                                <label><input type="checkbox" class="cb-niveau-multi" value="CM2" onchange="verifierNiveauxCMMulti()"> CM2</label>
-                            </div>
-                        </div>
-                        <div>
-                            <label><strong>2. Matière commune * :</strong></label>
-                            <input type="text" id="multiMatiere" list="listeMatieresConnues" placeholder="Ex: 🔤Français - Grammaire">
-                        </div>
-                        <div>
-                            <label><strong>3. Séquence(s) commune(s) * :</strong></label>
-                            <div id="tagsSequencesMulti" class="comp-tags-container"></div>
-                            <div style="display:flex; gap:4px;">
-                                <input type="text" id="multiSequencePicker" list="listeSequencesConnues" placeholder="🔍 Séquence..." style="flex:1;" oninput="renderTagsSequencesMulti()" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterTagSequenceMulti();}">
-                                <button type="button" class="btn-action" style="padding:4px 8px;" onclick="ajouterTagSequenceMulti()">➕</button>
-                            </div>
-                            <input type="hidden" id="multiSequence">
-                        </div>
-                        <div>
-                            <label><strong>4. Période commune (optionnel) :</strong></label>
-                            <select id="multiPeriode">
-                                <option value="">-- Automatique selon la séquence --</option>
-                                <option value="P1">Période 1</option>
-                                <option value="P2">Période 2</option>
-                                <option value="P3">Période 3</option>
-                                <option value="P4">Période 4</option>
-                                <option value="P5">Période 5</option>
-                                <option value="P1, P2, P3, P4, P5">🌟 Toute l'année (P1 à P5)</option>
-                            </select>
-                        </div>
-                    </div>
+body.theme-nature .btn-action { background-color: #84a98c !important; color: #ffffff !important; }
+body.theme-nature .btn-valid { background-color: #52796f !important; color: #ffffff !important; }
+body.theme-nature .table-classique th { background-color: #cad2c5; color: #2f3e46; }
 
-                    <div style="overflow-x:auto;">
-                        <table class="table-classique">
-                            <thead>
-                                <tr>
-                                    <th style="width:68px;">
-                                        Leçon<br>
-                                        <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_lecon" checked onchange="toggleDuplicationColonneMulti('lecon', this.checked)"> 📋 Copier L1</label>
-                                    </th>
-                                    <th style="min-width:215px;">
-                                        Compétence(s) * <small>(écrire puis ➕)</small><br>
-                                        <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_comp" onchange="toggleDuplicationColonneMulti('comp', this.checked)"> 📋 Copier L1</label>
-                                    </th>
-                                    <th>Nom de l'exercice / Titre Leçon *</th>
-                                    <th style="width:105px;">
-                                        Support *<br>
-                                        <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_type" onchange="toggleDuplicationColonneMulti('type', this.checked)"> 📋 Copier L1</label>
-                                    </th>
-                                    <th style="width:58px;">N° Atel.</th>
-                                    <th style="width:62px;">
-                                        Nb Pers.<br>
-                                        <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_pers" onchange="toggleDuplicationColonneMulti('pers', this.checked)"> 📋 Copier L1</label>
-                                    </th>
-                                    <th style="width:78px;">
-                                        📘/🟡 Page<br>
-                                        <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_page" onchange="toggleDuplicationColonneMulti('page', this.checked)"> 📋 Copier L1</label>
-                                    </th>
-                                    <th style="width:78px;">
-                                        🟠 Page CM<br>
-                                        <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_orange" onchange="toggleDuplicationColonneMulti('orange', this.checked)"> 📋 Copier L1</label>
-                                    </th>
-                                    <th style="width:78px;">
-                                        📒 Var. Jaune<br>
-                                        <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_jaune" onchange="toggleDuplicationColonneMulti('jaune', this.checked)"> 📋 Copier L1</label>
-                                    </th>
-                                    <th style="width:82px;">
-                                        👩‍🏫 Page Prof<br>
-                                        <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_pageprof" onchange="toggleDuplicationColonneMulti('pageprof', this.checked)"> 📋 Copier L1</label>
-                                    </th>
-                                    <th style="width:110px;">🔗 Lien Anton / PDF / PPT</th>
-                                    <th style="width:82px;">
-                                        Étoiles *<br>
-                                        <label class="th-copy-label" title="Dupliquer la 1re ligne sur toute la colonne"><input type="checkbox" id="cbCopyMulti_diff" onchange="toggleDuplicationColonneMulti('diff', this.checked)"> 📋 Copier L1</label>
-                                    </th>
-                                    <th style="width:36px; text-align:center;" title="Est une Évaluation">🎯</th>
-                                    <th style="width:36px; text-align:center;" title="Est une Leçon explicite (Tableau de bord prof uniquement)">👩‍🏫</th>
-                                    <th style="width:32px;"></th>
-                                </tr>
-                            </thead>
-                            <tbody id="tbodySaisieMultiple"></tbody>
-                        </table>
-                    </div>
+/* ========================================== */
+/* 4. COMPOSANTS, SOUS-ONGLETS & GRILLES      */
+/* ========================================== */
+.container {
+    max-width: 1300px;
+    margin: 20px auto;
+    padding: 0 15px 40px 15px;
+}
 
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px; flex-wrap:wrap; gap:10px;">
-                        <div style="display:flex; gap:8px;">
-                            <button type="button" class="btn-action" onclick="ajouterLigneSaisieMultiple(1)">➕ Ajouter 1 ligne</button>
-                            <button type="button" class="filter-btn" onclick="ajouterLigneSaisieMultiple(5)">➕ Ajouter 5 lignes</button>
-                        </div>
-                        <button type="button" class="btn-valid" onclick="enregistrerSaisieMultiple()" style="padding:10px 20px; font-size:14px;">💾 Enregistrer tous ces éléments d'un coup</button>
-                    </div>
-                </div>
+.page { display: none; }
+.page.active { display: block; }
 
-                <!-- Filtres de la base -->
-                <div class="card-panel" style="margin-bottom:12px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                        <div id="barreFiltresNiveauxBase" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                            <select id="selectFiltreStatutBase" onchange="afficherBase()">
-                                <option value="Tous">Tout afficher (Ateliers + Évals + Leçons 👩‍🏫)</option>
-                                <option value="Ateliers">📌 Ateliers & Exercices élèves uniquement</option>
-                                <option value="Lecons">👩‍🏫 Leçons explicites (Prof) uniquement</option>
-                                <option value="Evaluations">🎯 Évaluations uniquement</option>
-                            </select>
-                            <select id="selectFiltreMatiereBase" onchange="filtrerBaseMatiere(this.value)"></select>
-                            <select id="selectFiltreSequenceBase" onchange="filtrerBaseSequence(this.value)"></select>
-                            <select id="selectFiltreTypeBase" onchange="filtrerBaseType(this.value)"></select>
-                            <input type="text" id="inputRechercheBase" placeholder="🔍 Rechercher..." oninput="afficherBase()">
-                        </div>
-                    </div>
-                </div>
+.panel {
+    background: #ffffff;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+}
 
-                <!-- BARRE DE MODIFICATION GROUPÉE D'ATELIERS COCHÉS -->
-                <div id="barreActionGroupeeBase" class="card-panel" style="display:none; margin-bottom:15px; background:#fef9e7; border:2px solid #f39c12;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
-                        <strong style="color:#d35400;">☑️ <span id="nbAteliersCochesBase">0</span> élément(s) sélectionné(s) — Modifier en lot :</strong>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                            <select id="bulkSelectType"><option value="">-- Changer Support --</option></select>
-                            <input type="text" id="bulkInputMatiere" list="listeMatieresConnues" placeholder="Changer Matière..." style="width:135px;">
-                            <input type="text" id="bulkInputSequence" list="listeSequencesConnues" placeholder="Remplacer Séq..." style="width:130px;" title="Remplace la séquence des éléments cochés">
-                            <input type="text" id="bulkInputAddSequence" list="listeSequencesConnues" placeholder="➕ Ajouter Séq..." style="width:130px;" title="Ajoute une séquence supplémentaire sans effacer celles existantes">
-                            <select id="bulkSelectPeriode">
-                                <option value="">-- Changer Période --</option>
-                                <option value="VIDER">🚫 Sans période</option>
-                                <option value="P1">Période 1</option>
-                                <option value="P2">Période 2</option>
-                                <option value="P3">Période 3</option>
-                                <option value="P4">Période 4</option>
-                                <option value="P5">Période 5</option>
-                                <option value="P1, P2, P3, P4, P5">🌟 Toute l'année (P1-P5)</option>
-                            </select>
-                            <select id="bulkSelectEtoiles">
-                                <option value="">-- Changer Étoiles --</option>
-                                <option value="0">0 étoile</option>
-                                <option value="1">⭐ (1)</option>
-                                <option value="2">⭐⭐ (2)</option>
-                                <option value="3">⭐⭐⭐ (3)</option>
-                            </select>
-                            <select id="bulkSelectRole">
-                                <option value="">-- Statut Élève / Prof --</option>
-                                <option value="atelier">📌 Atelier Élève</option>
-                                <option value="lecon">👩‍🏫 Leçon explicite (Prof)</option>
-                                <option value="eval">🎯 Évaluation</option>
-                            </select>
-                            <input type="text" id="bulkInputPageProf" placeholder="👩‍🏫 Page Prof..." style="width:105px;">
-                            <input type="text" id="bulkInputPersonnes" placeholder="Nb Pers (👤)..." style="width:85px;">
-                            <button type="button" class="btn-valid" onclick="appliquerModificationGroupeeBase()">✅ Appliquer aux cochés</button>
-                            <button type="button" class="btn-danger" onclick="supprimerSelectionGroupeeBase()" title="Supprimer les éléments cochés">🗑️</button>
-                        </div>
-                    </div>
-                </div>
+.page h2 {
+    margin-bottom: 18px;
+    color: #2c3e50;
+    border-bottom: 2px solid #ecf0f1;
+    padding-bottom: 10px;
+}
 
-                <p style="margin-bottom:8px; font-size:13px; color:#555;">Total affiché : <strong id="compteurBaseAffichee">0</strong> élément(s)</p>
-                <table class="table-classique">
-                    <thead>
-                        <tr>
-                            <th style="width:34px; text-align:center;"><input type="checkbox" id="cbToutCocherBase" onchange="cocherToutBase(this.checked)" title="Tout sélectionner pour modifier en lot"></th>
-                            <th style="width:65px;">Niveau</th>
-                            <th style="width:75px;">Période(s)</th>
-                            <th style="width:175px;">Matière / Séquence(s)</th>
-                            <th>Compétence(s)</th>
-                            <th>Ressource / Leçon, Pages (Élève & Prof) & Lien</th>
-                            <th style="width:90px;">Type</th>
-                            <th style="width:65px; text-align:center;">Nb Pers.</th>
-                            <th style="width:105px; text-align:center;">N° Atelier / Visuel</th>
-                            <th style="width:130px;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tableBaseDonnees"></tbody>
-                </table>
-            </div>
-        </div>
+.page-header-flex {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 18px;
+    border-bottom: 2px solid #ecf0f1;
+    padding-bottom: 10px;
+}
+.page-header-flex h2 { border: none; margin: 0; padding: 0; }
 
-        <!-- ========================================== -->
-        <!-- 5. PROGRAMMATION (SOUS-ONGLETS P1 À P5)    -->
-        <!-- ========================================== -->
-        <div id="pageProg" class="page">
-            <div class="panel">
-                <h2>📅 5. Programmation annuelle & Planification par Période / Semaine / Jour</h2>
+.card-panel {
+    background: #ffffff;
+    padding: 16px 20px;
+    border-radius: 10px;
+    border: 1px solid #e1e8ed;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+}
 
-                <!-- Barre de sous-onglets de Programmation -->
-                <div id="barreSousOngletsProg" class="subtabs-bar no-print">
-                    <button type="button" class="subtab-btn active" id="btnSubProg_ANNUEL" onclick="changerSousOngletProg('ANNUEL')">📋 Répartition annuelle (P1 à P5)</button>
-                    <button type="button" class="subtab-btn" id="btnSubProg_P1" onclick="changerSousOngletProg('P1')">🍂 Période 1</button>
-                    <button type="button" class="subtab-btn" id="btnSubProg_P2" onclick="changerSousOngletProg('P2')">❄️ Période 2</button>
-                    <button type="button" class="subtab-btn" id="btnSubProg_P3" onclick="changerSousOngletProg('P3')">🌱 Période 3</button>
-                    <button type="button" class="subtab-btn" id="btnSubProg_P4" onclick="changerSousOngletProg('P4')">🌸 Période 4</button>
-                    <button type="button" class="subtab-btn" id="btnSubProg_P5" onclick="changerSousOngletProg('P5')">☀️ Période 5</button>
-                </div>
+/* Barre de sous-onglets Programmation (Annuel / P1 à P5) */
+.subtabs-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    padding: 8px;
+    background: #f1f5f9;
+    border-radius: 10px;
+    border: 1px solid #cbd5e1;
+}
+.subtab-btn {
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: #ffffff;
+    color: #334155;
+    font-weight: 700;
+    font-size: 13.5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.subtab-btn:hover {
+    background: #e2e8f0;
+}
+.subtab-btn.active {
+    background: #d35400 !important;
+    color: #ffffff !important;
+    border-color: #a04000;
+    box-shadow: 0 2px 6px rgba(211, 84, 0, 0.28);
+}
 
-                <!-- Filtres du sous-onglet Répartition Annuelle -->
-                <div id="blocFiltresProgAnnuel" class="card-panel" style="margin-bottom:15px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-                    <label><strong>Niveau :</strong>
-                        <select id="selectNiveauProg" onchange="afficherProgrammation()">
-                            <option value="Tous">Tous les niveaux</option>
-                            <option value="CP">CP</option>
-                            <option value="CE1">CE1</option>
-                            <option value="CE2">CE2</option>
-                            <option value="CM1">CM1</option>
-                            <option value="CM2">CM2</option>
-                        </select>
-                    </label>
-                    <label><strong>Matière :</strong>
-                        <select id="selectMatiereProg" onchange="afficherProgrammation()">
-                            <option value="Toutes">Toutes les matières</option>
-                        </select>
-                    </label>
-                    <label><strong>Filtrer Période :</strong>
-                        <select id="selectPeriodeProg" onchange="afficherProgrammation()">
-                            <option value="Toutes">Toutes (P1 à P5)</option>
-                            <option value="P1">Période 1</option>
-                            <option value="P2">Période 2</option>
-                            <option value="P3">Période 3</option>
-                            <option value="P4">Période 4</option>
-                            <option value="P5">Période 5</option>
-                            <option value="Non_affecte">Non affectées</option>
-                        </select>
-                    </label>
-                </div>
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #7f8c8d;
+    background: #f8f9fa;
+    border-radius: 10px;
+    border: 2px dashed #bdc3c7;
+}
 
-                <div id="contenuProgrammation"></div>
-            </div>
-        </div>
+.grid-2-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+@media (max-width: 850px) { .grid-2-cols { grid-template-columns: 1fr; } }
 
-        <!-- ========================================== -->
-        <!-- 6. ÉTIQUETTES (PLANCHES 3x8 — 66x33,8mm)   -->
-        <!-- ========================================== -->
-        <div id="pageEtiquettes" class="page">
-            <div class="panel no-print">
-                <h2 style="color: #8e44ad;">🏷️ 6. Studio d'impression d'Étiquettes (Format 3x8 — 66 × 33,8 mm)</h2>
-                <div class="card-panel" style="margin-bottom:15px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
-                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                            <select id="selectNiveauEtiquettes" onchange="afficherChoixEtiquettes()">
-                                <option value="Tous">Tous les niveaux</option>
-                                <option value="CP">CP</option>
-                                <option value="CE1">CE1</option>
-                                <option value="CE2">CE2</option>
-                                <option value="CM1">CM1</option>
-                                <option value="CM2">CM2</option>
-                            </select>
-                            <select id="selectMatiereEtiquettes" onchange="afficherChoixEtiquettes()">
-                                <option value="Toutes">Toutes les matières</option>
-                            </select>
-                            <select id="selectTypeEtiquettes" onchange="afficherChoixEtiquettes()">
-                                <option value="Tous">Tous les supports</option>
-                            </select>
-                            <button type="button" class="filter-btn" onclick="cocherToutesEtiquettes(true)">✅ Tout cocher</button>
-                            <button type="button" class="filter-btn" onclick="cocherToutesEtiquettes(false)">❌ Tout décocher</button>
-                        </div>
-                        <div style="display:flex; gap:8px;">
-                            <button type="button" class="btn-action" onclick="genererApercuEtiquettes()">🔄 Générer l'aperçu</button>
-                            <button type="button" class="btn-valid" onclick="lancerImpressionEtiquettes()">🖨️ Imprimer la planche (3x8)</button>
-                        </div>
-                    </div>
+input[type="text"], input[type="number"], input[type="date"], select {
+    padding: 7px 10px;
+    border: 1px solid #bdc3c7;
+    border-radius: 6px;
+    font-size: 13.5px;
+}
 
-                    <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; font-size:13px; padding-top:10px; border-top:1px dashed #ccc;">
-                        <label>Largeur (mm) : <input type="number" step="0.1" id="etiqLargeurInput" value="66" min="20" max="200" style="width:65px;" onchange="genererApercuEtiquettes()"></label>
-                        <label>Hauteur (mm) : <input type="number" step="0.1" id="etiqHauteurInput" value="33.8" min="15" max="200" style="width:65px;" onchange="genererApercuEtiquettes()"></label>
-                        <label>Police (pt) : <input type="number" step="0.5" id="etiqFontInput" value="10.5" min="6" max="26" style="width:55px;" onchange="genererApercuEtiquettes()"></label>
-                        <label>Colonnes/ligne : <input type="number" id="etiqColsInput" value="3" min="1" max="6" style="width:48px;" onchange="genererApercuEtiquettes()"></label>
-                    </div>
-                    <div style="display:flex; gap:14px; align-items:center; flex-wrap:wrap; font-size:13px; margin-top:10px; padding-top:8px; border-top:1px dashed #eee;">
-                        <strong>Éléments à afficher :</strong>
-                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowCode" checked onchange="genererApercuEtiquettes()"> 🎲🔤1 Code / Logo</label>
-                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowMatiere" checked onchange="genererApercuEtiquettes()"> 📚 Bandeau Matière</label>
-                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowNiveau" checked onchange="genererApercuEtiquettes()"> 🎓 Niveau</label>
-                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowNom" checked onchange="genererApercuEtiquettes()"> 📝 Nom de l'atelier</label>
-                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowSeq" checked onchange="genererApercuEtiquettes()"> 📑 Séquence & Leçon</label>
-                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowComp" checked onchange="genererApercuEtiquettes()"> 🎯 Compétence</label>
-                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowEtoiles" checked onchange="genererApercuEtiquettes()"> ⭐ Étoiles</label>
-                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowPers" checked onchange="genererApercuEtiquettes()"> 👤 Nb Pers.</label>
-                        <label style="cursor:pointer;"><input type="checkbox" id="cbEtiqShowBorder" checked onchange="genererApercuEtiquettes()"> 🔲 Bordure de découpe</label>
-                    </div>
-                </div>
-                <div id="listeChoixEtiquettes" style="max-height:210px; overflow-y:auto; margin-bottom:20px; border:1px solid #ddd; border-radius:6px; padding:10px; background:#fff;"></div>
-            </div>
-            <div id="printEtiquettesContainer" class="etiquettes-grid-print"></div>
-        </div>
+.selection-eleve-bar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px dashed #dce4ec;
+}
+.selection-eleve-bar select {
+    font-size: 15px;
+    font-weight: 600;
+    min-width: 260px;
+    flex-grow: 1;
+    max-width: 420px;
+}
 
-        <!-- 7. MATRICE DES COMPÉTENCES -->
-        <div id="pageMatrice" class="page">
-            <div class="panel">
-                <div class="page-header-flex no-print">
-                    <h2>🧮 7. Matrice des Compétences</h2>
-                    <button type="button" class="btn-valid" onclick="window.print()">🖨️ Imprimer la matrice</button>
-                </div>
-                <div class="card-panel no-print" style="margin-bottom:15px; display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
-                    <label><strong>Niveau :</strong>
-                        <select id="selectNiveauMatrice" onchange="genererMatriceCompetences()">
-                            <option value="CP">CP</option>
-                            <option value="CE1">CE1</option>
-                            <option value="CE2">CE2</option>
-                            <option value="CM1">CM1</option>
-                            <option value="CM2">CM2</option>
-                        </select>
-                    </label>
-                    <label><strong>Période :</strong>
-                        <select id="selectPeriodeMatrice" onchange="genererMatriceCompetences()">
-                            <option value="Toutes">📅 Toutes les périodes</option>
-                            <option value="P1">Période 1</option>
-                            <option value="P2">Période 2</option>
-                            <option value="P3">Période 3</option>
-                            <option value="P4">Période 4</option>
-                            <option value="P5">Période 5</option>
-                            <option value="Non_affecte">Non affectées</option>
-                        </select>
-                    </label>
-                    <label><strong>Matière :</strong>
-                        <select id="selectMatiereMatrice" onchange="genererMatriceCompetences()">
-                            <option value="Toutes">Toutes les matières</option>
-                        </select>
-                    </label>
-                    <label style="cursor:pointer; background:#fef9e7; padding:5px 10px; border-radius:6px; border:1px solid #f1c40f; font-size:13px;">
-                        <input type="checkbox" id="cbEvalOnlyMatrice" onchange="genererMatriceCompetences()"> 🎯 Évaluations uniquement
-                    </label>
-                </div>
-                <div id="conteneurMatrice" style="overflow-x:auto;"></div>
-            </div>
-        </div>
+.ajout-eleve-bar, .semaines-flex, .quotas-bar, .filtres-ajout-plan {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.semaines-flex, .quotas-bar { justify-content: space-between; }
 
-        <!-- 8. BILANS & EXPORT EDULIVRET / LSU -->
-        <div id="pageBilan" class="page">
-            <div class="panel">
-                <div class="page-header-flex no-print">
-                    <h2>📝 8. Bilans individuels & Export Edulivret / LSU</h2>
-                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                        <select id="selectEleveBilan" onchange="genererBilanEleve()"></select>
-                        <button type="button" class="btn-action" onclick="exporterBilanEdulivret()">📋 Exporter pour Edulivret / LSU</button>
-                        <button type="button" class="btn-valid" onclick="window.print()">🖨️ Imprimer le bilan</button>
-                    </div>
-                </div>
-                <div id="zoneExportEdulivret" class="card-panel no-print" style="display:none; margin-bottom:18px; background:#f8fbff; border:1px solid #2980b9;">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                        <strong style="color:#1b4f72;">📋 Texte formaté prêt à coller dans Edulivret / LSU :</strong>
-                        <button type="button" class="filter-btn" onclick="document.getElementById('zoneExportEdulivret').style.display='none'">✖ Fermer</button>
-                    </div>
-                    <textarea id="textareaExportLSU" rows="7" style="width:100%; padding:10px; border-radius:6px; border:1px solid #bdc3c7; font-size:13px;"></textarea>
-                </div>
-                <div id="conteneurBilanEleve"></div>
-            </div>
-        </div>
+.panel-semaines {
+    background: #eaf2f8;
+    padding: 14px 18px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    border: 1px solid #d4e6f1;
+}
 
-        <!-- 9. SAUVEGARDE, RESTAURATION & CLOUD -->
-        <div id="pageSave" class="page">
-            <div class="panel">
-                <h2>💾 9. Sauvegarde, Restauration & Synchronisation Cloud</h2>
+.quotas-bar {
+    background: #fff;
+    padding: 12px 16px;
+    border-radius: 8px;
+    border: 1px solid #e1e8ed;
+    margin-bottom: 16px;
+}
 
-                <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #27ae60;">
-                    <h3 style="color:#1e8449; margin-bottom:8px;">📤 1. Restaurer vos données depuis un fichier JSON</h3>
-                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                        <input type="file" id="inputFichierJson" onchange="restaurerFichierJSON(event)" accept=".json,application/json" style="padding:10px; border:2px dashed #27ae60; border-radius:6px; flex:1; background:#f9fffb;">
-                        <button type="button" class="btn-valid" onclick="restaurerSauvegarde()" style="padding:12px 20px; font-size:15px;">🔄 Restaurer les données</button>
-                    </div>
-                </div>
+.badge-quota {
+    background: #ebf5fb;
+    color: #1b4f72;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 14px;
+    border: 1px solid #aed6f1;
+}
+.badge-quota.tablette { background: #f5eef8; color: #6c3483; border-color: #d7bde2; }
 
-                <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #e67e22;">
-                    <h3 style="color:#d35400; margin-bottom:8px;">📋 2. Restauration directe par Copier-Coller</h3>
-                    <textarea id="textareaJsonSecours" rows="4" placeholder='Collez ici le contenu de votre sauvegarde (ex: {"base":[...], "eleves":{...}})' style="width:100%; padding:10px; border:1px solid #ccc; border-radius:6px; font-family:monospace; font-size:12px; margin-bottom:8px;"></textarea>
-                    <button type="button" class="btn-action" onclick="restaurerDepuisTexteColle()" style="background:#e67e22;">⚡ Importer le texte collé maintenant</button>
-                </div>
+.badge-jaune-toggle {
+    cursor: pointer;
+    background: #fef9e7;
+    color: #7c2d12;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid #f1c40f;
+    font-weight: bold;
+    font-size: 13.5px;
+}
 
-                <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #2980b9;">
-                    <h3 style="color:#1b4f72; margin-bottom:8px;">📥 3. Télécharger une sauvegarde complète (.json)</h3>
-                    <button type="button" class="btn-action" onclick="exporterSauvegardeJSON()">💾 Télécharger ma sauvegarde (.json)</button>
-                </div>
+.etoiles-filter { display: flex; gap: 4px; align-items: center; font-size: 13px; }
 
-                <div class="card-panel" style="margin-bottom:20px; border-left:5px solid #8e44ad;">
-                    <h3 style="color:#6c3483; margin-bottom:8px;">🔥 4. Synchronisation Cloud Firebase</h3>
-                    <p id="statutFirebase" style="font-weight:bold; color:#f39c12; margin-bottom:12px;">⏳ Vérification du Cloud...</p>
-                    <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                        <button type="button" class="btn-valid" onclick="chargerDepuisFirebase(true)">⬇️ Récupérer depuis Firebase</button>
-                        <button type="button" class="btn-action" onclick="sauvegarderVersFirebase(true)">⬆️ Forcer l'envoi vers Firebase</button>
-                        <button type="button" class="filter-btn" onclick="inspecterToutesBranchesFirebase()">🔍 Chercher sur tout le Cloud Firebase</button>
-                    </div>
-                </div>
+.form-grid-base {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(205px, 1fr));
+    gap: 12px;
+}
+.form-grid-base label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; }
+.form-grid-base input, .form-grid-base select { width: 100%; }
 
-                <div class="card-panel">
-                    <h3 style="margin-bottom:8px;">⚙️ 5. Stockage local & Réparation du cache</h3>
-                    <p id="texteStockage">Calcul en cours...</p>
-                    <div style="background:#e0e0e0; border-radius:6px; height:18px; width:100%; overflow:hidden; margin:10px 0 15px 0;">
-                        <div id="jaugeStockageFill" style="background:#27ae60; height:100%; width:0%;"></div>
-                    </div>
-                    <button type="button" class="filter-btn" onclick="viderCacheApplication()">🧹 Purger le cache hors-ligne et recharger</button>
-                </div>
-            </div>
-        </div>
+/* Pastilles (Tags) de compétences et de séquences multiples */
+.comp-tags-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin-bottom: 6px;
+    min-height: 4px;
+}
+.comp-tag-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #eaf2f8;
+    color: #1b4f72;
+    border: 1px solid #aed6f1;
+    padding: 3px 8px;
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.seq-tag-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #fef9e7;
+    color: #7d6608;
+    border: 1px solid #f5b041;
+    padding: 3px 8px;
+    border-radius: 14px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.seq-tag-pill.done {
+    background: #d4efdf;
+    color: #1e8449;
+    border-color: #27ae60;
+    text-decoration: line-through;
+}
+.comp-tag-remove {
+    cursor: pointer;
+    color: #c0392b;
+    font-weight: bold;
+    font-size: 13px;
+    line-height: 1;
+    padding: 0 2px;
+}
+.comp-tag-remove:hover {
+    color: #e74c3c;
+    transform: scale(1.15);
+}
 
-    </main>
+/* Badges rituels récurrents et leçons explicites */
+.badge-recurrent {
+    background: #f4ecf7;
+    color: #6c3483;
+    border: 1px solid #d7bde2;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+}
+.badge-lecon-prof {
+    background: #d1f2eb;
+    color: #0e6251;
+    border: 1px solid #48c9b0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+}
+.badge-guide-prof {
+    background: #e8f8f5;
+    color: #117864;
+    border: 1px solid #76d7c4;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+}
 
-    <!-- MODALES -->
-    <div id="modalDesign" class="modal-overlay no-print" style="display:none;">
-        <div class="modal-content">
-            <h3 style="margin-top:0; color: #2c3e50;">🎨 Personnaliser le graphisme</h3>
-            <div class="theme-card" id="card_theme_classique" onclick="appliquerThemeVisuel('classique')">
-                <div><strong>💼 Classique (Origine)</strong><br><span style="font-size: 12px; color: #7f8c8d;">Couleurs franches et onglets colorés contrastés</span></div>
-                <div class="theme-preview-dots"><span class="theme-dot" style="background:#2c3e50;"></span><span class="theme-dot" style="background:#2980b9;"></span><span class="theme-dot" style="background:#27ae60;"></span></div>
-            </div>
-            <div class="theme-card active-theme" id="card_theme_pastel" onclick="appliquerThemeVisuel('pastel')">
-                <div><strong>🌸 Pastel Poudré</strong><br><span style="font-size: 12px; color: #7f8c8d;">Teintes douces macaron, lavande et menthe</span></div>
-                <div class="theme-preview-dots"><span class="theme-dot" style="background:#e8dff5;"></span><span class="theme-dot" style="background:#a2d2ff;"></span><span class="theme-dot" style="background:#ffcad4;"></span></div>
-            </div>
-            <div class="theme-card" id="card_theme_doodles" onclick="appliquerThemeVisuel('doodles')">
-                <div><strong>✏️ Pastel + Doodles École</strong><br><span style="font-size: 12px; color: #7f8c8d;">Ambiance pastel avec petits motifs d'école en fond</span></div>
-                <div class="theme-preview-dots"><span class="theme-dot" style="background:#faf6f2; border:1px solid #d8c8e8;"></span><span class="theme-dot" style="background:#b8c0ff;"></span><span class="theme-dot" style="background:#b7e4c7;"></span></div>
-            </div>
-            <div class="theme-card" id="card_theme_nature" onclick="appliquerThemeVisuel('nature')">
-                <div><strong>🌿 Nature & Sauge</strong><br><span style="font-size: 12px; color: #7f8c8d;">Tons apaisants vert sauge, lin et forêt</span></div>
-                <div class="theme-preview-dots"><span class="theme-dot" style="background:#cad2c5;"></span><span class="theme-dot" style="background:#84a98c;"></span><span class="theme-dot" style="background:#52796f;"></span></div>
-            </div>
-            <button onclick="fermerModal('modalDesign')" style="background: #34495e; color: white; border: none; padding: 10px 20px; width: 100%; font-weight: bold; border-radius:8px; cursor:pointer; margin-top: 10px;">Fermer</button>
-        </div>
-    </div>
+/* Case de duplication L1 en haut des colonnes de saisie multiple */
+.th-copy-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    margin-top: 3px;
+    padding: 1px 5px;
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #1b4f72;
+    cursor: pointer;
+    user-select: none;
+}
+.th-copy-label:hover {
+    background: #eaf2f8;
+    border-color: #2980b9;
+}
 
-    <div id="modalMatieres" class="modal" style="display:none;">
-        <div class="modal-content" style="max-width:650px;">
-            <h3>⚙️ Gérer et renommer les Matières</h3>
-            <div id="listeMatieresModalContainer" style="max-height:320px; overflow-y:auto; margin:12px 0; border:1px solid #ddd; padding:10px; border-radius:6px;"></div>
-            <div style="display:flex; justify-content:flex-end; gap:10px;">
-                <button type="button" class="btn-remove" onclick="fermerModal('modalMatieres')">Fermer</button>
-                <button type="button" class="btn-valid" onclick="sauvegarderToutesMatieres()">💾 Enregistrer</button>
-            </div>
-        </div>
-    </div>
+/* Tableaux */
+.table-classique {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.table-classique th, .table-classique td {
+    border: 1px solid #e2e8f0;
+    padding: 7px 9px;
+    text-align: left;
+    font-size: 13px;
+    vertical-align: middle;
+}
+.table-classique th { background-color: #f1f5f9; color: #1e293b; font-weight: 700; }
 
-    <div id="modalSequences" class="modal" style="display:none;">
-        <div class="modal-content" style="max-width:860px;">
-            <h3>⚙️ Gérer les Séquences & Modifier la Matière d'une séquence entière</h3>
-            <p style="font-size:12px; color:#555; margin-bottom:8px;">
-                💡 Vous pouvez <strong>renommer une séquence</strong> ou <strong>changer directement la matière de toute la séquence</strong> grâce au menu déroulant à droite de chaque ligne. Supprimer une séquence ne supprime aucune activité (elles passent en <em>« ⚠️ Sans séquence »</em>).
-            </p>
-            <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:10px 0; background:#f8f9fa; padding:10px; border-radius:6px;">
-                <label><strong>Niveau :</strong>
-                    <select id="filtreNiveauModalSeq" onchange="afficherListeSequencesModal()">
-                        <option value="Tous">Tous les niveaux</option>
-                        <option value="CP">CP</option>
-                        <option value="CE1">CE1</option>
-                        <option value="CE2">CE2</option>
-                        <option value="CM1">CM1</option>
-                        <option value="CM2">CM2</option>
-                    </select>
-                </label>
-                <label><strong>Matière :</strong>
-                    <select id="filtreMatiereModalSeq" onchange="afficherListeSequencesModal()"></select>
-                </label>
-            </div>
-            <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
-                <input type="text" id="inputNouvelleSeqModal" placeholder="➕ Créer une nouvelle séquence..." style="flex:1;">
-                <button type="button" class="btn-action" onclick="creerNouvelleSequenceModal()">➕ Ajouter à la liste</button>
-            </div>
-            <div id="listeSequencesModalContainer" style="max-height:260px; overflow-y:auto; margin:10px 0; border:1px solid #ddd; padding:10px; border-radius:6px;"></div>
-            <div id="blocOrphelinsSeqModal" style="display:none; max-height:180px; overflow-y:auto; margin:10px 0; border:2px dashed #e67e22; background:#fef9e7; padding:10px; border-radius:6px;"></div>
-            <div style="display:flex; justify-content:flex-end; gap:10px;">
-                <button type="button" class="btn-remove" onclick="fermerModal('modalSequences')">Fermer</button>
-                <button type="button" class="btn-valid" onclick="sauvegarderToutesSequences()">💾 Enregistrer les modifications</button>
-            </div>
-        </div>
-    </div>
+.col-center { text-align: center !important; }
+.row-valide { background-color: #e8f8f5 !important; }
+.row-eval { background-color: #fef9e7 !important; }
+.col-num { text-align: center !important; font-weight: bold; font-size: 14px; width: 42px; }
+.num-jour-impose { background-color: #fef5e7 !important; color: #d35400 !important; text-decoration: underline; }
 
-    <div id="modalCompetences" class="modal" style="display:none;">
-        <div class="modal-content" style="max-width:720px;">
-            <h3>⚙️ Gérer et renommer les Compétences</h3>
-            <div style="margin:10px 0;"><label>Filtrer par matière : <select id="filtreMatiereModalComp" onchange="afficherListeCompetencesModal()"></select></label></div>
-            <div id="listeCompetencesModalContainer" style="max-height:320px; overflow-y:auto; margin:12px 0; border:1px solid #ddd; padding:10px; border-radius:6px;"></div>
-            <div style="display:flex; justify-content:flex-end; gap:10px;">
-                <button type="button" class="btn-remove" onclick="fermerModal('modalCompetences')">Fermer</button>
-                <button type="button" class="btn-valid" onclick="sauvegarderToutesCompetences()">💾 Enregistrer</button>
-            </div>
-        </div>
-    </div>
+.sequence-separator-row td {
+    font-weight: bold;
+    font-size: 12px !important;
+    padding: 4px 10px !important;
+    letter-spacing: 0.3px;
+}
 
-    <div id="modalTypes" class="modal" style="display:none;">
-        <div class="modal-content" style="max-width:780px;">
-            <h3>⚙️ Gérer les Types de supports, Émojis, Logos & Quotas Tablettes</h3>
-            <div style="background:#f8f9fa; padding:10px; border-radius:6px; margin-bottom:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
-                <input type="text" id="inputNouveauTypeNom" placeholder="Nouveau type (ex: Manipulation)" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterOuModifierType();}">
-                <input type="text" id="inputNouveauTypeEmoji" placeholder="Émoji (ex: 🧩)" style="width:110px;">
-                <input type="text" id="inputNouveauTypeImg" placeholder="ou URL image/logo (optionnel)" style="flex:1;">
-                <label style="font-size:12px; cursor:pointer;"><input type="checkbox" id="cbNouveauTypeRempNum"> Logo seul</label>
-                <label style="font-size:12px; cursor:pointer;"><input type="checkbox" id="cbNouveauTypeCouleur" checked> Colorer</label>
-                <label style="font-size:12px; cursor:pointer;"><input type="checkbox" id="cbNouveauTypeTablette"> 📱 Tablette</label>
-                <button type="button" class="btn-valid" onclick="ajouterOuModifierType()">➕ Créer ce type</button>
-            </div>
-            <div id="listeTypesModalContainer" style="max-height:300px; overflow-y:auto; margin:10px 0; border:1px solid #ddd; padding:10px; border-radius:6px;"></div>
-            <div style="display:flex; justify-content:flex-end; gap:10px;">
-                <button type="button" class="btn-remove" onclick="fermerModal('modalTypes')">Fermer</button>
-                <button type="button" class="btn-valid" onclick="sauvegarderTousLesTypes()">💾 Enregistrer tous les types</button>
-            </div>
-        </div>
-    </div>
+/* Tableau d'organisation de la semaine (Semainier Lundi / Mardi / Jeudi / Vendredi) */
+.planning-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 3px;
+    background: #fff;
+    table-layout: fixed;
+}
+.planning-table th {
+    background-color: #34495e !important;
+    color: #ffffff !important;
+    text-align: center !important;
+    font-size: 11.5px;
+    padding: 4px;
+    border: 1px solid #2c3e50;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+.planning-table td {
+    border: 1px solid #7f8c8d;
+    height: 24px;
+    text-align: center;
+    vertical-align: middle;
+    padding: 2px;
+}
+.planning-cell-box {
+    display: inline-block;
+    min-width: 22px;
+    min-height: 18px;
+    line-height: 18px;
+    font-weight: bold;
+    font-size: 12.5px;
+    color: #2c3e50;
+}
 
-    <div id="modalDupliquer" class="modal" style="display:none;">
-        <div class="modal-content">
-            <h3>📋 Dupliquer le plan de <span id="nomEleveSourceDupli"></span></h3>
-            <p style="font-size:12px; color:#555; margin-top:4px;">
-                💡 Les exercices s'adapteront automatiquement au parcours (🟡 Jaune / 🟠 Orange) ou au 📒 Fichier Jaune de chaque élève sélectionné !
-            </p>
-            <div id="listeElevesDupli" style="max-height:260px; overflow-y:auto; margin:15px 0; border:1px solid #ddd; padding:10px; display:flex; flex-direction:column; gap:6px;"></div>
-            <div style="display:flex; justify-content:flex-end; gap:10px;">
-                <button type="button" class="btn-remove" onclick="fermerModal('modalDupliquer')">Annuler</button>
-                <button type="button" class="btn-valid" onclick="validerDuplication()">Dupliquer</button>
-            </div>
-        </div>
-    </div>
+.badge-eval {
+    background: #e74c3c;
+    color: #fff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+}
 
-    <div id="modalAssigner" class="modal" style="display:none;">
-        <div class="modal-content">
-            <h3>📌 Assigner l'activité : <span id="nomActiviteAssign"></span></h3>
-            <div id="blocChoixSequenceAssignModal" style="margin:10px 0; display:none;">
-                <label><strong>Dans quelle séquence assigner cet atelier ?</strong>
-                    <select id="selectSequenceAssignMultiple" style="padding:6px; border-radius:4px; width:100%; margin-top:4px;"></select>
-                </label>
-            </div>
-            <div style="margin:10px 0; display:flex; gap:14px; align-items:center; flex-wrap:wrap;">
-                <label>Jour imposé (optionnel) :
-                    <select id="selectJourAssignMultiple" style="padding:6px; border-radius:4px;">
-                        <option value="">-- Libre --</option>
-                        <option value="Lundi">Lundi</option>
-                        <option value="Mardi">Mardi</option>
-                        <option value="Jeudi">Jeudi</option>
-                        <option value="Vendredi">Vendredi</option>
-                    </select>
-                </label>
-                <label style="cursor:pointer; background:#f4ecf7; color:#6c3483; padding:5px 10px; border-radius:6px; border:1px solid #d7bde2; font-weight:bold; font-size:12.5px;">
-                    <input type="checkbox" id="cbAssignRecurrentMultiple"> 🔄 Épingler en rituel hebdomadaire (chaque semaine)
-                </label>
-            </div>
-            <div id="listeElevesAssign" style="max-height:260px; overflow-y:auto; margin:15px 0; border:1px solid #ddd; padding:10px; display:flex; flex-direction:column; gap:6px;"></div>
-            <div style="display:flex; justify-content:flex-end; gap:10px;">
-                <button type="button" class="btn-remove" onclick="fermerModal('modalAssigner')">Annuler</button>
-                <button type="button" class="btn-valid" onclick="validerAssignationMultiple()">Valider l'assignation</button>
-            </div>
-        </div>
-    </div>
+/* Boutons */
+.btn-action, .btn-valid, .btn-danger, .btn-remove {
+    color: white;
+    border: none;
+    padding: 7px 13px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 13px;
+}
+.btn-action { background-color: #2980b9; }
+.btn-valid { background-color: #27ae60; }
+.btn-danger, .btn-remove { background-color: #e74c3c; }
 
-    <div id="modalEditEleve" class="modal" style="display:none;">
-        <div class="modal-content">
-            <h3>✏️ Modifier l'élève</h3>
-            <div style="margin:10px 0;">
-                <label>Prénom : <input type="text" id="editEleveNomInput" style="padding:8px; border-radius:4px; width:100%; margin-top:5px; border:1px solid #ccc;"></label>
-            </div>
-            <div style="margin:10px 0;">
-                <label>Niveau :
-                    <select id="editEleveNiveauSelect" onchange="majVisibiliteParcoursEdition(this.value)" style="padding:8px; border-radius:4px; width:100%; margin-top:5px; border:1px solid #ccc;">
-                        <option value="CP">CP</option>
-                        <option value="CE1">CE1</option>
-                        <option value="CE2">CE2</option>
-                        <option value="CM1">CM1</option>
-                        <option value="CM2">CM2</option>
-                    </select>
-                </label>
-            </div>
-            <div id="blocEditEleveParcours" style="margin:10px 0; display:none;">
-                <label>Parcours manuel CM :
-                    <select id="editEleveParcoursSelect" style="padding:8px; border-radius:4px; width:100%; margin-top:5px; border:1px solid #ccc; font-weight:bold;">
-                        <option value="jaune">🟡 Parcours Jaune (CM1 / adapté)</option>
-                        <option value="orange">🟠 Parcours Orange (CM2)</option>
-                    </select>
-                </label>
-            </div>
-            <div style="margin:12px 0;">
-                <label style="cursor:pointer; font-weight:bold;"><input type="checkbox" id="editEleveFichierJauneInput"> 📒 Utilise le Fichier Jaune</label>
-            </div>
-            <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:20px;">
-                <button type="button" class="btn-remove" onclick="fermerModal('modalEditEleve')">Annuler</button>
-                <button type="button" class="btn-valid" onclick="validerEditionEleve()">Enregistrer</button>
-            </div>
-        </div>
-    </div>
+.filter-btn {
+    background-color: #ecf0f1;
+    color: #2c3e50;
+    border: 1px solid #bdc3c7;
+    padding: 5px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+.filter-btn:hover, .filter-btn.active {
+    background-color: #1b4f72;
+    color: #fff;
+    border-color: #1b4f72;
+}
 
-    <button id="btnScrollTop" class="no-print" onclick="window.scrollTo({top:0, behavior:'smooth'})" style="display:none; position:fixed; bottom:20px; right:20px; z-index:99; background:#1b4f72; color:#fff; border:none; padding:12px 16px; border-radius:50%; cursor:pointer; font-size:16px; box-shadow:0 3px 8px rgba(0,0,0,0.2);">⬆️</button>
+.prog-pill {
+    padding: 5px 9px;
+    border-radius: 6px;
+    border: 1px solid #bdc3c7;
+    background: #f8f9fa;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 12px;
+    margin: 2px;
+    transition: all 0.15s ease;
+}
+.prog-pill:hover {
+    border-color: #d35400;
+}
+.prog-pill.active {
+    background: #d35400;
+    color: #fff;
+    border-color: #a04000;
+}
+.prog-pill.all-periods {
+    background: #fef9e7;
+    color: #7d6608;
+    border-color: #f1c40f;
+}
+.prog-pill.all-periods.active {
+    background: #27ae60;
+    color: #ffffff;
+    border-color: #1e8449;
+}
 
-    <script src="script.js?v=20261106"></script>
-</body>
-</html>
+/* Dashboard */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+}
+.dash-card {
+    background: #fff;
+    border: 1px solid #dce4ec;
+    border-radius: 10px;
+    padding: 14px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+}
+.dash-progress-bar {
+    height: 10px;
+    background: #ecf0f1;
+    border-radius: 5px;
+    overflow: hidden;
+    margin: 8px 0;
+}
+.dash-progress-fill { height: 100%; background: #27ae60; transition: width 0.3s ease; }
+
+/* Étiquettes 3x8 (66mm x 33,8mm) SANS ESPACEMENT & Impression Fiches */
+.etiquettes-grid-print {
+    display: grid;
+    grid-template-columns: repeat(3, 66mm);
+    gap: 0mm !important;
+    margin: 0 auto;
+    padding: 0;
+    justify-content: center;
+}
+.etiquette-item {
+    width: 66mm;
+    height: 33.8mm;
+    border-radius: 0px !important;
+    padding: 2mm 2.5mm;
+    text-align: center;
+    background: #fff;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.conteneur-a5-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    page-break-after: always;
+    margin-bottom: 16px;
+}
+.fiche-plan-print {
+    background: #fff;
+    border: 1.5px solid #2c3e50;
+    border-radius: 8px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    page-break-inside: avoid;
+}
+.fiche-plan-print table th, .fiche-plan-print table td {
+    padding: 4px 6px;
+    font-size: 11px;
+}
+.plan-eleve-page {
+    page-break-inside: avoid;
+}
+.bandeau-matiere-print {
+    padding: 4px 10px;
+    font-weight: bold;
+    font-size: 12.5px;
+    border-radius: 4px;
+    margin-top: 8px;
+    margin-bottom: 4px;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+/* Affichage imprimable du tableau des leçons explicites (pour les élèves) */
+.only-print-lecons {
+    display: none;
+}
+
+/* Modales */
+.modal, .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+.modal-content {
+    background: #ffffff;
+    padding: 24px;
+    border-radius: 12px;
+    width: 92%;
+    max-width: 540px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+}
+
+.theme-card {
+    border: 2px solid #ecf0f1;
+    border-radius: 10px;
+    padding: 12px 15px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.2s ease;
+    background: #ffffff;
+}
+.theme-card.active-theme {
+    border-color: #8e44ad;
+    background-color: #f9f5ff;
+    box-shadow: 0 2px 8px rgba(142, 68, 173, 0.15);
+}
+.theme-preview-dots { display: flex; gap: 6px; }
+.theme-dot { width: 18px; height: 18px; border-radius: 50%; display: inline-block; border: 1px solid rgba(0,0,0,0.1); }
+
+#toast-container {
+    position: fixed;
+    bottom: 20px; left: 20px;
+    z-index: 9999;
+    display: flex; flex-direction: column; gap: 8px;
+}
+.toast {
+    background-color: #2c3e50;
+    color: #fff;
+    padding: 12px 18px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    font-size: 14px; font-weight: 600;
+}
+.toast.success { background-color: #27ae60; }
+.toast.error { background-color: #c0392b; }
+
+@media print {
+    .no-print, .navbar, #toast-container, #btnScrollTop { display: none !important; }
+    body, .page, .panel, .container {
+        background: #fff !important;
+        background-image: none !important;
+        margin: 0 !important; padding: 0 !important;
+        box-shadow: none !important; border: none !important;
+        max-width: 100% !important;
+    }
+    .etiquettes-grid-print {
+        gap: 0mm !important;
+        margin: 0 auto !important;
+        padding: 0 !important;
+    }
+    /* Mode impression exclusif de l'affiche des leçons explicites pour la classe */
+    body.print-lecons-only .no-print-lecons { display: none !important; }
+    body.print-lecons-only .only-print-lecons { display: block !important; }
+    body.print-lecons-only .grid-lecons-poles {
+        display: block !important;
+    }
+    body.print-lecons-only .card-pole-lecon {
+        margin-bottom: 14px !important;
+        page-break-inside: avoid;
+        break-inside: avoid;
+        border: 2px solid #2c3e50 !important;
+    }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+}
