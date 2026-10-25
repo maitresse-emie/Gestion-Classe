@@ -1,5 +1,5 @@
 // ==========================================
-// 1. SETUP, CONSTANTES ET COULEURS MATIÈRES
+// 1. SETUP, CONSTANTES, BOUCLIER ANTI-PERTE & COULEURS MATIÈRES
 // ==========================================
 function escJS(str) { return (str || "").toString().replace(/\\/g, "\\\\").replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
 function escHTML(str) { return (str || "").toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;"); }
@@ -18,6 +18,10 @@ const KEY_PRINT_CFG = 'maConfigImpression_Finale';
 const KEY_SEQ_CUSTOM = 'mesSequencesCustom_Finale';
 const KEY_LECONS_PROF = 'mesLeconsProf_Finale';
 const KEY_PROG_HEBDO = 'maProgHebdoPeriodes_Finale';
+const KEY_LOCAL_UPDATED_AT = 'monUpdatedAtLocal_Finale';
+const KEY_SNAPSHOTS_SECOURS = 'mesSnapshotsSecours_Finale';
+
+const COULEUR_FRANCAIS_CP_VERT_CLAIR = "#c8e6c9";
 
 const MATIERES_DEFAUT_LISTE = [
     "✅Français - Orthographe",
@@ -49,7 +53,6 @@ let competencesSelectionneesSimple = [];
 let sequencesSelectionneesSimple = [];
 let sequencesSelectionneesMulti = [];
 
-// Navigation Programmation (Annuel vs P1..P5)
 let sousOngletProgActif = 'ANNUEL';
 let niveauActifProgPeriode = 'CP';
 let afficherSemaineSuivanteDash = false;
@@ -60,7 +63,8 @@ let printConfig = JSON.parse(localStorage.getItem(KEY_PRINT_CFG)) || {
     meteo: "meteo",
     afficherCompteur: true,
     afficherSignature: true,
-    afficherCommentaire: false
+    afficherCommentaire: false,
+    taillePolice: 11
 };
 
 let dateGlobaleDebutISO = "", dateGlobaleDebutFR = "", dateGlobaleFinFR = "";
@@ -103,7 +107,6 @@ if (!baseDonnees || !Array.isArray(baseDonnees)) baseDonnees = [];
 let eleves = JSON.parse(localStorage.getItem(KEY_ELEVES));
 if (!eleves || typeof eleves !== 'object') eleves = {};
 
-// Indique si un élément de la base de données est une Leçon explicite (réservée au Tableau de bord prof)
 function estLeconProf(act) {
     if (!act) return false;
     if (act.estLecon) return true;
@@ -139,7 +142,8 @@ function getEmojiMatiere(matiere, sequence = "") {
     if (text.includes("geometrie")) return "🔷";
     if (text.includes("programmation") || text.includes("scratch")) return "🤖";
     if (text.includes("lexique") || text.includes("vocabulaire")) return "🧑‍🎓";
-    if (text.includes("numeration") || text.includes("nombre") || text.includes("calcul")) return "🧮";
+    if (text.includes("numeration") || text.includes("nombre") || text.includes("calcul") || text.includes("math")) return "🧮";
+    if (text.includes("francais") || text.includes("lecture")) return "🔤";
 
     return "";
 }
@@ -169,9 +173,6 @@ function formaterAffichageCompetences(compStr) {
     return list.map(c => `<span style="display:inline-block; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:1px 6px; margin:1px 2px; font-size:11.5px;">${escHTML(c)}</span>`).join(' ');
 }
 
-// ==========================================
-// GESTION MULTI-SÉQUENCES & PROGRAMMATION MULTI-PÉRIODES PAR SÉQUENCE
-// ==========================================
 function extraireListeSequences(seqStr) {
     if (!seqStr) return [];
     if (Array.isArray(seqStr)) return seqStr.map(s => String(s).trim()).filter(Boolean);
@@ -194,7 +195,9 @@ function formaterAffichageSequences(seqStr) {
 }
 
 function getCleProgSequence(matiere, sequence) {
-    return `SEQ||${(matiere || "").trim()}||${(sequence || "").trim()}`;
+    let mClean = (matiere || "").toString().trim().replace(/[.$#[\]\/]/g, "_");
+    let sClean = (sequence || "").toString().trim().replace(/[.$#[\]\/]/g, "_");
+    return `SEQ||${mClean}||${sClean}`;
 }
 
 function extrairePeriodesArray(perRaw) {
@@ -207,8 +210,10 @@ function extrairePeriodesArray(perRaw) {
 function getPeriodesSequence(matiere, sequence) {
     if (!sequence || !sequence.trim()) return [];
     let cle = getCleProgSequence(matiere, sequence);
-    if (programmations[cle] !== undefined) {
-        return extrairePeriodesArray(programmations[cle]);
+    let cleAncienne = `SEQ||${(matiere || "").trim()}||${(sequence || "").trim()}`;
+    let valProg = programmations[cle] !== undefined ? programmations[cle] : programmations[cleAncienne];
+    if (valProg !== undefined && valProg !== "") {
+        return extrairePeriodesArray(valProg);
     }
     let setP = new Set();
     baseDonnees.forEach(a => {
@@ -250,15 +255,9 @@ function estActiviteValideePourSequence(eleve, act, seqCible) {
     return (eleve.historique || []).some(h => {
         if (!h || h.idActivite !== act.id) return false;
         let hSeqNorm = (h.sequence || "").trim().toLowerCase();
-        if (seqsAct.length <= 1) {
-            return true;
-        }
-        if (!targetNorm) {
-            return false;
-        }
-        if (hSeqNorm) {
-            return hSeqNorm === targetNorm;
-        }
+        if (seqsAct.length <= 1) return true;
+        if (!targetNorm) return false;
+        if (hSeqNorm) return hSeqNorm === targetNorm;
         return seqsAct[0].toLowerCase() === targetNorm;
     });
 }
@@ -273,7 +272,7 @@ function getSequenceActivePourEleve(eleve, act) {
 }
 
 // ==========================================
-// GESTION DES PARCOURS (JAUNE / ORANGE / FICHIER JAUNE) & VISUELS ATELIERS
+// GESTION DES PARCOURS & VISUELS ATELIERS (AVEC SYMBOLE MATIÈRE TOUJOURS AFFICHÉ)
 // ==========================================
 function estEleveCM(eleveOuNiveau) {
     let niv = typeof eleveOuNiveau === 'string' ? eleveOuNiveau : (eleveOuNiveau && eleveOuNiveau.niveau ? eleveOuNiveau.niveau : "");
@@ -352,6 +351,7 @@ function extraireNumeroAtelierPropre(symboleBrut, emojiType, emojiMat) {
     return s;
 }
 
+// Génère le repère visuel de l'atelier : le symbole de la matière (emojiMat) apparaît TOUJOURS, même s'il ne s'agit pas d'un jeu !
 function getRepereAtelierHtml(act, eleve, tailleMaxImg = 28) {
     let infos = getInfosActivitePourEleve(act, eleve);
     let typeKey = "";
@@ -388,22 +388,22 @@ function getRepereAtelierHtml(act, eleve, tailleMaxImg = 28) {
         bg = calculerCouleurAutomatique(act ? act.matiere : "", act ? act.niveau : "", infos.typeEffectif);
     }
 
+    // Construction du code complet incluant systématiquement emojiMat (symbole de la matière)
+    let codeTexteComplet = `${emojiType}${emojiMat}${numPropre}`;
+
     let html = "";
     if (imgUrl && !imgUrl.startsWith('#')) {
         let tagImg = `<img src="${escHTML(imgUrl)}" style="max-height:${tailleMaxImg}px; max-width:52px; object-fit:contain; vertical-align:middle; display:inline-block;">`;
         if (remplacerNumParLogo && !numPropre) {
-            html = tagImg;
-        } else if (numPropre || symBrut) {
+            html = emojiMat ? `<strong style="vertical-align:middle; margin-right:3px;">${escHTML(emojiMat)}</strong>${tagImg}` : tagImg;
+        } else if (numPropre || symBrut || emojiMat) {
             html = `${tagImg} <strong style="vertical-align:middle;">${escHTML(emojiMat + numPropre)}</strong>`;
         } else {
             html = tagImg;
         }
     } else {
-        if (numPropre || symBrut) {
-            let codeComplet = `${emojiType}${emojiMat}${numPropre}`;
-            html = `<strong style="font-size:${Math.max(12, Math.round(tailleMaxImg * 0.6))}px; letter-spacing:0.4px;">${escHTML(codeComplet)}</strong>`;
-        } else if (emojiType) {
-            html = `<span style="font-size:${Math.max(13, tailleMaxImg - 4)}px;">${escHTML(emojiType)}</span>`;
+        if (numPropre || symBrut || emojiMat || emojiType) {
+            html = `<strong style="font-size:${Math.max(12, Math.round(tailleMaxImg * 0.6))}px; letter-spacing:0.4px;">${escHTML(codeTexteComplet)}</strong>`;
         } else {
             html = "";
         }
@@ -417,7 +417,7 @@ function getRepereAtelierHtml(act, eleve, tailleMaxImg = 28) {
         emojiMat,
         numPropre,
         imgUrl,
-        codeTexte: (numPropre || symBrut) ? `${emojiType}${emojiMat}${numPropre}` : ""
+        codeTexte: codeTexteComplet
     };
 }
 
@@ -438,7 +438,7 @@ function calculerVendrediDepuisISO(dateISO) {
 
 function assurerStructureSemaines(e) {
     if (!e) return;
-    if (!e.maxAteliers) e.maxAteliers = 15;
+    if (!e.maxAteliers) e.maxAteliers = 100;
     if (e.maxTablettes === undefined) e.maxTablettes = 2;
     if (!e.niveau) e.niveau = "CP";
     if (estEleveCM(e)) {
@@ -525,29 +525,205 @@ function chargerSemaineDepuisIndex(e, nouvelIndex) {
 Object.values(eleves).forEach(e => assurerStructureSemaines(e));
 localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves));
 
+// ==========================================
+// 2. BOUCLIER ANTI-PERTE : DOUBLE STOCKAGE (LOCALSTORAGE + INDEXEDDB), JOURNAL DE SECOURS & FUSION FIREBASE
+// ==========================================
+function marquerModificationLocale() {
+    let nowISO = new Date().toISOString();
+    localStorage.setItem(KEY_LOCAL_UPDATED_AT, nowISO);
+    sauvegarderDansIndexedDB();
+    enregistrerSnapshotSecoursAuto();
+}
+
 function sauvegarderEleves() {
     Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
     localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves));
+    marquerModificationLocale();
     declencherAutoSaveFirebase();
 }
 function sauvegarderBase() {
     localStorage.setItem(KEY_ATELIERS, JSON.stringify(baseDonnees));
     localStorage.setItem(KEY_SEQ_CUSTOM, JSON.stringify(sequencesCustom));
+    marquerModificationLocale();
     declencherAutoSaveFirebase();
 }
 function sauvegarderProgrammations() {
     localStorage.setItem(KEY_PROG, JSON.stringify(programmations));
+    marquerModificationLocale();
     declencherAutoSaveFirebase();
 }
 function sauvegarderProgPeriodes() {
-    assurerStructureProgPeriodes();
+    if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
     localStorage.setItem(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData));
+    marquerModificationLocale();
     declencherAutoSaveFirebase();
 }
 
-// ==========================================
-// 2. RESTAURATION UNIVERSELLE JSON & FIREBASE
-// ==========================================
+// --- Stockage longue durée IndexedDB (survit aux limites de 5 Mo de localStorage) ---
+function ouvrirIndexedDB() {
+    return new Promise((resolve, reject) => {
+        if (!window.indexedDB) return resolve(null);
+        let req = indexedDB.open('GestionClasseSecoursDB', 1);
+        req.onupgradeneeded = (e) => {
+            let db = e.target.result;
+            if (!db.objectStoreNames.contains('etat')) db.createObjectStore('etat');
+        };
+        req.onsuccess = (e) => resolve(e.target.result);
+        req.onerror = () => resolve(null);
+    });
+}
+
+async function sauvegarderDansIndexedDB() {
+    try {
+        let db = await ouvrirIndexedDB();
+        if (!db) return;
+        let payload = construirePayloadComplet();
+        let tx = db.transaction('etat', 'readwrite');
+        tx.objectStore('etat').put(payload, 'derniere_sauvegarde');
+    } catch (e) {}
+}
+
+async function verifierSecoursIndexedDBAuDemarrage() {
+    try {
+        let db = await ouvrirIndexedDB();
+        if (!db) return;
+        let tx = db.transaction('etat', 'readonly');
+        let req = tx.objectStore('etat').get('derniere_sauvegarde');
+        req.onsuccess = () => {
+            let idbData = req.result;
+            if (idbData && Array.isArray(idbData.base) && idbData.base.length > baseDonnees.length) {
+                let nbAjoutes = fusionnerTableauBaseSansPerte(idbData.base);
+                if (nbAjoutes > 0) {
+                    localStorage.setItem(KEY_ATELIERS, JSON.stringify(baseDonnees));
+                    rafraichirToutApresImport();
+                    showToast(`🛡️ ${nbAjoutes} élément(s) récupéré(s) depuis la mémoire de sécurité IndexedDB !`, "success");
+                }
+            }
+        };
+    } catch (e) {}
+}
+
+// --- Journal automatique des 5 dernières copies de secours horodatées ---
+let dernierSnapshotTimestamp = 0;
+function enregistrerSnapshotSecoursAuto(forcer = false) {
+    let now = Date.now();
+    if (!forcer && (now - dernierSnapshotTimestamp < 15000)) return;
+    if (baseDonnees.length === 0 && Object.keys(eleves).length === 0) return;
+    dernierSnapshotTimestamp = now;
+    try {
+        let liste = JSON.parse(localStorage.getItem(KEY_SNAPSHOTS_SECOURS)) || [];
+        let snap = {
+            dateFR: new Date().toLocaleString('fr-FR'),
+            nbBase: baseDonnees.length,
+            nbLecons: baseDonnees.filter(a => estLeconProf(a)).length,
+            nbEleves: Object.keys(eleves).length,
+            payload: construirePayloadComplet()
+        };
+        // Évite d'empiler deux snapshots identiques
+        if (liste.length > 0 && liste[0].nbBase === snap.nbBase && liste[0].nbLecons === snap.nbLecons && liste[0].nbEleves === snap.nbEleves) {
+            liste[0] = snap;
+        } else {
+            liste.unshift(snap);
+        }
+        if (liste.length > 5) liste.length = 5;
+        localStorage.setItem(KEY_SNAPSHOTS_SECOURS, JSON.stringify(liste));
+        afficherListeSnapshotsSecoursUI();
+    } catch (e) {}
+}
+
+function afficherListeSnapshotsSecoursUI() {
+    let cont = document.getElementById('listeSnapshotsAutoContainer');
+    if (!cont) return;
+    let liste = [];
+    try { liste = JSON.parse(localStorage.getItem(KEY_SNAPSHOTS_SECOURS)) || []; } catch (e) {}
+    if (liste.length === 0) {
+        cont.innerHTML = `<em style="color:#7f8c8d; font-size:12.5px;">Aucune copie automatique enregistrée pour le moment.</em>`;
+        return;
+    }
+    cont.innerHTML = liste.map((s, idx) => `
+        <div style="display:flex; justify-content:space-between; align-items:center; background:#fff; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:12.5px; flex-wrap:wrap; gap:8px;">
+            <span>🕒 <strong>${escHTML(s.dateFR)}</strong> — <strong>${s.nbBase}</strong> éléments (dont <strong>${s.nbLecons || 0}</strong> 👩‍🏫 leçons) & <strong>${s.nbEleves}</strong> élèves</span>
+            <div style="display:flex; gap:6px;">
+                <button type="button" class="btn-action" style="padding:3px 8px; font-size:11.5px;" onclick="restaurerSnapshotSecours(${idx}, true)" title="Récupère uniquement les éléments manquants de cette copie sans rien effacer">➕ Fusionner les manquants</button>
+                <button type="button" class="filter-btn" style="padding:3px 8px; font-size:11.5px;" onclick="restaurerSnapshotSecours(${idx}, false)" title="Remplace toute la base par cette copie">↩️ Restaurer cet état</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function restaurerSnapshotSecours(idx, modeFusion = true) {
+    let liste = JSON.parse(localStorage.getItem(KEY_SNAPSHOTS_SECOURS)) || [];
+    let snap = liste[idx];
+    if (!snap || !snap.payload) return;
+    if (modeFusion) {
+        let ajoutes = fusionnerTableauBaseSansPerte(snap.payload.base || []);
+        sauvegarderBase();
+        rafraichirToutApresImport();
+        showToast(`✅ ${ajoutes} élément(s) manquant(s) récupéré(s) depuis la copie du ${snap.dateFR} !`, "success");
+    } else if (confirm(`Restaurer intégralement la copie du ${snap.dateFR} (${snap.nbBase} éléments) ?`)) {
+        importerDonneesUniversel(snap.payload, false);
+    }
+}
+
+// Fusionne un tableau d'activités/leçons externe dans baseDonnees SANS JAMAIS supprimer ce qui est déjà présent en local
+function signatureUniqueActivite(a) {
+    if (!a) return "";
+    return `${(a.niveau || "").trim().toUpperCase()}||${(a.matiere || "").trim().toLowerCase()}||${(a.sequence || "").trim().toLowerCase()}||${(a.lecon || "").trim().toLowerCase()}||${(a.ressource || "").trim().toLowerCase()}||${Boolean(a.estLecon)}`;
+}
+
+function fusionnerTableauBaseSansPerte(tableauExterne) {
+    if (!Array.isArray(tableauExterne)) return 0;
+    let idsConnus = new Set(baseDonnees.map(b => b && b.id).filter(Boolean));
+    let sigsConnues = new Set(baseDonnees.map(b => signatureUniqueActivite(b)).filter(Boolean));
+    let nbAjoutes = 0;
+
+    tableauExterne.forEach(item => {
+        if (!item) return;
+        let sig = signatureUniqueActivite(item);
+        if (!idsConnus.has(item.id) && !sigsConnues.has(sig)) {
+            baseDonnees.push(item);
+            idsConnus.add(item.id);
+            sigsConnues.add(sig);
+            nbAjoutes++;
+        }
+    });
+    return nbAjoutes;
+}
+
+// Nettoyage récursif profond de toutes les clés d'objet avant envoi à Firebase (évite toute erreur HTTP 400 si une clé contient . $ # [ ] /)
+function nettoyerArbrePourFirebase(val) {
+    if (Array.isArray(val)) {
+        return val.map(v => nettoyerArbrePourFirebase(v));
+    }
+    if (val && typeof val === 'object') {
+        let propre = {};
+        Object.keys(val).forEach(k => {
+            let kSafe = k.toString().replace(/[.$#[\]\/]/g, "_") || "_vide_";
+            propre[kSafe] = nettoyerArbrePourFirebase(val[k]);
+        });
+        return propre;
+    }
+    return val;
+}
+
+function construirePayloadComplet() {
+    Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
+    if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
+    return {
+        base: baseDonnees,
+        eleves: eleves,
+        images: imagesParType,
+        archives: dashboardArchives,
+        programmations: programmations,
+        sequencesCustom: sequencesCustom,
+        planningLeconsProf: planningLeconsProf,
+        progPeriodesData: progPeriodesData,
+        printConfig: printConfig,
+        theme: localStorage.getItem(KEY_THEME) || 'pastel',
+        updatedAt: localStorage.getItem(KEY_LOCAL_UPDATED_AT) || new Date().toISOString()
+    };
+}
+
 function parseSiString(val) {
     if (typeof val === 'string') {
         try { return JSON.parse(val); } catch (e) { return val; }
@@ -555,7 +731,7 @@ function parseSiString(val) {
     return val;
 }
 
-function importerDonneesUniversel(rawData) {
+function importerDonneesUniversel(rawData, modeFusionSansPerte = false) {
     if (!rawData) { showToast("Aucune donnée trouvée.", "error"); return false; }
     let data = parseSiString(rawData);
     if (data.classe_data && typeof data.classe_data === 'object') data = data.classe_data;
@@ -575,14 +751,30 @@ function importerDonneesUniversel(rawData) {
         return false;
     }
 
-    if (Array.isArray(nouvBase)) { baseDonnees = nouvBase; localStorage.setItem(KEY_ATELIERS, JSON.stringify(baseDonnees)); }
+    // Avant tout remplacement, on crée un snapshot de secours de ce qui était présent en local
+    enregistrerSnapshotSecoursAuto(true);
+
+    if (Array.isArray(nouvBase)) {
+        if (modeFusionSansPerte && baseDonnees.length > 0) {
+            fusionnerTableauBaseSansPerte(nouvBase);
+        } else {
+            baseDonnees = nouvBase;
+        }
+        localStorage.setItem(KEY_ATELIERS, JSON.stringify(baseDonnees));
+    }
     if (nouvEleves && typeof nouvEleves === 'object') {
-        eleves = nouvEleves;
+        if (modeFusionSansPerte && Object.keys(eleves).length > 0) {
+            Object.keys(nouvEleves).forEach(idEl => {
+                if (!eleves[idEl]) eleves[idEl] = nouvEleves[idEl];
+            });
+        } else {
+            eleves = nouvEleves;
+        }
         Object.values(eleves).forEach(el => assurerStructureSemaines(el));
         localStorage.setItem(KEY_ELEVES, JSON.stringify(eleves));
     }
     if (nouvImages && typeof nouvImages === 'object') {
-        imagesParType = nouvImages;
+        imagesParType = { ...imagesParType, ...nouvImages };
         if (!imagesParType["Leçon"]) {
             imagesParType["Leçon"] = { img: "", emoji: "👩‍🏫", remplacerNum: true, appliquerCouleur: false, isTablette: false };
         }
@@ -593,21 +785,48 @@ function importerDonneesUniversel(rawData) {
         });
         localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
     }
-    if (nouvProg && typeof nouvProg === 'object') { programmations = nouvProg; localStorage.setItem(KEY_PROG, JSON.stringify(programmations)); }
+    if (nouvProg && typeof nouvProg === 'object') {
+        programmations = modeFusionSansPerte ? { ...nouvProg, ...programmations } : nouvProg;
+        localStorage.setItem(KEY_PROG, JSON.stringify(programmations));
+    }
     if (Array.isArray(nouvArchives)) { dashboardArchives = nouvArchives; localStorage.setItem(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); }
     if (nouvPrintCfg && typeof nouvPrintCfg === 'object') { printConfig = { ...printConfig, ...nouvPrintCfg }; localStorage.setItem(KEY_PRINT_CFG, JSON.stringify(printConfig)); }
-    if (Array.isArray(nouvSeqCustom)) { sequencesCustom = nouvSeqCustom; localStorage.setItem(KEY_SEQ_CUSTOM, JSON.stringify(sequencesCustom)); }
-    if (nouvLeconsProf && typeof nouvLeconsProf === 'object') { planningLeconsProf = nouvLeconsProf; localStorage.setItem(KEY_LECONS_PROF, JSON.stringify(planningLeconsProf)); }
-    if (nouvProgHebdo && typeof nouvProgHebdo === 'object') { progPeriodesData = nouvProgHebdo; localStorage.setItem(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData)); }
-    if (data.theme) appliquerThemeVisuel(data.theme);
+    if (Array.isArray(nouvSeqCustom)) {
+        sequencesCustom = [...new Set([...sequencesCustom, ...nouvSeqCustom])];
+        localStorage.setItem(KEY_SEQ_CUSTOM, JSON.stringify(sequencesCustom));
+    }
+    if (nouvLeconsProf && typeof nouvLeconsProf === 'object' && !modeFusionSansPerte) { planningLeconsProf = nouvLeconsProf; localStorage.setItem(KEY_LECONS_PROF, JSON.stringify(planningLeconsProf)); }
+    if (nouvProgHebdo && typeof nouvProgHebdo === 'object' && (!modeFusionSansPerte || !progPeriodesData)) { progPeriodesData = nouvProgHebdo; localStorage.setItem(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData)); }
+    if (data.theme && !modeFusionSansPerte) appliquerThemeVisuel(data.theme);
 
+    marquerModificationLocale();
     rafraichirToutApresImport();
-    showToast(`✅ Restauration réussie (${baseDonnees.length} éléments, ${Object.keys(eleves).length} élèves) !`, "success");
+    showToast(`✅ Données chargées (${baseDonnees.length} éléments, ${Object.keys(eleves).length} élèves) !`, "success");
     return true;
 }
 
+// Met à jour automatiquement les activités de Français CP qui avaient l'ancien violet (#d5a6bd) vers le nouveau Vert clair (#c8e6c9)
+function migrerCouleurFrancaisCPVertClair() {
+    let modifie = false;
+    baseDonnees.forEach(a => {
+        if (!a) return;
+        let nivs = (a.niveau || "").toUpperCase();
+        if (nivs.includes("CP") && a.visuel && a.visuel.toLowerCase() === "#d5a6bd") {
+            let nouvCoul = calculerCouleurAutomatique(a.matiere, a.niveau, a.typeRes);
+            if (nouvCoul === COULEUR_FRANCAIS_CP_VERT_CLAIR) {
+                a.visuel = COULEUR_FRANCAIS_CP_VERT_CLAIR;
+                modifie = true;
+            }
+        }
+    });
+    if (modifie) {
+        localStorage.setItem(KEY_ATELIERS, JSON.stringify(baseDonnees));
+    }
+}
+
 function rafraichirToutApresImport() {
-    assurerStructureProgPeriodes();
+    if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
+    migrerCouleurFrancaisCPVertClair();
     eliminerDoublonsHistoriques();
     trierBaseDonnees();
     majListeTypesSelect();
@@ -621,6 +840,7 @@ function rafraichirToutApresImport() {
     afficherChoixEtiquettes();
     majSelectCouleursRapides();
     calculTailleStockage();
+    afficherListeSnapshotsSecoursUI();
     rafraichirDashboard();
     if (idEleveCourant && eleves[idEleveCourant]) chargerEleve();
 }
@@ -632,7 +852,7 @@ function restaurerFichierJSON(event) {
     let lecteur = new FileReader();
     lecteur.onload = function(e) {
         try {
-            importerDonneesUniversel(JSON.parse(e.target.result));
+            importerDonneesUniversel(JSON.parse(e.target.result), false);
         } catch (err) {
             showToast("Erreur : ce fichier n'est pas un JSON valide.", "error");
         }
@@ -662,16 +882,15 @@ function restaurerDepuisTexteColle() {
     }
     try {
         let parsed = typeof txt === 'string' ? JSON.parse(txt) : txt;
-        if (importerDonneesUniversel(parsed)) zone.value = "";
+        if (importerDonneesUniversel(parsed, false)) zone.value = "";
     } catch (err) {
         showToast("Le texte collé n'est pas un JSON valide.", "error");
     }
 }
 
 function exporterSauvegardeJSON() {
-    Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
-    assurerStructureProgPeriodes();
-    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, sequencesCustom: sequencesCustom, planningLeconsProf: planningLeconsProf, progPeriodesData: progPeriodesData, printConfig: printConfig, theme: localStorage.getItem(KEY_THEME) || 'pastel', exportedAt: new Date().toISOString() };
+    const payload = construirePayloadComplet();
+    payload.exportedAt = new Date().toISOString();
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -689,28 +908,58 @@ function viderCacheApplication() {
     setTimeout(() => location.reload(true), 800);
 }
 
-let timerFirebaseSave;
+let timerFirebaseSave = null;
+let sauvegardeFirebaseEnAttente = false;
 const URL_FIREBASE_FIXE = "https://gestionclasse-cc401-default-rtdb.europe-west1.firebasedatabase.app";
 
-async function sauvegarderVersFirebase(forcerManuellement = false) {
+function majBadgeSecuriteUI(texte, couleurBg, couleurTexte) {
+    let b = document.getElementById('badgeSecuriteBase');
+    if (b) {
+        b.innerText = texte;
+        b.style.background = couleurBg;
+        b.style.color = couleurTexte;
+    }
+}
+
+async function sauvegarderVersFirebase(forcerManuellement = false, keepaliveMode = false) {
     if (!forcerManuellement && baseDonnees.length === 0 && Object.keys(eleves).length === 0) return;
-    Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
-    assurerStructureProgPeriodes();
-    const payload = { base: baseDonnees, eleves: eleves, images: imagesParType, archives: dashboardArchives, programmations: programmations, sequencesCustom: sequencesCustom, planningLeconsProf: planningLeconsProf, progPeriodesData: progPeriodesData, printConfig: printConfig, theme: localStorage.getItem(KEY_THEME) || 'pastel', updatedAt: new Date().toISOString() };
+    sauvegardeFirebaseEnAttente = false;
+    majBadgeSecuriteUI("⏳ Synchro Cloud en cours...", "#fef9e7", "#7d6608");
+
+    const rawPayload = construirePayloadComplet();
+    const safePayload = nettoyerArbrePourFirebase(rawPayload);
+
     try {
-        let res = await fetch(`${URL_FIREBASE_FIXE}/classe_data.json`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        let res = await fetch(`${URL_FIREBASE_FIXE}/classe_data.json`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(safePayload),
+            keepalive: keepaliveMode
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        let heure = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
         let statut = document.getElementById('statutFirebase');
-        if (statut) { statut.innerText = `🔥 Synchro Cloud OK (${new Date().toLocaleTimeString()} — ${baseDonnees.length} éléments, ${Object.keys(eleves).length} élèves)`; statut.style.color = "#27ae60"; }
-        if (forcerManuellement) showToast("⬆️ Données envoyées sur Firebase !", "success");
+        if (statut) {
+            statut.innerText = `🔥 Synchro Cloud OK à ${heure} (${baseDonnees.length} éléments, ${Object.keys(eleves).length} élèves)`;
+            statut.style.color = "#27ae60";
+        }
+        majBadgeSecuriteUI(`🛡️ Sauvegardé (Local + Cloud ${heure})`, "#e8f8f5", "#117864");
+        if (forcerManuellement) showToast("⬆️ Données envoyées et sécurisées sur Firebase !", "success");
     } catch (e) {
+        let statut = document.getElementById('statutFirebase');
+        if (statut) {
+            statut.innerText = `⚠️ Sauvegardé sur l'appareil (Cloud hors-ligne : ${e.message})`;
+            statut.style.color = "#e67e22";
+        }
+        majBadgeSecuriteUI("🛡️ Sauvegardé sur l'appareil (Hors-ligne)", "#fef9e7", "#d35400");
         if (forcerManuellement) showToast("Erreur Firebase : " + e.message, "error");
     }
 }
 
-async function chargerDepuisFirebase(forcer = false) {
+// Synchronisation Cloud intelligente SANS PERTE : ne remplace jamais une base locale plus récente ou plus complète !
+async function chargerDepuisFirebase(forcerFusionManuelle = false) {
     let statut = document.getElementById('statutFirebase');
-    if (statut) { statut.innerText = "⏳ Recherche des données sur Firebase..."; statut.style.color = "#f39c12"; }
+    if (statut) { statut.innerText = "⏳ Vérification et synchronisation intelligente avec Firebase..."; statut.style.color = "#f39c12"; }
     try {
         let res = await fetch(`${URL_FIREBASE_FIXE}/classe_data.json`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -720,16 +969,35 @@ async function chargerDepuisFirebase(forcer = false) {
 
         if (data && (nbBaseCloud > 0 || nbElevesCloud > 0)) {
             let localEstVide = (baseDonnees.length === 0 && Object.keys(eleves).length === 0);
-            if (forcer || localEstVide || confirm(`Cloud Firebase trouvé (${nbBaseCloud} éléments, ${nbElevesCloud} élèves). Charger ces données ?`)) {
-                importerDonneesUniversel(data);
+
+            if (localEstVide) {
+                importerDonneesUniversel(data, false);
+            } else {
+                // Fusion sans perte : on récupère tout élément présent sur le Cloud qui manquerait en local,
+                // ET on conserve 100 % des leçons/activités créées en local !
+                let nbRecupDuCloud = fusionnerTableauBaseSansPerte(data.base || []);
+                if (nbRecupDuCloud > 0) {
+                    localStorage.setItem(KEY_ATELIERS, JSON.stringify(baseDonnees));
+                    rafraichirToutApresImport();
+                    showToast(`🔄 ${nbRecupDuCloud} élément(s) récupéré(s) du Cloud et fusionné(s) sans perte !`, "success");
+                } else if (forcerFusionManuelle) {
+                    importerDonneesUniversel(data, true);
+                }
+                // Si la base locale contient plus d'éléments ou des nouveautés, on met immédiatement le Cloud à jour
+                if (baseDonnees.length >= nbBaseCloud) {
+                    sauvegarderVersFirebase(false);
+                }
             }
-            if (statut) { statut.innerText = `🔥 Cloud Firebase connecté (${nbBaseCloud} éléments, ${nbElevesCloud} élèves)`; statut.style.color = "#27ae60"; }
+            if (statut) {
+                statut.innerText = `🔥 Cloud Firebase synchronisé sans perte (${baseDonnees.length} éléments, ${Object.keys(eleves).length} élèves)`;
+                statut.style.color = "#27ae60";
+            }
         } else {
             if (statut) { statut.innerText = "ℹ️ Cloud prêt. Vos données locales sont conservées."; statut.style.color = "#2980b9"; }
             if (baseDonnees.length > 0 || Object.keys(eleves).length > 0) sauvegarderVersFirebase(false);
         }
     } catch (e) {
-        if (statut) { statut.innerText = "⚠️ Erreur de connexion Firebase : " + e.message; statut.style.color = "#e74c3c"; }
+        if (statut) { statut.innerText = "⚠️ Mode hors-ligne (vos données locales sont protégées) : " + e.message; statut.style.color = "#e67e22"; }
     }
 }
 
@@ -739,22 +1007,45 @@ async function inspecterToutesBranchesFirebase() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         let rootData = await res.json();
         if (!rootData) { showToast("La base Firebase est vide.", "error"); return; }
-        if (importerDonneesUniversel(rootData)) return;
+        if (importerDonneesUniversel(rootData, true)) return;
         for (let cle of Object.keys(rootData)) {
-            if (rootData[cle] && typeof rootData[cle] === 'object' && importerDonneesUniversel(rootData[cle])) return;
+            if (rootData[cle] && typeof rootData[cle] === 'object' && importerDonneesUniversel(rootData[cle], true)) return;
         }
         showToast("Aucune sauvegarde exploitable trouvée.", "error");
     } catch (e) { showToast("Erreur : " + e.message, "error"); }
 }
 
+// Délai réduit à 300ms + envoi forcé immédiat si on quitte ou recharge la page !
 function declencherAutoSaveFirebase() {
+    sauvegardeFirebaseEnAttente = true;
     clearTimeout(timerFirebaseSave);
-    timerFirebaseSave = setTimeout(() => sauvegarderVersFirebase(false), 1800);
+    timerFirebaseSave = setTimeout(() => sauvegarderVersFirebase(false, false), 300);
 }
-function tenterConnexionAutoFirebase() { chargerDepuisFirebase(false); }
+
+window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && sauvegardeFirebaseEnAttente) {
+        clearTimeout(timerFirebaseSave);
+        sauvegarderVersFirebase(false, true);
+    }
+});
+
+window.addEventListener('beforeunload', () => {
+    if (sauvegardeFirebaseEnAttente) {
+        clearTimeout(timerFirebaseSave);
+        sauvegarderVersFirebase(false, true);
+    }
+});
+
+let connexionInitialeFirebaseFaite = false;
+function tenterConnexionAutoFirebase() {
+    if (connexionInitialeFirebaseFaite) return;
+    connexionInitialeFirebaseFaite = true;
+    verifierSecoursIndexedDBAuDemarrage();
+    chargerDepuisFirebase(false);
+}
 
 // ==========================================
-// 3. UTILITAIRES, TRI FIXE & COULEURS AUTO
+// 3. UTILITAIRES, TRI FIXE & COULEURS AUTO (FRANÇAIS CP EN VERT CLAIR)
 // ==========================================
 function nettoyerNomPourTri(str) { return (!str) ? "" : str.replace(/^[^a-zA-ZÀ-ÿ0-9]+/, "").trim().toLowerCase(); }
 function formaterEtoiles(nb) { let n = parseInt(nb) || 0; return n <= 0 ? "" : `<span style="color:#f39c12; font-size:12px; margin-right:4px;" title="Difficulté : ${n} étoile(s)">${"⭐".repeat(n)}</span>`; }
@@ -793,7 +1084,7 @@ function getNiveauxCochesFormulaire(classe = '.cb-niveau-form') {
 
 function majSelectCouleursRapides(valeurForcee) {
     const select = document.getElementById('selectCouleurRapide'); if (!select) return;
-    select.innerHTML = '<option value="">-- Couleur auto par matière/niveau --</option><option value="#ffe599">🟡 Jaune (Maths CP)</option><option value="#f6b26b">🟠 Orange (Maths CE)</option><option value="#ea9999">🔴 Rouge (Maths CM)</option><option value="#d5a6bd">🟣 Violet (Français CP)</option><option value="#b6d7a8">🟢 Vert (Français CE)</option><option value="#9fc5e8">🔵 Bleu (Français CM)</option><option value="#ffffff">⚪ Blanc</option>';
+    select.innerHTML = `<option value="">-- Couleur auto par matière/niveau --</option><option value="#ffe599">🟡 Jaune (Maths CP)</option><option value="#f6b26b">🟠 Orange (Maths CE)</option><option value="#ea9999">🔴 Rouge (Maths CM)</option><option value="${COULEUR_FRANCAIS_CP_VERT_CLAIR}">🟢 Vert clair (Français CP)</option><option value="#b6d7a8">🟢 Vert tendre (Français CE)</option><option value="#9fc5e8">🔵 Bleu (Français CM)</option><option value="#d5a6bd">🟣 Violet</option><option value="#ffffff">⚪ Blanc</option>`;
     if (valeurForcee) select.value = valeurForcee;
 }
 
@@ -820,7 +1111,6 @@ function majListeTypesSelect() {
     if (selectTypeEtiq) selectTypeEtiq.innerHTML = htmlEtiq;
     if (bulkType) bulkType.innerHTML = htmlBulk;
 
-    // Met aussi à jour les selects .m-type éventuellement ouverts en saisie multiple
     document.querySelectorAll('#tbodySaisieMultiple .m-type').forEach(sel => {
         let cur = sel.value;
         sel.innerHTML = `<option value="">-- Support * --</option>` + Object.keys(imagesParType || {}).map(t => `<option value="${escHTML(t)}">${escHTML(((imagesParType[t] && imagesParType[t].emoji) ? imagesParType[t].emoji + ' ' : '') + t)}</option>`).join('');
@@ -891,6 +1181,7 @@ function formaterLienImage(url) {
     return fileId ? `https://lh3.googleusercontent.com/d/${fileId}` : url;
 }
 
+// Couleur automatique : Français CP est désormais Vert clair (#c8e6c9) !
 function calculerCouleurAutomatique(matiere, niveauxStr, typeRes) {
     if (!matiere || !niveauxStr) return "#ffffff";
     let typeKey = "";
@@ -899,12 +1190,12 @@ function calculerCouleurAutomatique(matiere, niveauxStr, typeRes) {
     let mat = matiere.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""), nivs = niveauxStr.toUpperCase();
     let ordreNivs = ["CP", "CE1", "CE2", "CM1", "CM2"], niveauPlusBas = "";
     for (let n of ordreNivs) { if (nivs.includes(n)) { niveauPlusBas = n; break; } }
-    if (mat.includes('math') || mat.includes('numeration') || mat.includes('geometrie') || mat.includes('mesure') || mat.includes('algebre') || mat.includes('calcul')) {
+    if (mat.includes('math') || mat.includes('numeration') || mat.includes('geometrie') || mat.includes('mesure') || mat.includes('algebre') || mat.includes('calcul') || mat.includes('proportionnalite') || mat.includes('programmation') || mat.includes('probleme')) {
         if (niveauPlusBas === 'CP') return "#ffe599";
         if (niveauPlusBas === 'CE1' || niveauPlusBas === 'CE2') return "#f6b26b";
         if (niveauPlusBas === 'CM1' || niveauPlusBas === 'CM2') return "#ea9999";
-    } else if (mat.includes('francais') || mat.includes('grammaire') || mat.includes('orthographe') || mat.includes('conjugaison') || mat.includes('vocabulaire') || mat.includes('lexique') || mat.includes('ecriture')) {
-        if (niveauPlusBas === 'CP') return "#d5a6bd";
+    } else if (mat.includes('francais') || mat.includes('grammaire') || mat.includes('orthographe') || mat.includes('conjugaison') || mat.includes('vocabulaire') || mat.includes('lexique') || mat.includes('ecriture') || mat.includes('lecture') || mat.includes('phonologie')) {
+        if (niveauPlusBas === 'CP') return COULEUR_FRANCAIS_CP_VERT_CLAIR;
         if (niveauPlusBas === 'CE1' || niveauPlusBas === 'CE2') return "#b6d7a8";
         if (niveauPlusBas === 'CM1' || niveauPlusBas === 'CM2') return "#9fc5e8";
     }
@@ -930,8 +1221,6 @@ function calculTailleStockage() {
     let jauge = document.getElementById('jaugeStockageFill');
     if (jauge) { jauge.style.width = pct + "%"; jauge.style.backgroundColor = pct > 80 ? "#e74c3c" : (pct > 50 ? "#f39c12" : "#27ae60"); }
 }
-
-
 // ==========================================
 // 3B. CORRECTIF SAUVEGARDE PROGRAMMATION ANNUELLE, ARCHITECTURE PÉRIODES & DÉCALAGE DYNAMIQUE
 // ==========================================
@@ -939,7 +1228,6 @@ const GROUPES_NIVEAUX_PROF = ["CP", "CE1", "CE2", "CM1", "CM2"];
 const OPTIONS_NIVEAUX_PROF_SELECT = ["CP", "CE1", "CE2", "CM1", "CM2", "CM1-CM2"];
 const NB_SLOTS_PASSAGES_PROF = 5;
 
-// Nettoyage des clés pour éviter tout blocage Firebase Realtime Database (interdit ., $, #, [, ], /)
 function nettoyerCleFirebase(str) {
     return (str || "").toString().trim().replace(/[.$#[\]\/]/g, "_");
 }
@@ -983,6 +1271,7 @@ function nettoyerObjetClesFirebase(obj) {
 sauvegarderProgrammations = function() {
     programmations = nettoyerObjetClesFirebase(programmations);
     localStorage.setItem(KEY_PROG, JSON.stringify(programmations));
+    marquerModificationLocale();
     declencherAutoSaveFirebase();
 };
 
@@ -1533,7 +1822,6 @@ function majListeEleves() {
     }
 }
 
-// Augmentation du quota maximum d'ateliers à 100 par semaine
 function modifierMaxAteliersEleve() {
     if (!idEleveCourant) return;
     let inp = document.getElementById('inputMaxAteliersEleve');
@@ -2363,7 +2651,6 @@ function desarchiverActivite(idActivite, seqSpecifique = "") {
     }
 }
 
-// Génère les lignes HTML d'une sous-partie du Plan de travail (Français ou Mathématiques) dans l'Onglet 1
 function genererLignesTableauPlanSuiviHtml(listeItems, eleve) {
     if (listeItems.length === 0) {
         return `<tr><td colspan="9" style="text-align:center; color:#7f8c8d; padding:14px;">Aucune activité dans ce pôle.</td></tr>`;
@@ -2593,6 +2880,7 @@ function modifierTaillePoliceImpression(delta, valeurDirecte = null) {
 
     appliquerStyleTaillePoliceImpression(nouvelle);
     localStorage.setItem(KEY_PRINT_CFG, JSON.stringify(printConfig));
+    marquerModificationLocale();
     declencherAutoSaveFirebase();
     rafraichirFicheImpression();
 }
@@ -2615,24 +2903,8 @@ function chargerConfigImpressionUI() {
         selFmt.value = '3PAGES';
     }
 
-    if (selFmt && !document.getElementById('blocControleTaillePoliceImp')) {
-        let labelFmt = selFmt.closest('label') || selFmt.parentElement;
-        let spanCtrl = document.createElement('div');
-        spanCtrl.id = 'blocControleTaillePoliceImp';
-        spanCtrl.style.cssText = 'display:inline-flex; align-items:center; gap:4px; background:#f8fbff; padding:4px 8px; border-radius:6px; border:1px solid #aed6f1;';
-        spanCtrl.innerHTML = `
-            <strong style="font-size:13px; color:#1b4f72;">🔤 Police :</strong>
-            <button type="button" class="filter-btn" style="padding:2px 7px; font-weight:bold;" onclick="modifierTaillePoliceImpression(-0.5)" title="Réduire la police">➖</button>
-            <input type="number" id="printInputTaillePolice" min="6" max="22" step="0.5" value="${parseFloat(printConfig.taillePolice) || 11}" onchange="modifierTaillePoliceImpression(0, this.value)" style="width:58px; text-align:center; font-weight:bold; padding:3px 4px;">
-            <span style="font-size:12px; color:#555;">px</span>
-            <button type="button" class="filter-btn" style="padding:2px 7px; font-weight:bold;" onclick="modifierTaillePoliceImpression(0.5)" title="Agrandir la police">➕</button>
-            <button type="button" class="filter-btn" style="padding:2px 6px; font-size:11px;" onclick="modifierTaillePoliceImpression(0, 11)" title="Remettre la taille par défaut (11 px)">11px</button>
-        `;
-        labelFmt.parentNode.insertBefore(spanCtrl, labelFmt.nextSibling);
-    } else {
-        let inpP = document.getElementById('printInputTaillePolice');
-        if (inpP) inpP.value = parseFloat(printConfig.taillePolice) || 11;
-    }
+    let inpP = document.getElementById('printInputTaillePolice');
+    if (inpP) inpP.value = parseFloat(printConfig.taillePolice) || 11;
 
     appliquerStyleTaillePoliceImpression(printConfig.taillePolice || 11);
 }
@@ -2652,6 +2924,7 @@ function sauvegarderConfigImpression() {
     };
     appliquerStyleTaillePoliceImpression(printConfig.taillePolice);
     localStorage.setItem(KEY_PRINT_CFG, JSON.stringify(printConfig));
+    marquerModificationLocale();
     declencherAutoSaveFirebase();
     rafraichirFicheImpression();
 }
@@ -2914,11 +3187,11 @@ function rafraichirFicheImpression() {
 }
 
 // ==========================================
-// 6. ONGLET 3 : TABLEAU DE BORD SYNCHRONISÉ AVEC LA PROGRAMMATION (P1..P5, SEMAINES, DÉCALAGE & PDF/PPT/GUIDE)
+// 6. ONGLET 3 : TABLEAU DE BORD SYNCHRONISÉ AVEC LA PROGRAMMATION (FRANÇAIS CP EN VERT CLAIR)
 // ==========================================
 function getStyleNiveauProf(pole, niv) {
     if (pole === 'francais') {
-        if (niv === 'CP') return { bg: '#d5a6bd', text: '#2c3e50' };
+        if (niv === 'CP') return { bg: COULEUR_FRANCAIS_CP_VERT_CLAIR, text: '#1b4332' };
         if (niv === 'CE1') return { bg: '#b6d7a8', text: '#1b4332' };
         if (niv === 'CE2') return { bg: '#a3e4d7', text: '#0e6251' };
         if (niv === 'CM1') return { bg: '#9fc5e8', text: '#154360' };
@@ -3296,8 +3569,8 @@ function rafraichirDashboard() {
     });
     cont.innerHTML = html + `</div>`;
 }
-// ==========================================
-// 7. ONGLET 4 : BASE DE DONNÉES, PAGE GUIDE ENSEIGNANT, TYPES CORRIGÉS & TAGS SANS AUTO-VALIDATION
+                        // ==========================================
+// 7. ONGLET 4 : BASE DE DONNÉES, PAGE GUIDE ENSEIGNANT, TYPES CORRIGÉS & SAUVEGARDE IMMÉDIATE ANTI-PERTE
 // ==========================================
 
 function renderTagsSequencesSimple() {
@@ -3637,7 +3910,7 @@ function gererCocheLeconLigneMulti(cbElem) {
 function ajouterLigneSaisieMultiple(nbLignes = 1) {
     const tbody = document.getElementById('tbodySaisieMultiple'); if (!tbody) return;
     let isCM = estCMSelectionneFormMulti();
-    let optsTypes = `<option value="">-- Support * --</option>` + Object.keys(imagesParType || {}).map(t => `<option value="escHTML(t)">{escHTML(((imagesParType[t] && imagesParType[t].emoji) ? imagesParType[t].emoji + ' ' : '') + t)}</option>`).join('');
+    let optsTypes = `<option value="">-- Support * --</option>` + Object.keys(imagesParType || {}).map(t => `<option value="${escHTML(t)}">${escHTML(((imagesParType[t] && imagesParType[t].emoji) ? imagesParType[t].emoji + ' ' : '') + t)}</option>`).join('');
 
     let premiereLigne = tbody.querySelector('.ligne-saisie-multi');
     let getValSiCoche = (champ) => {
@@ -3781,17 +4054,21 @@ function enregistrerSaisieMultiple() {
             programmations[getCleProgSequence(matiere, sq)] = periode;
         }
     });
-    sauvegarderProgrammations(); postEditGlobal(); rafraichirDashboard();
+    sauvegarderProgrammations();
+    postEditGlobal();
+    enregistrerSnapshotSecoursAuto(true);
+    sauvegarderVersFirebase(false);
+    rafraichirDashboard();
     document.getElementById('tbodySaisieMultiple').innerHTML = '';
     ajouterLigneSaisieMultiple(4);
-    showToast(`✅ ${nbAjoutes} élément(s) ajouté(s) d'un coup !`, "success");
+    showToast(`✅ ${nbAjoutes} élément(s) enregistré(s) et sécurisé(s) !`, "success");
 }
 
 function ouvrirModalGestionMatieres() { afficherListeMatieresModal(); ouvrirModal('modalMatieres'); }
 function afficherListeMatieresModal() {
     let mats = [...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
     let cont = document.getElementById('listeMatieresModalContainer'); if (!cont) return;
-    cont.innerHTML = mats.map(m => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;"><input type="text" class="input-rename-mat" data-old="escHTML(m)"value="{escHTML(m)}" style="flex:1;"><button type="button" class="btn-remove" style="padding:4px 8px;" onclick="supprimerMatiereModal('${escJS(m)}')">🗑️</button></div>`).join('');
+    cont.innerHTML = mats.map(m => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;"><input type="text" class="input-rename-mat" data-old="${escHTML(m)}" value="${escHTML(m)}" style="flex:1;"><button type="button" class="btn-remove" style="padding:4px 8px;" onclick="supprimerMatiereModal('${escJS(m)}')">🗑️</button></div>`).join('');
 }
 function sauvegarderToutesMatieres() {
     document.querySelectorAll('.input-rename-mat').forEach(inp => {
@@ -3805,7 +4082,7 @@ function supprimerMatiereModal(m) { if (confirm(`Supprimer toutes les activités
 function ouvrirModalGestionSequences() {
     let sel = document.getElementById('filtreMatiereModalSeq');
     let mats = ['Toutes', ...new Set([...MATIERES_DEFAUT_LISTE, ...baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean)])];
-    if (sel) sel.innerHTML = mats.map(m => `<option value="escHTML(m)">{escHTML(m)}</option>`).join('');
+    if (sel) sel.innerHTML = mats.map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
     afficherListeSequencesModal();
     ouvrirModal('modalSequences');
 }
@@ -3838,7 +4115,7 @@ function afficherBlocOrphelinsDansModal(orphelines) {
         </div>
     </div>` + orphelines.map(o => `
         <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12.5px; padding:5px 0; border-bottom:1px dashed #f39c12;">
-            <span style="flex:1;"><strong>[${escHTML(o.niveau)}]</strong> escHTML(o.matiere)—<strong>{escHTML(o.ressource)}</strong> <small style="color:#666;">(${escHTML(o.competence)})</small></span>
+            <span style="flex:1;"><strong>[${escHTML(o.niveau)}]</strong> ${escHTML(o.matiere)} — <strong>${escHTML(o.ressource)}</strong> <small style="color:#666;">(${escHTML(o.competence)})</small></span>
             <div style="display:flex; gap:4px; align-items:center;">
                 <input type="text" id="inp_orph_${o.id}" list="listeSequencesConnues" placeholder="Choisir ou écrire..." style="width:165px; padding:4px 6px; font-size:12px;">
                 <button type="button" class="btn-action" style="padding:4px 8px; font-size:12px;" onclick="reassignerActiviteSequence('${o.id}', document.getElementById('inp_orph_${o.id}').value)">OK</button>
@@ -3896,8 +4173,8 @@ function afficherListeSequencesModal() {
 
                 return `<div class="ligne-seq-modal" style="display:flex; gap:8px; align-items:center; margin-bottom:7px; padding-bottom:6px; border-bottom:1px solid #f1f5f9; flex-wrap:wrap;">
                     <span class="filter-btn" style="font-size:11px; padding:2px 6px; white-space:nowrap;">${escHTML(nivTxt)} • ${info.count} élém.</span>
-                    <input type="text" class="input-rename-seq" data-old="escHTML(s)"value="{escHTML(s)}" style="flex:1; min-width:170px;" title="Renommer cette séquence">
-                    <select class="select-matiere-seq" data-seq="escHTML(s)"data-old-mat="{escHTML(matUnique)}" style="width:240px; padding:5px; font-size:12px; background:#f8fbff; border:1px solid #2980b9; border-radius:5px; font-weight:600;" title="Changer la matière de tous les éléments de cette séquence">
+                    <input type="text" class="input-rename-seq" data-old="${escHTML(s)}" value="${escHTML(s)}" style="flex:1; min-width:170px;" title="Renommer cette séquence">
+                    <select class="select-matiere-seq" data-seq="${escHTML(s)}" data-old-mat="${escHTML(matUnique)}" style="width:240px; padding:5px; font-size:12px; background:#f8fbff; border:1px solid #2980b9; border-radius:5px; font-weight:600;" title="Changer la matière de tous les éléments de cette séquence">
                         ${optionsMatHtml}
                     </select>
                     <button type="button" class="btn-remove" style="padding:4px 8px;" title="Retirer cette séquence (les activités passeront en 'Sans séquence')" onclick="supprimerSequenceModal('${escJS(s)}')">🗑️</button>
@@ -3950,7 +4227,7 @@ function reassignerToutesOrphelinesModal() {
     if (!sequencesCustom.includes(nouvSeq)) sequencesCustom.push(nouvSeq);
     postEditGlobal();
     afficherListeSequencesModal();
-    showToast(`✅ countélément(s)réassigné(s)dans"{nouvSeq}" !`, "success");
+    showToast(`✅ ${count} élément(s) réassigné(s) dans "${nouvSeq}" !`, "success");
 }
 
 function sauvegarderToutesSequences() {
@@ -3992,7 +4269,7 @@ function sauvegarderToutesSequences() {
                 if (k.startsWith('SEQ||') && (k.endsWith('||' + oldV) || k.endsWith('||' + oldClean))) {
                     let parts = k.split('||');
                     if (newV) {
-                        programmations[`SEQ||parts[1]||{newClean}`] = programmations[k];
+                        programmations[`SEQ||${parts[1]}||${newClean}`] = programmations[k];
                     }
                     delete programmations[k];
                 }
@@ -4046,7 +4323,7 @@ function supprimerSequenceModal(s) {
 function ouvrirModalGestionCompetences() {
     let sel = document.getElementById('filtreMatiereModalComp');
     let mats = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))];
-    if (sel) sel.innerHTML = mats.map(m => `<option value="escHTML(m)">{escHTML(m)}</option>`).join('');
+    if (sel) sel.innerHTML = mats.map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
     afficherListeCompetencesModal(); ouvrirModal('modalCompetences');
 }
 function afficherListeCompetencesModal() {
@@ -4057,7 +4334,7 @@ function afficherListeCompetencesModal() {
     });
     let comps = [...new Set(toutesComps)].sort((a, b) => a.localeCompare(b, 'fr'));
     let cont = document.getElementById('listeCompetencesModalContainer'); if (!cont) return;
-    cont.innerHTML = comps.map(c => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;"><input type="text" class="input-rename-comp" data-old="escHTML(c)"value="{escHTML(c)}" style="flex:1;"></div>`).join('');
+    cont.innerHTML = comps.map(c => `<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;"><input type="text" class="input-rename-comp" data-old="${escHTML(c)}" value="${escHTML(c)}" style="flex:1;"></div>`).join('');
 }
 function sauvegarderToutesCompetences() {
     document.querySelectorAll('.input-rename-comp').forEach(inp => {
@@ -4121,6 +4398,7 @@ function sauvegarderTousLesTypes() {
         lireModificationsTypesEnCoursDansDOM();
     }
     localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
+    marquerModificationLocale();
     declencherAutoSaveFirebase();
     majListeTypesSelect();
     initNiveaux();
@@ -4153,6 +4431,7 @@ function ajouterOuModifierType(silencieux = false) {
     };
 
     localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
+    marquerModificationLocale();
     declencherAutoSaveFirebase();
     majListeTypesSelect();
     initNiveaux();
@@ -4174,6 +4453,7 @@ function supprimerTypeRessource(nom) {
     if (confirm(`Supprimer le type "${nom}" ?`)) {
         delete imagesParType[nom];
         localStorage.setItem(KEY_IMAGES, JSON.stringify(imagesParType));
+        marquerModificationLocale();
         majListeTypesSelect();
         initNiveaux();
         afficherListeTypesModal();
@@ -4183,7 +4463,14 @@ function supprimerTypeRessource(nom) {
 
 function changerCouleurDB(idAct, nouvCouleur) { let a = baseDonnees.find(b => b.id === idAct); if (a) { a.visuel = nouvCouleur; sauvegarderBase(); afficherBase(); } }
 function changerImageDB(idAct) { let a = baseDonnees.find(b => b.id === idAct); if (!a) return; let url = prompt("URL de l'image spécifique :", a.imageSpecifique || ""); if (url !== null) { a.imageSpecifique = url.trim(); sauvegarderBase(); afficherBase(); } }
-function viderBase() { if (confirm("⚠️ Vider l'intégralité de la base de données ?")) { baseDonnees = []; postEditGlobal(); showToast("Base de données vidée.", "success"); } }
+function viderBase() {
+    if (confirm("⚠️ Vider l'intégralité de la base de données ? (Une copie de secours sera automatiquement conservée dans l'Onglet 9)")) {
+        enregistrerSnapshotSecoursAuto(true);
+        baseDonnees = [];
+        postEditGlobal();
+        showToast("Base de données vidée (copie de secours disponible dans l'Onglet 9).", "success");
+    }
+}
 
 function enregistrerActiviteBase() {
     renderTagsSequencesSimple();
@@ -4236,12 +4523,12 @@ function enregistrerActiviteBase() {
         idEnCoursEdition = null;
         document.getElementById('btnAnnulerEditBase').style.display = 'none';
         document.getElementById('titreFormulaireBase').innerText = "➕ Ajouter ou modifier une activité / une leçon";
-        showToast("Élément modifié !", "success");
+        showToast("Élément modifié et sécurisé !", "success");
     } else {
         let newId = 'act_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
         baseDonnees.push({ id: newId, matiere, sequence, lecon, competence, ressource, typeRes, symbole, personnes, pageManuel, pageOrange, varianteJaune, pageProf, lienExterne, periode, difficulte, niveau: niveauStr, visuel: couleur, imageSpecifique: imgAct, estEvaluation: estEval, estLecon: estLecon });
         if (periode) programmations[newId] = periode;
-        showToast(estLecon ? "👩‍🏫 Nouvelle leçon enregistrée !" : "Nouvelle activité ajoutée !", "success");
+        showToast(estLecon ? "👩‍🏫 Nouvelle leçon enregistrée et sécurisée !" : "Nouvelle activité ajoutée et sécurisée !", "success");
     }
     extraireListeSequences(sequence).forEach(sq => {
         if (sq && !sequencesCustom.includes(sq)) sequencesCustom.push(sq);
@@ -4249,7 +4536,12 @@ function enregistrerActiviteBase() {
             programmations[getCleProgSequence(matiere, sq)] = periode;
         }
     });
-    sauvegarderProgrammations(); postEditGlobal(); rafraichirDashboard();
+    sauvegarderProgrammations();
+    postEditGlobal();
+    enregistrerSnapshotSecoursAuto(true);
+    sauvegarderVersFirebase(false);
+    rafraichirDashboard();
+
     document.getElementById('inputRessource').value = '';
     if (document.getElementById('inputSymbole')) document.getElementById('inputSymbole').value = '';
     document.getElementById('inputPageManuel').value = '';
@@ -4312,6 +4604,7 @@ function annulerEditionBase() {
 
 function supprimerActiviteBase(idAct) {
     if (confirm("Supprimer cet élément de la base de données ?")) {
+        enregistrerSnapshotSecoursAuto(true);
         baseDonnees = baseDonnees.filter(b => b.id !== idAct);
         selectionGroupeeBase.delete(idAct);
         postEditGlobal();
@@ -4415,19 +4708,22 @@ function appliquerModificationGroupeeBase() {
     document.getElementById('bulkSelectEtoiles').value = "";
     if (document.getElementById('bulkSelectRole')) document.getElementById('bulkSelectRole').value = "";
     if (document.getElementById('bulkInputPageProf')) document.getElementById('bulkInputPageProf').value = "";
-    document.getElementById('bulkInputPersonnes').value = "";
+    if (document.getElementById('bulkInputPersonnes').value) document.getElementById('bulkInputPersonnes').value = "";
 
     selectionGroupeeBase.clear();
     let cbAll = document.getElementById('cbToutCocherBase'); if (cbAll) cbAll.checked = false;
     majBarreActionGroupeeBase();
     sauvegarderProgrammations();
     postEditGlobal();
+    enregistrerSnapshotSecoursAuto(true);
+    sauvegarderVersFirebase(false);
     showToast(`✅ ${count} élément(s) modifié(s) en lot !`, "success");
 }
 
 function supprimerSelectionGroupeeBase() {
     if (selectionGroupeeBase.size === 0) return;
     if (confirm(`Supprimer définitivement les ${selectionGroupeeBase.size} élément(s) coché(s) ?`)) {
+        enregistrerSnapshotSecoursAuto(true);
         baseDonnees = baseDonnees.filter(a => !selectionGroupeeBase.has(a.id));
         selectionGroupeeBase.clear();
         let cbAll = document.getElementById('cbToutCocherBase'); if (cbAll) cbAll.checked = false;
@@ -4439,7 +4735,7 @@ function supprimerSelectionGroupeeBase() {
 
 function initNiveaux() {
     const barre = document.getElementById('barreFiltresNiveauxBase');
-    if (barre) barre.innerHTML = ['Tous', 'CP', 'CE1', 'CE2', 'CM1', 'CM2'].map(n => `<button type="button" class="filter-btn filtreCourantDB===n?'active':''"onclick="filtrerBaseNiveau('{n}')">${n}</button>`).join('');
+    if (barre) barre.innerHTML = ['Tous', 'CP', 'CE1', 'CE2', 'CM1', 'CM2'].map(n => `<button type="button" class="filter-btn ${filtreCourantDB === n ? 'active' : ''}" onclick="filtrerBaseNiveau('${n}')">${n}</button>`).join('');
     const selMat = document.getElementById('selectFiltreMatiereBase');
     if (selMat) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}" ${filtreCourantMatiere === m ? 'selected' : ''}>Matière : ${escHTML(m)}</option>`).join('');
     const selSeq = document.getElementById('selectFiltreSequenceBase');
@@ -4451,7 +4747,7 @@ function initNiveaux() {
         let seqsDispo = [...new Set(toutesSeqs.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
         let nbSansSeq = baseDonnees.filter(b => extraireListeSequences(b.sequence).length === 0).length;
         selSeq.innerHTML = `<option value="Toutes" ${filtreCourantSequenceDB === 'Toutes' ? 'selected' : ''}>Séquence : Toutes</option>`
-            + (nbSansSeq > 0 ? `<option value="SANS_SEQUENCE" filtreCourantSequenceDB==='SANSSEQUENCE'?'selected':''>⚠️Sansséquence({nbSansSeq})</option>` : '')
+            + (nbSansSeq > 0 ? `<option value="SANS_SEQUENCE" ${filtreCourantSequenceDB === 'SANS_SEQUENCE' ? 'selected' : ''}>⚠️ Sans séquence (${nbSansSeq})</option>` : '')
             + seqsDispo.map(s => `<option value="${escHTML(s)}" ${filtreCourantSequenceDB === s ? 'selected' : ''}>Séquence : ${escHTML(s)}</option>`).join('');
     }
     const selType = document.getElementById('selectFiltreTypeBase');
@@ -4498,10 +4794,10 @@ function afficherBase() {
             badgePages = `<span style="background:#fdebd0; color:#9c640c; padding:1px 5px; border-radius:4px; font-size:11px; border:1px solid #f39c12;">🟠 ${escHTML(a.pageOrange)}</span> `;
         }
         let badgeGuideProf = (a.pageProf && a.pageProf.trim()) ? `<span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ${escHTML(a.pageProf.trim())}</span> ` : '';
-        let detailsLivres = `badgePages{a.varianteJaune ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 5px; border-radius:4px; font-size:11px;">📒 ${escHTML(a.varianteJaune)}</span> ` : ''}${badgeGuideProf}`;
+        let detailsLivres = `${badgePages}${a.varianteJaune ? `<span style="background:#ffe599; color:#7c2d12; padding:1px 5px; border-radius:4px; font-size:11px;">📒 ${escHTML(a.varianteJaune)}</span> ` : ''}${badgeGuideProf}`;
         let labelBtnLien = isLecon ? "📽️ PDF/PPT ↗" : "🔗 Anton ↗";
         let badgeLien = (a.lienExterne && a.lienExterne.trim())
-            ? `<a href="escHTML(a.lienExterne.trim())"target="blank"rel="noopenernoreferrer"style="background:#f5eef8;color:#6c3483;padding:1px6px;border-radius:4px;font-size:11px;font-weight:bold;text-decoration:none;border:1pxsolid#d7bde2;"title="Ouvrirlelien">{labelBtnLien}</a> `
+            ? `<a href="${escHTML(a.lienExterne.trim())}" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir le lien">${labelBtnLien}</a> `
             : '';
         let badgeRoleHtml = isLecon
             ? ` <span class="badge-lecon-prof" title="Leçon explicite : visible uniquement dans votre Programmation et votre Tableau de bord enseignante">👩‍🏫 Leçon Prof</span>`
@@ -4515,20 +4811,20 @@ function afficherBase() {
             : `<span style="color:#e67e22; font-weight:bold; cursor:pointer;" onclick="ouvrirModalGestionSequences()" title="Cliquez pour réassigner">⚠️ Sans séquence</span>`;
 
         html += `<tr style="${isLecon ? 'background:#f4fbf9;' : ''}">
-            <td style="text-align:center;"><input type="checkbox" class="cb-select-base" value="${a.id}" isChecked?'checked':''onchange="toggleCheckActiviteBase('{a.id}', this.checked)" style="transform:scale(1.2); cursor:pointer;"></td>
+            <td style="text-align:center;"><input type="checkbox" class="cb-select-base" value="${a.id}" ${isChecked ? 'checked' : ''} onchange="toggleCheckActiviteBase('${a.id}', this.checked)" style="transform:scale(1.2); cursor:pointer;"></td>
             <td><strong>${escHTML(a.niveau)}</strong></td>
             <td><span class="filter-btn" style="padding:2px 6px; font-size:11px;">${escHTML(per)}</span></td>
-            <td><span style="display:inline-block; padding:2px 7px; border-radius:4px; background:coul.bg;color:{coul.text}; font-size:11.5px; font-weight:bold; margin-bottom:2px;">escHTML(a.matiere)</span><br>{seqHtml} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
+            <td><span style="display:inline-block; padding:2px 7px; border-radius:4px; background:${coul.bg}; color:${coul.text}; font-size:11.5px; font-weight:bold; margin-bottom:2px;">${escHTML(a.matiere)}</span><br>${seqHtml} ${a.lecon ? '('+escHTML(a.lecon)+')' : ''}</td>
             <td>${formaterAffichageCompetences(a.competence)}</td>
-            <td>isLecon?'':formaterEtoiles(a.difficulte)<strong>{escHTML(a.ressource)}</strong> detailsLivres{badgeLien}${badgeRoleHtml}</td>
+            <td>${isLecon ? '' : formaterEtoiles(a.difficulte)}<strong>${escHTML(a.ressource)}</strong> ${detailsLivres}${badgeLien}${badgeRoleHtml}</td>
             <td>${escHTML(a.typeRes || (isLecon ? 'Leçon' : ''))}</td>
             <td style="text-align:center;">${escHTML(a.personnes || '')}</td>
             <td style="text-align:center; background:${coulVisuel};">
                 ${rep.html}
                 <div style="margin-top:3px;">
-                    <input type="color" value="coulVisuel.startsWith('#')?coulVisuel:'#ffffff'"onchange="changerCouleurDB('{a.id}', this.value)" style="width:22px; height:18px; border:none; cursor:pointer; vertical-align:middle;">
-                    <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" onclick="changerImageDB('a.id')">{a.imageSpecifique ? '🖼️' : '➕🖼️'}</button>
-                    <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Ajouter ou modifier le lien direct (Anton / PDF / PowerPoint)" onclick="definirLienRapideDepuisDash('a.id')">{a.lienExterne ? '🔗' : '➕🔗'}</button>
+                    <input type="color" value="${coulVisuel.startsWith('#') ? coulVisuel : '#ffffff'}" onchange="changerCouleurDB('${a.id}', this.value)" style="width:22px; height:18px; border:none; cursor:pointer; vertical-align:middle;">
+                    <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" onclick="changerImageDB('${a.id}')">${a.imageSpecifique ? '🖼️' : '➕🖼️'}</button>
+                    <button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Ajouter ou modifier le lien direct (Anton / PDF / PowerPoint)" onclick="definirLienRapideDepuisDash('${a.id}')">${a.lienExterne ? '🔗' : '➕🔗'}</button>
                 </div>
             </td>
             <td>
@@ -4556,7 +4852,6 @@ function estActiviteDuPole(act, pole) {
         : (matNorm.includes('math') || matNorm.includes('numeration') || matNorm.includes('calcul') || matNorm.includes('geometrie') || matNorm.includes('mesure') || matNorm.includes('algebre') || matNorm.includes('proportionnalite') || matNorm.includes('programmation') || matNorm.includes('probleme'));
 }
 
-// Détecte tous les niveaux qui partagent une même séquence avec le niveau d'origine (ex: G1 partagée entre CM1 et CM2)
 function getNiveauxPartageantSequence(nomSeq, pole, nivOrigine) {
     let niveauxSet = new Set([nivOrigine]);
     if (!nomSeq || !nomSeq.trim()) return Array.from(niveauxSet);
@@ -4575,7 +4870,6 @@ function getNiveauxPartageantSequence(nomSeq, pole, nivOrigine) {
     return NIVEAUX_LISTE.filter(n => niveauxSet.has(n));
 }
 
-// Détecte tous les niveaux qui partagent une même leçon avec le niveau d'origine (ex: Leçon G1 commune aux CM1 et CM2)
 function getNiveauxPartageantLecon(pole, nivOrigine, texteLecon) {
     let nivClean = nivOrigine === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivOrigine) ? nivOrigine : "CP");
     let niveauxSet = new Set([nivClean]);
@@ -4590,7 +4884,7 @@ function getNiveauxPartageantLecon(pole, nivOrigine, texteLecon) {
 
         let prefix = a.lecon ? `${a.lecon.trim()} - `.toLowerCase() : "";
         let res = (a.ressource || "").trim().toLowerCase();
-        let labelComplet = (prefix && !res.startsWith(prefix)) ? `prefix{res}` : res;
+        let labelComplet = (prefix && !res.startsWith(prefix)) ? `${prefix}${res}` : res;
         let codeSeul = (a.lecon || "").trim().toLowerCase();
 
         if (txtNorm === labelComplet || txtNorm === res || (codeSeul !== "" && txtNorm === codeSeul)) {
@@ -4603,8 +4897,6 @@ function getNiveauxPartageantLecon(pole, nivOrigine, texteLecon) {
     return NIVEAUX_LISTE.filter(n => niveauxSet.has(n));
 }
 
-// Récupère EXCLUSIVEMENT les activités pré-enregistrées en tant que Leçon (👩‍🏫)
-// appartenant aux séquences sélectionnées pour la semaine (et au niveau / pôle)
 function getLeconsPreEnregistreesPourSequencesSemaine(pole, niveauGroupe, seqsSemaine = []) {
     if (!Array.isArray(seqsSemaine) || seqsSemaine.length === 0) return [];
     let nivCibles = niveauGroupe === "CM1-CM2" ? ["CM1", "CM2"] : (niveauGroupe ? [niveauGroupe] : ["CP", "CE1", "CE2", "CM1", "CM2"]);
@@ -4621,7 +4913,7 @@ function getLeconsPreEnregistreesPourSequencesSemaine(pole, niveauGroupe, seqsSe
         let prefix = a.lecon ? `${a.lecon.trim()} - ` : "";
         let titreBase = (a.ressource || a.competence || a.sequence || "Leçon").trim();
         let label = (prefix && !titreBase.toLowerCase().startsWith(prefix.toLowerCase()))
-            ? `prefix{titreBase}`
+            ? `${prefix}${titreBase}`
             : titreBase;
         if (!resMap.has(label)) {
             resMap.set(label, {
@@ -4653,7 +4945,7 @@ trouverInfosDepuisBaseLecon = function(pole, niveauGroupe, texteSaisi) {
 
         let prefix = a.lecon ? `${a.lecon.trim()} - `.toLowerCase() : "";
         let res = (a.ressource || "").trim().toLowerCase();
-        let labelComplet = (prefix && !res.startsWith(prefix)) ? `prefix{res}` : res;
+        let labelComplet = (prefix && !res.startsWith(prefix)) ? `${prefix}${res}` : res;
         let codeSeul = (a.lecon || "").trim().toLowerCase();
 
         return txtNorm === labelComplet || txtNorm === res || (codeSeul !== "" && txtNorm === codeSeul);
@@ -4667,7 +4959,6 @@ trouverInfosDepuisBaseLecon = function(pole, niveauGroupe, texteSaisi) {
     };
 };
 
-// Surcharge de majSlotLeconProf sur le Tableau de bord pour répercuter aussi la leçon sur tous les niveaux qui la partagent (ex: CM1 et CM2)
 majSlotLeconProf = function(pole, jour, slotIdx, champ, valeur) {
     assurerStructureProgPeriodes();
     let per = progPeriodesData.periodeActiveDash;
@@ -4737,7 +5028,7 @@ genererTableauLeconsPoleHtml = function(pole, titre, couleurBandeau, sem) {
             let bgCell = cell.fait ? "#d4efdf" : "#ffffff";
 
             let optionsNiv = `<option value="" ${!nivSlot ? 'selected' : ''}>-- Pause / Libre --</option>` +
-                OPTIONS_NIVEAUX_PROF_SELECT.map(n => `<option value="${n}" nivSlot===n?'selected':''>{n}</option>`).join('');
+                OPTIONS_NIVEAUX_PROF_SELECT.map(n => `<option value="${n}" ${nivSlot === n ? 'selected' : ''}>${n}</option>`).join('');
 
             let leconsDispo = getLeconsPreEnregistreesPourSequencesSemaine(pole, nivSlot, nomsSeqsSem);
             let valActuelle = (cell.texte || "").trim();
@@ -4749,7 +5040,7 @@ genererTableauLeconsPoleHtml = function(pole, titre, couleurBandeau, sem) {
                 optionsLeconsHtml = `<option value="">-- Aucune leçon 👩‍🏫 dans cette séquence --</option>`;
             } else {
                 optionsLeconsHtml = `<option value="">-- Choisir la leçon (${leconsDispo.length}) --</option>` +
-                    leconsDispo.map(l => `<option value="${escHTML(l.label)}" ${l.label === valActuelle ? 'selected' : ''}>👩‍🏫 escHTML(l.label){l.lien ? ' 📽️' : ''}</option>`).join('');
+                    leconsDispo.map(l => `<option value="${escHTML(l.label)}" ${l.label === valActuelle ? 'selected' : ''}>👩‍🏫 ${escHTML(l.label)}${l.lien ? ' 📽️' : ''}</option>`).join('');
             }
             if (valActuelle && !leconsDispo.some(l => l.label === valActuelle)) {
                 optionsLeconsHtml += `<option value="${escHTML(valActuelle)}" selected>👩‍🏫 ${escHTML(valActuelle)}</option>`;
@@ -4767,37 +5058,37 @@ genererTableauLeconsPoleHtml = function(pole, titre, couleurBandeau, sem) {
                 ? `<div style="display:flex; gap:3px; align-items:center; margin-top:4px; flex-wrap:wrap;">
                        ${badgeGuideHtml}
                        <a href="${escHTML(lienDoc)}" target="_blank" rel="noopener noreferrer" class="btn-action" style="flex:1; text-align:center; text-decoration:none; padding:2px 6px; font-size:11px; background:#8e44ad !important; color:#fff !important; border-radius:4px;" title="Ouvrir le diaporama (PDF / PowerPoint) à projeter">📽️ Projeter ↗</a>
-                       <button type="button" class="filter-btn" style="padding:2px 5px; font-size:10px;" title="Modifier le lien" onclick="definirLienSlotLeconProf('pole','{jour}', ${slotIdx})">✏️</button>
+                       <button type="button" class="filter-btn" style="padding:2px 5px; font-size:10px;" title="Modifier le lien" onclick="definirLienSlotLeconProf('${pole}', '${jour}', ${slotIdx})">✏️</button>
                    </div>`
                 : `<div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">
                        <span>${badgeGuideHtml}</span>
-                       <button type="button" class="filter-btn" style="padding:1px 5px; font-size:10px; opacity:0.8;" title="Ajouter un lien PDF ou PowerPoint à projeter" onclick="definirLienSlotLeconProf('pole','{jour}', ${slotIdx})">➕📎 PDF/PPT</button>
+                       <button type="button" class="filter-btn" style="padding:1px 5px; font-size:10px; opacity:0.8;" title="Ajouter un lien PDF ou PowerPoint à projeter" onclick="definirLienSlotLeconProf('${pole}', '${jour}', ${slotIdx})">➕📎 PDF/PPT</button>
                    </div>`;
 
             return `<td style="background:${bgCell}; padding:6px; vertical-align:top; border:1px solid #cbd5e1;">
                 <div class="no-print">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:3px;">
-                        <select onchange="majSlotLeconProf('pole','{jour}', slotIdx,'niveau',this.value)"style="background:{stNiv.bg}; color:${stNiv.text}; font-weight:bold; font-size:12px; padding:2px 6px; border-radius:5px; border:1px solid rgba(0,0,0,0.18); cursor:pointer;">
+                        <select onchange="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'niveau', this.value)" style="background:${stNiv.bg}; color:${stNiv.text}; font-weight:bold; font-size:12px; padding:2px 6px; border-radius:5px; border:1px solid rgba(0,0,0,0.18); cursor:pointer;">
                             ${optionsNiv}
                         </select>
                         <div style="display:flex; align-items:center; gap:2px;">
                             ${slotIdx > 0 ? `<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Monter ce groupe plus tôt" onclick="deplacerSlotLeconProf('${pole}', '${jour}', ${slotIdx}, -1)">▲</button>` : ''}
                             ${slotIdx < (NB_SLOTS_PASSAGES_PROF - 1) ? `<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Descendre ce groupe plus tard" onclick="deplacerSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 1)">▼</button>` : ''}
                             <label style="font-size:11px; font-weight:bold; color:${cell.fait ? '#1e8449' : '#7f8c8d'}; cursor:pointer; margin-left:3px; display:flex; align-items:center; gap:2px;" title="Cocher quand la leçon a été donnée">
-                                <input type="checkbox" cell.fait?'checked':''onchange="majSlotLeconProf('{pole}', '${jour}', ${slotIdx}, 'fait', this.checked)" style="cursor:pointer;">
+                                <input type="checkbox" ${cell.fait ? 'checked' : ''} onchange="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'fait', this.checked)" style="cursor:pointer;">
                                 ${cell.fait ? '✅' : ''}
                             </label>
                         </div>
                     </div>
                     ${rappelSeqHtml}
-                    <select onchange="majSlotLeconProf('pole','{jour}', slotIdx,'texte',this.value)"style="width:100%;padding:5px6px;font-size:12px;font-weight:{valActuelle ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:5px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;'}">
+                    <select onchange="majSlotLeconProf('${pole}', '${jour}', ${slotIdx}, 'texte', this.value)" style="width:100%; padding:5px 6px; font-size:12px; font-weight:${valActuelle ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:5px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;'}">
                         ${optionsLeconsHtml}
                     </select>
                     ${btnDocHtml}
                 </div>
 
                 <div class="only-print-lecons" style="text-align:center; padding:3px 2px;">
-                    ${nivSlot ? `<div style="display:inline-block; background:${stNiv.bg} !important; color:stNiv.text!important;font-weight:bold;font-size:11.5pt;padding:2px10px;border-radius:6px;border:1pxsolid#2c3e50;margin-bottom:4px;">{escHTML(nivSlot)}</div>` : ''}
+                    ${nivSlot ? `<div style="display:inline-block; background:${stNiv.bg} !important; color:${stNiv.text} !important; font-weight:bold; font-size:11.5pt; padding:2px 10px; border-radius:6px; border:1px solid #2c3e50; margin-bottom:4px;">${escHTML(nivSlot)}</div>` : ''}
                     <div id="print_txt_${pole}_${jour}_${slotIdx}" style="font-size:11pt; font-weight:bold; color:#1e293b; line-height:1.2; ${cell.fait ? 'text-decoration:line-through; opacity:0.6;' : ''}">
                         ${escHTML(cell.texte || '—')}
                     </div>
@@ -4807,7 +5098,7 @@ genererTableauLeconsPoleHtml = function(pole, titre, couleurBandeau, sem) {
 
         return `<tr>
             <td style="font-weight:bold; font-size:12.5px; text-align:center; background:#f1f5f9; color:#1e293b; width:88px;">
-                <span style="display:inline-block; background:couleurBandeau;color:#fff;border-radius:50%;width:22px;height:22px;line-height:22px;font-size:12px;margin-bottom:2px;">{slotIdx + 1}</span><br>
+                <span style="display:inline-block; background:${couleurBandeau}; color:#fff; border-radius:50%; width:22px; height:22px; line-height:22px; font-size:12px; margin-bottom:2px;">${slotIdx + 1}</span><br>
                 <small>${labelsOrdre[slotIdx]}</small>
             </td>
             ${cellsHtml}
@@ -4839,7 +5130,7 @@ genererTableauLeconsPoleHtml = function(pole, titre, couleurBandeau, sem) {
 function initProgFilters() {
     const selMat = document.getElementById('selectMatiereProg'); if (!selMat) return;
     let val = selMat.value || 'Toutes';
-    selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="escHTML(m)">{escHTML(m)}</option>`).join('');
+    selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
     selMat.value = val;
 }
 
@@ -4886,8 +5177,6 @@ function modifierDateDebutPeriode(per, dateISO) {
     afficherProgrammation();
 }
 
-// Ajout d'une séquence dans une semaine : si cette séquence est commune à plusieurs niveaux (ex: CM1 et CM2),
-// elle se place automatiquement au même endroit (même période, même semaine, même pôle) dans l'autre niveau !
 function ajouterSequenceDansSemaineProg(per, semIdx, niv, pole, nomSeq) {
     if (!nomSeq || !nomSeq.trim()) return;
     assurerStructureProgPeriodes();
@@ -4947,8 +5236,6 @@ function toggleFaitSequenceSemaineProg(per, semIdx, niv, pole, idxSeq) {
     rafraichirDashboard();
 }
 
-// Sélection ou validation d'une leçon dans la Programmation :
-// Si la leçon est commune à plusieurs niveaux (ex: G1 pour CM1 et CM2), elle se place automatiquement au même jour dans tous les niveaux concernés avec son diaporama !
 function majLeconJourProg(per, semIdx, niv, pole, jour, champ, valeur) {
     assurerStructureProgPeriodes();
     let semObj = progPeriodesData.periodes[per].semaines[semIdx];
@@ -4979,7 +5266,7 @@ function majLeconJourProg(per, semIdx, niv, pole, jour, champ, valeur) {
     afficherProgrammation();
     rafraichirDashboard();
     if (champ === 'texte' && valeur && niveauxCibles.length > 1) {
-        showToast(`👩‍🏫 Leçon placée automatiquement en niveauxCibles.join('&')({jour} - S${semIdx + 1}) !`, "success");
+        showToast(`👩‍🏫 Leçon placée automatiquement en ${niveauxCibles.join(' & ')} (${jour} - S${semIdx + 1}) !`, "success");
     }
 }
 
@@ -5024,7 +5311,6 @@ function envoyerSemaineProgVersDashboard(per, semIdx) {
     showToast(`📊 Tableau de bord positionné sur ${per} — Semaine ${semIdx + 1} !`, "success");
 }
 
-// Affectation d'une séquence aux périodes dans la Répartition Annuelle (avec double sauvegarde dans programmations + baseDonnees)
 function toggleProgSequence(matiere, sequence, per) {
     let actuelles = getPeriodesSequence(matiere, sequence);
     let nouvelles = [];
@@ -5100,11 +5386,11 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
     });
 
     let idDlSeq = `dl_prog_seq_${per}_${niv}_${pole}`;
-    let dlSeqHtml = `<datalist id="idDlSeq">`+Array.from(toutesSeqsPoleSet).map(s=>`<optionvalue="{escHTML(s)}">`).join('') + `</datalist>`;
+    let dlSeqHtml = `<datalist id="${idDlSeq}">` + Array.from(toutesSeqsPoleSet).map(s => `<option value="${escHTML(s)}">`).join('') + `</datalist>`;
 
     let reservoirHtml = seqsPeriode.length > 0
         ? `<div style="margin-bottom:10px; padding:8px 10px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:6px; font-size:12px;">
-               <strong style="color:${couleurPole};">📌 Séquences affectées en per({niv}) :</strong> ` +
+               <strong style="color:${couleurPole};">📌 Séquences affectées en ${per} (${niv}) :</strong> ` +
                seqsPeriode.map(sp => {
                    let semsPlacees = [];
                    pObj.semaines.forEach((sm, idx) => {
@@ -5112,11 +5398,11 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
                        if ((b.sequences || []).some(x => x.nom.toLowerCase() === sp.nom.toLowerCase())) semsPlacees.push(`S${idx + 1}`);
                    });
                    let badgeSem = semsPlacees.length > 0 ? ` <strong style="color:#27ae60;">[${semsPlacees.join(', ')}]</strong>` : ` <em style="color:#e67e22;">(à placer)</em>`;
-                   return `<span class="seq-tag-pill" style="margin:2px;">📑 escHTML(sp.nom){badgeSem}</span>`;
+                   return `<span class="seq-tag-pill" style="margin:2px;">📑 ${escHTML(sp.nom)}${badgeSem}</span>`;
                }).join(' ') +
            `</div>`
         : `<div style="margin-bottom:10px; padding:6px 10px; background:#fef9e7; border-radius:6px; font-size:12px; color:#7d6608;">
-               ℹ️ Aucune séquence de nivn'estencorecochéeen<strong>{per}</strong> dans la <em>Répartition annuelle</em> (vous pouvez tout de même en ajouter ci-dessous).
+               ℹ️ Aucune séquence de ${niv} n'est encore cochée en <strong>${per}</strong> dans la <em>Répartition annuelle</em> (vous pouvez tout de même en ajouter ci-dessous).
            </div>`;
 
     let rowsHtml = pObj.semaines.map((sem, semIdx) => {
@@ -5130,9 +5416,9 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
             let nivPart = getNiveauxPartageantSequence(sq.nom, pole, niv);
             let badgeShared = nivPart.length > 1 ? ` <small style="opacity:0.75;">(${nivPart.join('/')})</small>` : '';
             return `<span class="seq-tag-pill ${sq.fait ? 'done' : ''}" style="display:inline-flex; align-items:center; gap:4px; margin:2px 0;">
-                <input type="checkbox" sq.fait?'checked':''onchange="toggleFaitSequenceSemaineProg('{per}', semIdx,'{niv}', '${pole}', ${sqIdx})" title="Cocher quand la séquence est faite (si non cochée, elle glissera en S+1 lors du report)">
-                <span>📑 escHTML(sq.nom){badgeShared}</span>
-                <span class="comp-tag-remove" onclick="retirerSequenceDeSemaineProg('${per}', semIdx,'{niv}', '${pole}', ${sqIdx})" title="Retirer de cette semaine">✖</span>
+                <input type="checkbox" ${sq.fait ? 'checked' : ''} onchange="toggleFaitSequenceSemaineProg('${per}', ${semIdx}, '${niv}', '${pole}', ${sqIdx})" title="Cocher quand la séquence est faite (si non cochée, elle glissera en S+1 lors du report)">
+                <span>📑 ${escHTML(sq.nom)}${badgeShared}</span>
+                <span class="comp-tag-remove" onclick="retirerSequenceDeSemaineProg('${per}', ${semIdx}, '${niv}', '${pole}', ${sqIdx})" title="Retirer de cette semaine">✖</span>
             </span>`;
         }).join(' ');
 
@@ -5152,7 +5438,7 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
                 optionsSelectHtml = `<option value="">-- ⚠️ Aucune leçon 👩‍🏫 enregistrée pour cette séquence --</option>`;
             } else {
                 optionsSelectHtml = `<option value="">-- Choisir la leçon (${leconsDispoSemaine.length} dispo) --</option>` +
-                    leconsDispoSemaine.map(l => `<option value="${escHTML(l.label)}" ${l.label === valActuelle ? 'selected' : ''}>👩‍🏫 escHTML(l.label){l.lien ? ' 📽️' : ''}</option>`).join('');
+                    leconsDispoSemaine.map(l => `<option value="${escHTML(l.label)}" ${l.label === valActuelle ? 'selected' : ''}>👩‍🏫 ${escHTML(l.label)}${l.lien ? ' 📽️' : ''}</option>`).join('');
             }
             if (valActuelle && !leconsDispoSemaine.some(l => l.label === valActuelle)) {
                 optionsSelectHtml += `<option value="${escHTML(valActuelle)}" selected>👩‍🏫 ${escHTML(valActuelle)}</option>`;
@@ -5161,7 +5447,7 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
             return `<td style="background:${cell.fait ? '#e8f8f5' : '#fff'}; vertical-align:top; padding:6px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
                     <label style="font-size:11px; font-weight:bold; color:${cell.fait ? '#1e8449' : '#7f8c8d'}; cursor:pointer; display:flex; align-items:center; gap:3px;" title="Cocher quand la leçon est faite">
-                        <input type="checkbox" cell.fait?'checked':''onchange="majLeconJourProg('{per}', semIdx,'{niv}', 'pole','{jour}', 'fait', this.checked)">
+                        <input type="checkbox" ${cell.fait ? 'checked' : ''} onchange="majLeconJourProg('${per}', ${semIdx}, '${niv}', '${pole}', '${jour}', 'fait', this.checked)">
                         ${cell.fait ? '✅ Fait' : 'À faire'}
                     </label>
                     <div style="display:flex; gap:3px; align-items:center;">
@@ -5169,7 +5455,7 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
                         ${lienEff ? `<a href="${escHTML(lienEff)}" target="_blank" rel="noopener noreferrer" style="background:#8e44ad; color:#fff; padding:1px 6px; border-radius:4px; font-size:10.5px; text-decoration:none; font-weight:bold;" title="Diaporama automatiquement rattaché depuis la base : cliquer pour projeter">📽️ Diapo ↗</a>` : ''}
                     </div>
                 </div>
-                <select onchange="majLeconJourProg('${per}', semIdx,'{niv}', 'pole','{jour}', 'texte', this.value)" style="width:100%; padding:5px 6px; font-size:12px; font-weight:${valActuelle ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:4px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;'}">
+                <select onchange="majLeconJourProg('${per}', ${semIdx}, '${niv}', '${pole}', '${jour}', 'texte', this.value)" style="width:100%; padding:5px 6px; font-size:12px; font-weight:${valActuelle ? '600' : 'normal'}; border:1px solid #cbd5e1; border-radius:4px; ${cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;'}">
                     ${optionsSelectHtml}
                 </select>
             </td>`;
@@ -5179,18 +5465,18 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
 
         return `<tr>
             <td style="background:#f8fafc; text-align:center; vertical-align:top; width:115px;">
-                <strong style="color:${couleurPole}; font-size:13.5px;">Semaine semIdx+1</strong>{datesLabel}
+                <strong style="color:${couleurPole}; font-size:13.5px;">Semaine ${semIdx + 1}</strong>${datesLabel}
                 <div style="margin-top:6px; display:flex; flex-direction:column; gap:3px;">
                     <button type="button" class="filter-btn" style="font-size:10.5px; padding:2px 5px;" onclick="envoyerSemaineProgVersDashboard('${per}', ${semIdx})" title="Ouvrir cette semaine sur le Tableau de bord">📊 Tableau de bord</button>
-                    <button type="button" class="btn-action" style="font-size:10.5px; padding:2px 5px;" onclick="actionReporterEtDecalerDepuisProg('${per}', semIdx,'{niv}', '${pole}')" title="Reporter les non-cochés de cette semaine sur S+1 et décaler toutes les semaines suivantes">⏭️ Reporter non-faits</button>
-                    <button type="button" class="filter-btn" style="font-size:10.5px; padding:2px 5px;" onclick="actionRecalerAvanceDepuisProg('${per}', semIdx,'{niv}', '${pole}')" title="Si vous avez pris de l'avance, remonte les séances de S+1 sur les créneaux libres">⏮️ Recaler l'avance</button>
+                    <button type="button" class="btn-action" style="font-size:10.5px; padding:2px 5px;" onclick="actionReporterEtDecalerDepuisProg('${per}', ${semIdx}, '${niv}', '${pole}')" title="Reporter les non-cochés de cette semaine sur S+1 et décaler toutes les semaines suivantes">⏭️ Reporter non-faits</button>
+                    <button type="button" class="filter-btn" style="font-size:10.5px; padding:2px 5px;" onclick="actionRecalerAvanceDepuisProg('${per}', ${semIdx}, '${niv}', '${pole}')" title="Si vous avez pris de l'avance, remonte les séances de S+1 sur les créneaux libres">⏮️ Recaler l'avance</button>
                 </div>
             </td>
             <td style="vertical-align:top; width:215px;">
                 <div style="margin-bottom:5px; display:flex; flex-direction:column; gap:3px;">${pillsSeqHtml}</div>
                 <div style="display:flex; gap:3px;">
-                    <input type="text" id="idInputAddSeq"list="{idDlSeq}" placeholder="+ Séquence..." style="flex:1; padding:4px 6px; font-size:11.5px;" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterSequenceDansSemaineProg('${per}', semIdx,'{niv}', '${pole}', this.value); this.value='';}">
-                    <button type="button" class="btn-action" style="padding:3px 7px; font-size:11.5px;" onclick="let inp=document.getElementById('idInputAddSeq');ajouterSequenceDansSemaineProg('{per}', semIdx,'{niv}', '${pole}', inp.value); inp.value='';">➕</button>
+                    <input type="text" id="${idInputAddSeq}" list="${idDlSeq}" placeholder="+ Séquence..." style="flex:1; padding:4px 6px; font-size:11.5px;" onkeydown="if(event.key==='Enter'){event.preventDefault(); ajouterSequenceDansSemaineProg('${per}', ${semIdx}, '${niv}', '${pole}', this.value); this.value='';}">
+                    <button type="button" class="btn-action" style="padding:3px 7px; font-size:11.5px;" onclick="let inp=document.getElementById('${idInputAddSeq}'); ajouterSequenceDansSemaineProg('${per}', ${semIdx}, '${niv}', '${pole}', inp.value); inp.value='';">➕</button>
                 </div>
             </td>
             ${cellsJoursHtml}
@@ -5199,7 +5485,7 @@ function genererTableauProgPeriodePoleHtml(per, niv, pole, titrePole, couleurPol
 
     return `<div class="card-panel" style="border-top:4px solid ${couleurPole}; margin-bottom:22px; padding:14px 16px;">
         <div style="background:${couleurPole} !important; color:#fff !important; padding:7px 12px; border-radius:6px; font-weight:bold; font-size:14.5px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
-            <span>${titrePole} — Niveau niv({per})</span>
+            <span>${titrePole} — Niveau ${niv} (${per})</span>
             <small style="font-weight:normal; opacity:0.95;">Les séquences & leçons communes (ex: CM1/CM2) se placent automatiquement dans les deux niveaux</small>
         </div>
         ${dlSeqHtml}
@@ -5228,7 +5514,7 @@ function afficherProgrammationPeriodeDetail(per) {
     let pObj = progPeriodesData.periodes[per];
 
     let barreNiveauxHtml = NIVEAUX_LISTE.map(n =>
-        `<button type="button" class="filter-btn niveauActifProgPeriode===n?'active':''"style="font-size:14px;padding:7px16px;"onclick="changerNiveauActifProgPeriode('{n}')">🎓 Niveau ${n}</button>`
+        `<button type="button" class="filter-btn ${niveauActifProgPeriode === n ? 'active' : ''}" style="font-size:14px; padding:7px 16px;" onclick="changerNiveauActifProgPeriode('${n}')">🎓 Niveau ${n}</button>`
     ).join('');
 
     let html = `
@@ -5240,10 +5526,10 @@ function afficherProgrammationPeriodeDetail(per) {
             </div>
             <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
                 <label style="font-size:13px; font-weight:bold;">Nombre de semaines (${per}) :
-                    <input type="number" min="1" max="15" value="pObj.nbSemaines"onchange="modifierNbSemainesPeriode('{per}', this.value)" style="width:60px; font-weight:bold;">
+                    <input type="number" min="1" max="15" value="${pObj.nbSemaines}" onchange="modifierNbSemainesPeriode('${per}', this.value)" style="width:60px; font-weight:bold;">
                 </label>
                 <label style="font-size:13px; font-weight:bold;">Lundi de la Semaine 1 :
-                    <input type="date" min="2025-01-01" max="2035-12-31" value="escHTML(pObj.dateDebutPISO||'')"onchange="modifierDateDebutPeriode('{per}', this.value)">
+                    <input type="date" min="2025-01-01" max="2035-12-31" value="${escHTML(pObj.dateDebutP_ISO || '')}" onchange="modifierDateDebutPeriode('${per}', this.value)">
                 </label>
             </div>
         </div>
@@ -5280,7 +5566,7 @@ function afficherProgrammation() {
 
         seqs.forEach(s => {
             let matClean = (a.matiere || "").trim();
-            let cleGroupe = `matClean||{s}`;
+            let cleGroupe = `${matClean}||${s}`;
             if (!groupesSeqMap.has(cleGroupe)) {
                 groupesSeqMap.set(cleGroupe, {
                     matiere: matClean,
@@ -5337,16 +5623,16 @@ function afficherProgrammation() {
             let compsHtml = Array.from(g.competences).map(c => `<span style="display:inline-block; background:#f1f5f9; border:1px solid #cbd5e1; border-radius:6px; padding:1px 6px; margin:1px 2px; font-size:11px;">${escHTML(c)}</span>`).join(' ');
 
             let btnsPeriodes = PERIODES_LISTE.map(per =>
-                `<button type="button" class="prog-pill pArr.includes(per)?'active':''"onclick="toggleProgSequence('{escJS(g.matiere)}', 'escJS(g.sequence)','{per}')" title="Activer/Désactiver perpourcetteséquence">{per}</button>`
+                `<button type="button" class="prog-pill ${pArr.includes(per) ? 'active' : ''}" onclick="toggleProgSequence('${escJS(g.matiere)}', '${escJS(g.sequence)}', '${per}')" title="Activer/Désactiver ${per} pour cette séquence">${per}</button>`
             ).join('') +
-            `<button type="button" class="prog-pill all-periods toutesCochees?'active':''"onclick="toggleProgSequence('{escJS(g.matiere)}', '${escJS(g.sequence)}', 'TOUTES')" title="Sélectionner ou désélectionner toutes les périodes (P1 à P5)">🌟 Année</button>`;
+            `<button type="button" class="prog-pill all-periods ${toutesCochees ? 'active' : ''}" onclick="toggleProgSequence('${escJS(g.matiere)}', '${escJS(g.sequence)}', 'TOUTES')" title="Sélectionner ou désélectionner toutes les périodes (P1 à P5)">🌟 Année</button>`;
 
-            let resumeNb = `g.nbAteliersatelier(s){g.nbLecons > 0 ? ` • ${g.nbLecons} 👩‍🏫 leçon(s)` : ''}${g.nbEvals > 0 ? ` • ${g.nbEvals} 🎯 éval.` : ''}`;
+            let resumeNb = `${g.nbAteliers} atelier(s)${g.nbLecons > 0 ? ` • ${g.nbLecons} 👩‍🏫 leçon(s)` : ''}${g.nbEvals > 0 ? ` • ${g.nbEvals} 🎯 éval.` : ''}`;
 
             return `<tr>
                 <td><strong>${escHTML(nivTxt)}</strong></td>
-                <td><span style="background:coul.bg;color:#fff;padding:3px8px;border-radius:4px;font-size:11.5px;font-weight:bold;display:inline-block;">{escHTML(g.matiere)}</span></td>
-                <td><strong style="font-size:13.5px; color:#1b4f72;">📑 escHTML(g.sequence)</strong><br><smallstyle="color:#666;">{resumeNb}</small></td>
+                <td><span style="background:${coul.bg}; color:#fff; padding:3px 8px; border-radius:4px; font-size:11.5px; font-weight:bold; display:inline-block;">${escHTML(g.matiere)}</span></td>
+                <td><strong style="font-size:13.5px; color:#1b4f72;">📑 ${escHTML(g.sequence)}</strong><br><small style="color:#666;">${resumeNb}</small></td>
                 <td>${compsHtml || '<em style="color:#999;">Aucune compétence renseignée</em>'}</td>
                 <td style="text-align:center;">${btnsPeriodes}</td>
             </tr>`;
@@ -5354,18 +5640,18 @@ function afficherProgrammation() {
 }
 
 // ==========================================
-// 8B. ÉTIQUETTES 3x8 (66x33,8mm), MATRICE & BILANS
+// 8B. ÉTIQUETTES 3x8 (66x33,8mm — AVEC SYMBOLE MATIÈRE TOUJOURS AFFICHÉ AU DÉBUT), MATRICE & BILANS
 // ==========================================
 function afficherChoixEtiquettes() {
     const selMat = document.getElementById('selectMatiereEtiquettes');
-    if (selMat && selMat.options.length <= 1) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="escHTML(m)">{escHTML(m)}</option>`).join('');
+    if (selMat && selMat.options.length <= 1) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
     const niv = document.getElementById('selectNiveauEtiquettes') ? document.getElementById('selectNiveauEtiquettes').value : 'Tous';
     const mat = selMat ? selMat.value : 'Toutes', typeF = document.getElementById('selectTypeEtiquettes') ? document.getElementById('selectTypeEtiquettes').value : 'Tous';
     const cont = document.getElementById('listeChoixEtiquettes'); if (!cont) return;
     let liste = baseDonnees.filter(a => a && !estLeconProf(a) && (niv === 'Tous' || (a.niveau || "").toUpperCase().includes(niv)) && (mat === 'Toutes' || (a.matiere || "").trim() === mat) && (typeF === 'Tous' || (a.typeRes || "").trim() === typeF));
     cont.innerHTML = liste.map(a => {
         let rep = getRepereAtelierHtml(a, null, 18);
-        return `<label style="display:inline-block; width:280px; margin:3px 6px; font-size:13px; cursor:pointer;"><input type="checkbox" class="cb-etiq-item" value="a.id"checkedonchange="genererApercuEtiquettes()">[{escHTML(a.niveau)}] rep.codeTexte?'<strong>'+escHTML(rep.codeTexte)+'</strong>—':''{escHTML(a.ressource)}</label>`;
+        return `<label style="display:inline-block; width:280px; margin:3px 6px; font-size:13px; cursor:pointer;"><input type="checkbox" class="cb-etiq-item" value="${a.id}" checked onchange="genererApercuEtiquettes()"> [${escHTML(a.niveau)}] ${rep.codeTexte ? '<strong>'+escHTML(rep.codeTexte)+'</strong> — ' : ''}${escHTML(a.ressource)}</label>`;
     }).join('');
     genererApercuEtiquettes();
 }
@@ -5401,27 +5687,36 @@ function genererApercuEtiquettes() {
         let bgEtiq = rep.bg;
         let borderCss = showBorder ? `0.4mm solid ${coul.bg}` : `none`;
 
+        // S'assure que le symbole de la matière est toujours présent devant le nom de la matière dans le bandeau supérieur
+        let matRaw = (a.matiere || "").trim();
+        let libelleMatBandeau = (rep.emojiMat && !matRaw.startsWith(rep.emojiMat))
+            ? `${rep.emojiMat} ${matRaw}`
+            : matRaw;
+
         let bandeauHtml = (showMatiere || showNiveau) ? `
-            <div style="background:coul.bg!important;color:{coul.text} !important; font-size:${Math.max(7, fsPt - 2.5)}pt; font-weight:bold; padding:1px 5px; border-radius:3px; display:flex; justify-content:space-between; align-items:center; width:100%;">
-                <span>${showMatiere ? escHTML(a.matiere) : ''}</span>
+            <div style="background:${coul.bg} !important; color:${coul.text} !important; font-size:${Math.max(7, fsPt - 2.5)}pt; font-weight:bold; padding:1px 5px; border-radius:3px; display:flex; justify-content:space-between; align-items:center; width:100%;">
+                <span>${showMatiere ? escHTML(libelleMatBandeau) : escHTML(rep.emojiMat || '')}</span>
                 <span>${showNiveau ? escHTML(a.niveau) : ''}</span>
             </div>` : '';
 
+        // Repère en tête d'étiquette : affiche toujours le symbole de la matière (et l'émoji du support / numéro d'atelier) même quand il ne s'agit pas d'un jeu
         let codeHtml = (showCode && rep.html) ? `
             <div style="font-size:${Math.round(fsPt * 1.35)}pt; font-weight:bold; margin:1px 0; padding:1px 6px; background:rgba(255,255,255,0.72); border-radius:4px; display:inline-block; align-self:center; line-height:1.1;">
                 ${rep.html}
             </div>` : '';
 
-        let nomHtml = showNom ? `<div style="font-weight:bold; font-size:fsPtpt;color:#1e293b;line-height:1.15;">{escHTML(a.ressource)}</div>` : '';
-        let seqHtml = (showSeq && (a.sequence || a.lecon)) ? `<div style="font-size:Math.max(7,fsPt-2)pt;color:#333;line-height:1.1;">{escHTML(a.sequence || '')} ${a.lecon ? '— ' + escHTML(a.lecon) : ''}</div>` : '';
-        let compHtml = (showComp && a.competence) ? `<div style="font-size:Math.max(6.5,fsPt-2.5)pt;color:#444;font-style:italic;line-height:1.1;">{escHTML(a.competence)}</div>` : '';
+        // Si l'utilisatrice a décoché la boîte de code, on place tout de même le symbole de la matière au début du titre de l'étiquette
+        let prefixNomSiSansCode = (!showCode && rep.emojiMat) ? `${escHTML(rep.emojiMat)} ` : '';
+        let nomHtml = showNom ? `<div style="font-weight:bold; font-size:${fsPt}pt; color:#1e293b; line-height:1.15;">${prefixNomSiSansCode}${escHTML(a.ressource)}</div>` : '';
+        let seqHtml = (showSeq && (a.sequence || a.lecon)) ? `<div style="font-size:${Math.max(7, fsPt - 2)}pt; color:#333; line-height:1.1;">${escHTML(a.sequence || '')} ${a.lecon ? '— ' + escHTML(a.lecon) : ''}</div>` : '';
+        let compHtml = (showComp && a.competence) ? `<div style="font-size:${Math.max(6.5, fsPt - 2.5)}pt; color:#444; font-style:italic; line-height:1.1;">${escHTML(a.competence)}</div>` : '';
         let piedHtml = (showEtoiles || showPers) ? `
             <div style="display:flex; justify-content:space-between; align-items:center; font-size:${Math.max(7, fsPt - 2.5)}pt; width:100%;">
                 <span>${showEtoiles ? formaterEtoiles(a.difficulte) : ''}</span>
                 <span>${showPers ? escHTML(a.personnes || '') : ''}</span>
             </div>` : '';
 
-        return `<div class="etiquette-item" style="width:wMmmm;height:{hMm}mm; background:bgEtiq!important;border:{borderCss}; font-size:${fsPt}pt;">
+        return `<div class="etiquette-item" style="width:${wMm}mm; height:${hMm}mm; background:${bgEtiq} !important; border:${borderCss}; font-size:${fsPt}pt;">
             ${bandeauHtml}
             ${codeHtml}
             ${nomHtml}
@@ -5439,7 +5734,7 @@ function lancerImpressionEtiquettes() {
 
 function genererMatriceCompetences() {
     const selMat = document.getElementById('selectMatiereMatrice');
-    if (selMat && selMat.options.length <= 1) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="escHTML(m)">{escHTML(m)}</option>`).join('');
+    if (selMat && selMat.options.length <= 1) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => `<option value="${escHTML(m)}">${escHTML(m)}</option>`).join('');
     const niv = document.getElementById('selectNiveauMatrice')?.value || 'CP', per = document.getElementById('selectPeriodeMatrice')?.value || 'Toutes', mat = selMat ? selMat.value : 'Toutes';
     const evalOnly = document.getElementById('cbEvalOnlyMatrice') ? document.getElementById('cbEvalOnlyMatrice').checked : false;
     const cont = document.getElementById('conteneurMatrice'); if (!cont) return;
@@ -5460,7 +5755,7 @@ function genererMatriceCompetences() {
     acts.forEach(a => {
         let coul = getCouleurMatiereBandeau(a.matiere), p = getPeriodesActiviteTexte(a);
         let badgePer = p !== '-' ? `<span class="filter-btn" style="padding:1px 5px; font-size:10.5px; margin-left:4px;">${escHTML(p)}</span>` : '';
-        html += `<tr><td><span style="background:coul.bg;color:#fff;padding:1px6px;border-radius:4px;font-size:11px;">{escHTML(a.matiere)}</span>badgePer<strong>{escHTML(a.ressource)}</strong> a.estEvaluation?'<spanclass="badge-eval">🎯</span>':''<br><small>{escHTML(a.sequence)} — ${escHTML(a.competence)}</small></td>` + elevesNiv.map(e => {
+        html += `<tr><td><span style="background:${coul.bg}; color:#fff; padding:1px 6px; border-radius:4px; font-size:11px;">${escHTML(a.matiere)}</span>${badgePer} <strong>${escHTML(a.ressource)}</strong> ${a.estEvaluation ? '<span class="badge-eval">🎯</span>' : ''}<br><small>${escHTML(a.sequence)} — ${escHTML(a.competence)}</small></td>` + elevesNiv.map(e => {
             let valide = e.historique && e.historique.some(h => h.idActivite === a.id), enCours = e.planHebdo && e.planHebdo.includes(a.id);
             return `<td style="text-align:center; font-size:16px;">${valide ? '✅' : (enCours ? '⏳' : '—')}</td>`;
         }).join('') + `</tr>`;
@@ -5483,12 +5778,12 @@ function genererBilanEleve() {
 
     let parMat = {};
     hist.forEach(h => { let a = baseDonnees.find(b => b.id === h.idActivite && !estLeconProf(b)); if (!a) return; let m = a.matiere || "Autres"; if (!parMat[m]) parMat[m] = []; parMat[m].push({ act: a, date: h.date, sequence: h.sequence || a.sequence }); });
-    let html = `<div class="card-panel"><h3>📋 Bilan des acquisitions de escHTML(e.nom)({escHTML(e.niveau)}) — ${hist.length} activités validées</h3>`;
+    let html = `<div class="card-panel"><h3>📋 Bilan des acquisitions de ${escHTML(e.nom)} (${escHTML(e.niveau)}) — ${hist.length} activités validées</h3>`;
     Object.keys(parMat).forEach(m => {
         let coul = getCouleurMatiereBandeau(m);
-        html += `<div class="bandeau-matiere-print" style="background:coul.bg;color:{coul.text}; margin-top:15px;">${escHTML(m.toUpperCase())}</div><table class="table-classique"><thead><tr><th style="width:90px;">Date</th><th style="width:160px;">Séquence</th><th>Compétence(s)</th><th>Atelier validé</th><th style="width:170px;">Maîtrise (LSU)</th></tr></thead><tbody>` + parMat[m].map(it => {
-            let cleComp = `it.act.matiere||{it.act.competence || it.act.ressource}`, nivMaitrise = e.bilanEvaluations[cleComp] || "Atteint";
-            return `<tr><td>escHTML(it.date)</td><td>{escHTML(it.sequence)}</td><td><strong>formaterAffichageCompetences(it.act.competence)</strong></td><td>{escHTML(it.act.ressource)}</td><td><select onchange="changerBilanEval('e.id','{escJS(cleComp)}', this.value)" style="width:100%; font-weight:bold;"><option value="Dépassé" ${nivMaitrise === 'Dépassé' ? 'selected' : ''}>✨ Dépassé</option><option value="Atteint" ${nivMaitrise === 'Atteint' ? 'selected' : ''}>✅ Atteint</option><option value="Partiellement atteint" ${nivMaitrise === 'Partiellement atteint' ? 'selected' : ''}>🟠 Partiellement atteint</option><option value="Non atteint" ${nivMaitrise === 'Non atteint' ? 'selected' : ''}>🔴 Non atteint</option></select></td></tr>`;
+        html += `<div class="bandeau-matiere-print" style="background:${coul.bg}; color:${coul.text}; margin-top:15px;">${escHTML(m.toUpperCase())}</div><table class="table-classique"><thead><tr><th style="width:90px;">Date</th><th style="width:160px;">Séquence</th><th>Compétence(s)</th><th>Atelier validé</th><th style="width:170px;">Maîtrise (LSU)</th></tr></thead><tbody>` + parMat[m].map(it => {
+            let cleComp = `${it.act.matiere}||${it.act.competence || it.act.ressource}`, nivMaitrise = e.bilanEvaluations[cleComp] || "Atteint";
+            return `<tr><td>${escHTML(it.date)}</td><td>${escHTML(it.sequence)}</td><td><strong>${formaterAffichageCompetences(it.act.competence)}</strong></td><td>${escHTML(it.act.ressource)}</td><td><select onchange="changerBilanEval('${e.id}', '${escJS(cleComp)}', this.value)" style="width:100%; font-weight:bold;"><option value="Dépassé" ${nivMaitrise === 'Dépassé' ? 'selected' : ''}>✨ Dépassé</option><option value="Atteint" ${nivMaitrise === 'Atteint' ? 'selected' : ''}>✅ Atteint</option><option value="Partiellement atteint" ${nivMaitrise === 'Partiellement atteint' ? 'selected' : ''}>🟠 Partiellement atteint</option><option value="Non atteint" ${nivMaitrise === 'Non atteint' ? 'selected' : ''}>🔴 Non atteint</option></select></td></tr>`;
         }).join('') + `</tbody></table>`;
     });
     cont.innerHTML = html + `</div>`;
@@ -5500,10 +5795,10 @@ function exporterBilanEdulivret() {
     (e.historique || []).forEach(h => {
         let a = baseDonnees.find(b => b.id === h.idActivite && !estLeconProf(b)); if (!a) return;
         let m = a.matiere || "Autres"; if (!parMat[m]) parMat[m] = new Set();
-        let cleComp = `a.matiere||{a.competence || a.ressource}`, niv = (e.bilanEvaluations && e.bilanEvaluations[cleComp]) ? e.bilanEvaluations[cleComp] : "Atteint";
-        parMat[m].add(`- a.competence||a.ressource({h.sequence || a.sequence}) : ${niv}`);
+        let cleComp = `${a.matiere}||${a.competence || a.ressource}`, niv = (e.bilanEvaluations && e.bilanEvaluations[cleComp]) ? e.bilanEvaluations[cleComp] : "Atteint";
+        parMat[m].add(`- ${a.competence || a.ressource} (${h.sequence || a.sequence}) : ${niv}`);
     });
-    let lignes = [`BILAN DES COMPÉTENCES — e.nom.toUpperCase()({e.niveau})\n`];
+    let lignes = [`BILAN DES COMPÉTENCES — ${e.nom.toUpperCase()} (${e.niveau})\n`];
     Object.keys(parMat).forEach(m => { lignes.push(`=== ${m.toUpperCase()} ===`); parMat[m].forEach(it => lignes.push(it)); lignes.push(''); });
     let zone = document.getElementById('zoneExportEdulivret'), ta = document.getElementById('textareaExportLSU');
     if (zone && ta) { zone.style.display = 'block'; ta.value = lignes.join('\n'); ta.select(); navigator.clipboard?.writeText(ta.value).catch(() => {}); showToast("📋 Bilan copié dans le presse-papiers !", "success"); }
@@ -5525,7 +5820,7 @@ function changerOnglet(idPage, element) {
     if (idPage === 'pageEtiquettes') { afficherChoixEtiquettes(); }
     if (idPage === 'pageMatrice') { genererMatriceCompetences(); }
     if (idPage === 'pageBilan') { majListeEleves(); genererBilanEleve(); }
-    if (idPage === 'pageSave') { calculTailleStockage(); tenterConnexionAutoFirebase(); }
+    if (idPage === 'pageSave') { calculTailleStockage(); afficherListeSnapshotsSecoursUI(); }
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -5545,4 +5840,3 @@ document.addEventListener("DOMContentLoaded", function() {
     rafraichirToutApresImport();
     tenterConnexionAutoFirebase();
 });
-
