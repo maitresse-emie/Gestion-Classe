@@ -239,7 +239,6 @@ body.theme-nature .table-classique th { background-color: #cad2c5; color: #2f3e4
     box-shadow: 0 2px 6px rgba(0,0,0,0.03);
 }
 
-/* Barre de sous-onglets Programmation (Annuel / P1 à P5) */
 .subtabs-bar {
     display: flex;
     gap: 8px;
@@ -261,9 +260,7 @@ body.theme-nature .table-classique th { background-color: #cad2c5; color: #2f3e4
     cursor: pointer;
     transition: all 0.2s ease;
 }
-.subtab-btn:hover {
-    background: #e2e8f0;
-}
+.subtab-btn:hover { background: #e2e8f0; }
 .subtab-btn.active {
     background: #d35400 !important;
     color: #ffffff !important;
@@ -366,7 +363,6 @@ input[type="text"], input[type="number"], input[type="date"], select {
 .form-grid-base label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 4px; }
 .form-grid-base input, .form-grid-base select { width: 100%; }
 
-/* Pastilles (Tags) de compétences et de séquences multiples */
 .comp-tags-container {
     display: flex;
     flex-wrap: wrap;
@@ -417,7 +413,6 @@ input[type="text"], input[type="number"], input[type="date"], select {
     transform: scale(1.15);
 }
 
-/* Badges rituels récurrents et leçons explicites */
 .badge-recurrent {
     background: #f4ecf7;
     color: #6c3483;
@@ -446,7 +441,6 @@ input[type="text"], input[type="number"], input[type="date"], select {
     font-weight: bold;
 }
 
-/* Case de duplication L1 en haut des colonnes de saisie multiple */
 .th-copy-label {
     display: inline-flex;
     align-items: center;
@@ -467,7 +461,6 @@ input[type="text"], input[type="number"], input[type="date"], select {
     border-color: #2980b9;
 }
 
-/* Tableaux */
 .table-classique {
     width: 100%;
     border-collapse: collapse;
@@ -497,7 +490,6 @@ input[type="text"], input[type="number"], input[type="date"], select {
     letter-spacing: 0.3px;
 }
 
-/* Tableau d'organisation de la semaine (Semainier Lundi / Mardi / Jeudi / Vendredi) */
 .planning-table {
     width: 100%;
     border-collapse: collapse;
@@ -541,7 +533,6 @@ input[type="text"], input[type="number"], input[type="date"], select {
     font-weight: bold;
 }
 
-/* Boutons */
 .btn-action, .btn-valid, .btn-danger, .btn-remove {
     color: white;
     border: none;
@@ -582,9 +573,7 @@ input[type="text"], input[type="number"], input[type="date"], select {
     margin: 2px;
     transition: all 0.15s ease;
 }
-.prog-pill:hover {
-    border-color: #d35400;
-}
+.prog-pill:hover { border-color: #d35400; }
 .prog-pill.active {
     background: #d35400;
     color: #fff;
@@ -601,7 +590,6 @@ input[type="text"], input[type="number"], input[type="date"], select {
     border-color: #1e8449;
 }
 
-/* Dashboard */
 .dashboard-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
@@ -624,7 +612,6 @@ input[type="text"], input[type="number"], input[type="date"], select {
 }
 .dash-progress-fill { height: 100%; background: #27ae60; transition: width 0.3s ease; }
 
-/* Étiquettes 3x8 (66mm x 33,8mm) SANS ESPACEMENT & Impression Fiches */
 .etiquettes-grid-print {
     display: grid;
     grid-template-columns: repeat(3, 66mm);
@@ -668,9 +655,7 @@ input[type="text"], input[type="number"], input[type="date"], select {
     padding: 4px 6px;
     font-size: 11px;
 }
-.plan-eleve-page {
-    page-break-inside: avoid;
-}
+.plan-eleve-page { page-break-inside: avoid; }
 .bandeau-matiere-print {
     padding: 4px 10px;
     font-weight: bold;
@@ -682,12 +667,8 @@ input[type="text"], input[type="number"], input[type="date"], select {
     print-color-adjust: exact;
 }
 
-/* Affichage imprimable du tableau des leçons explicites (pour les élèves) */
-.only-print-lecons {
-    display: none;
-}
+.only-print-lecons { display: none; }
 
-/* Modales */
 .modal, .modal-overlay {
     position: fixed;
     top: 0; left: 0; width: 100%; height: 100%;
@@ -757,12 +738,9 @@ input[type="text"], input[type="number"], input[type="date"], select {
         margin: 0 auto !important;
         padding: 0 !important;
     }
-    /* Mode impression exclusif de l'affiche des leçons explicites pour la classe */
     body.print-lecons-only .no-print-lecons { display: none !important; }
     body.print-lecons-only .only-print-lecons { display: block !important; }
-    body.print-lecons-only .grid-lecons-poles {
-        display: block !important;
-    }
+    body.print-lecons-only .grid-lecons-poles { display: block !important; }
     body.print-lecons-only .card-pole-lecon {
         margin-bottom: 14px !important;
         page-break-inside: avoid;
