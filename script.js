@@ -1,28 +1,3 @@
-L'explosion de votre stockage à **9,6 Mo** vient d'une raison très précise : le **journal des 5 copies de secours automatiques** ajouté précédemment était enregistré dans `localStorage` (qui est limité à 5-10 Mo par les navigateurs), ce qui **multipliait par 6** le poids de votre base de données ! Et lorsque `localStorage` atteint sa limite maximale, le navigateur refuse silencieusement d'enregistrer les nouvelles saisies (ce qui explique aussi pourquoi vos leçons d'hier ne s'étaient pas enregistrées).
-
-### 🚀 La solution mise en place (Capacité étendue à 500 Mo+ sans aucune perte)
-
-Vous n'avez besoin de remplacer **que le MORCEAU 1 de votre fichier `script.js**` (les fichiers `index.html`, `style.css`, `sw.js` ainsi que les Morceaux 2 et 3 de `script.js` restent inchangés) :
-
-1. **Délestage immédiat vers la mémoire Haute Capacité `IndexedDB` (500 Mo à plusieurs Go)** :
-* Dès l'ouverture de la page, les copies de secours automatiques sont **retirées de `localStorage**` et transférées à 100 % dans **`IndexedDB`** (la base de données interne du navigateur qui dispose de plusieurs centaines de mégaoctets).
-* Votre compteur va **chuter instantanément d'environ 80 %** (passant de 9,6 Mo à environ **1 à 1,5 Mo**).
-
-
-2. **Compression intelligente sans perte dans `localStorage**` :
-* Les champs vides inutiles (`""`, `false`) ne sont plus écrits en double dans `localStorage`, ce qui réduit encore de moitié la place occupée par chaque atelier.
-
-
-3. **Stockage principal illimité dans `IndexedDB` + Protection anti-blocage (`setItemSafe`)** :
-* Même si vous ajoutez **10 000 ateliers**, l'application ne plantera jamais : `IndexedDB` prend automatiquement le relais avec **500 Mo+ d'espace**, et demande au navigateur un stockage persistant (`navigator.storage.persist()`).
-
-
-
----
-
-### 📜 Fichier `script.js` — MORCEAU 1 sur 3 (Remplace uniquement votre Morceau 1)
-
-```javascript
 // ==========================================
 // 1. SETUP, CONSTANTES, STOCKAGE HAUTE CAPACITÉ (INDEXEDDB 500 Mo+) & COULEURS MATIÈRES
 // ==========================================
@@ -1369,9 +1344,7 @@ function calculTailleStockage() {
         jauge.style.width = Math.max(2, pct) + "%";
         jauge.style.backgroundColor = "#27ae60";
     }
-}
-
-```// ==========================================
+}// ==========================================
 // 3B. CORRECTIF SAUVEGARDE PROGRAMMATION ANNUELLE, ARCHITECTURE PÉRIODES & DÉCALAGE DYNAMIQUE
 // ==========================================
 const GROUPES_NIVEAUX_PROF = ["CP", "CE1", "CE2", "CM1", "CM2"];
