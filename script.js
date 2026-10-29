@@ -22,6 +22,8 @@ const KEY_LOCAL_UPDATED_AT = 'monUpdatedAtLocal_Finale';
 const KEY_SNAPSHOTS_SECOURS = 'mesSnapshotsSecours_Finale';
 
 const COULEUR_FRANCAIS_CP_VERT_CLAIR = "#c8e6c9";
+const COULEUR_FRANCAIS_CE_TURQUOISE = "#66c2a5";
+const COULEUR_FRANCAIS_CM_BLEU_SOUTENU = "#6fa8dc";
 
 // LIBÉRATION IMMÉDIATE D'ESPACE : transfert des snapshots vers la mémoire vive + IndexedDB et purge de localStorage
 let snapshotsMemoire = [];
@@ -896,11 +898,11 @@ function migrerCouleurFrancaisCPVertClair() {
     let modifie = false;
     baseDonnees.forEach(a => {
         if (!a) return;
-        let nivs = (a.niveau || "").toUpperCase();
-        if (nivs.includes("CP") && a.visuel && a.visuel.toLowerCase() === "#d5a6bd") {
+        let coulActuelle = (a.visuel || "").toLowerCase();
+        if (coulActuelle === "#d5a6bd" || coulActuelle === "#b6d7a8" || coulActuelle === "#9fc5e8") {
             let nouvCoul = calculerCouleurAutomatique(a.matiere, a.niveau, a.typeRes);
-            if (nouvCoul === COULEUR_FRANCAIS_CP_VERT_CLAIR) {
-                a.visuel = COULEUR_FRANCAIS_CP_VERT_CLAIR;
+            if (nouvCoul && nouvCoul !== "#ffffff" && nouvCoul.toLowerCase() !== coulActuelle) {
+                a.visuel = nouvCoul;
                 modifie = true;
             }
         }
@@ -1166,7 +1168,16 @@ function getNiveauxCochesFormulaire(classe = '.cb-niveau-form') {
 
 function majSelectCouleursRapides(valeurForcee) {
     const select = document.getElementById('selectCouleurRapide'); if (!select) return;
-    select.innerHTML = '<option value="">-- Couleur auto par matière/niveau --</option><option value="#ffe599">🟡 Jaune (Maths CP)</option><option value="#f6b26b">🟠 Orange (Maths CE)</option><option value="#ea9999">🔴 Rouge (Maths CM)</option><option value="' + COULEUR_FRANCAIS_CP_VERT_CLAIR + '">🟢 Vert clair (Français CP)</option><option value="#b6d7a8">🟢 Vert tendre (Français CE)</option><option value="#9fc5e8">🔵 Bleu (Français CM)</option><option value="#d5a6bd">🟣 Violet</option><option value="#ffffff">⚪ Blanc</option>';
+    select.innerHTML =
+        '<option value="">-- Couleur auto par matière/niveau --</option>' +
+        '<option value="#ffe599">🟡 Jaune (Maths CP)</option>' +
+        '<option value="#f6b26b">🟠 Orange (Maths CE)</option>' +
+        '<option value="#ea9999">🔴 Rouge (Maths CM)</option>' +
+        '<option value="' + COULEUR_FRANCAIS_CP_VERT_CLAIR + '">🟢 Vert clair (Français CP)</option>' +
+        '<option value="' + COULEUR_FRANCAIS_CE_TURQUOISE + '">🌿 Vert jade / turquoise (Français CE1/CE2)</option>' +
+        '<option value="' + COULEUR_FRANCAIS_CM_BLEU_SOUTENU + '">🔵 Bleu soutenu (Français CM1/CM2)</option>' +
+        '<option value="#d5a6bd">🟣 Violet</option>' +
+        '<option value="#ffffff">⚪ Blanc</option>';
     if (valeurForcee) select.value = valeurForcee;
 }
 
@@ -1277,8 +1288,8 @@ function calculerCouleurAutomatique(matiere, niveauxStr, typeRes) {
         if (niveauPlusBas === 'CM1' || niveauPlusBas === 'CM2') return "#ea9999";
     } else if (mat.includes('francais') || mat.includes('grammaire') || mat.includes('orthographe') || mat.includes('conjugaison') || mat.includes('vocabulaire') || mat.includes('lexique') || mat.includes('ecriture') || mat.includes('lecture') || mat.includes('phonologie')) {
         if (niveauPlusBas === 'CP') return COULEUR_FRANCAIS_CP_VERT_CLAIR;
-        if (niveauPlusBas === 'CE1' || niveauPlusBas === 'CE2') return "#b6d7a8";
-        if (niveauPlusBas === 'CM1' || niveauPlusBas === 'CM2') return "#9fc5e8";
+        if (niveauPlusBas === 'CE1' || niveauPlusBas === 'CE2') return COULEUR_FRANCAIS_CE_TURQUOISE;
+        if (niveauPlusBas === 'CM1' || niveauPlusBas === 'CM2') return COULEUR_FRANCAIS_CM_BLEU_SOUTENU;
     }
     return "#ffffff";
 }
@@ -3281,10 +3292,10 @@ function rafraichirFicheImpression() {
 function getStyleNiveauProf(pole, niv) {
     if (pole === 'francais') {
         if (niv === 'CP') return { bg: COULEUR_FRANCAIS_CP_VERT_CLAIR, text: '#1b4332' };
-        if (niv === 'CE1') return { bg: '#b6d7a8', text: '#1b4332' };
-        if (niv === 'CE2') return { bg: '#a3e4d7', text: '#0e6251' };
-        if (niv === 'CM1') return { bg: '#9fc5e8', text: '#154360' };
-        if (niv === 'CM2' || niv === 'CM1-CM2') return { bg: '#7fb3d5', text: '#154360' };
+        if (niv === 'CE1') return { bg: COULEUR_FRANCAIS_CE_TURQUOISE, text: '#0b3b2e' };
+        if (niv === 'CE2') return { bg: COULEUR_FRANCAIS_CE_TURQUOISE, text: '#0b3b2e' };
+        if (niv === 'CM1') return { bg: COULEUR_FRANCAIS_CM_BLEU_SOUTENU, text: '#0d2b45' };
+        if (niv === 'CM2' || niv === 'CM1-CM2') return { bg: COULEUR_FRANCAIS_CM_BLEU_SOUTENU, text: '#0d2b45' };
     } else {
         if (niv === 'CP') return { bg: '#ffe599', text: '#7c2d12' };
         if (niv === 'CE1') return { bg: '#f6b26b', text: '#784212' };
@@ -5728,21 +5739,188 @@ function afficherProgrammation() {
 // ==========================================
 // 8B. ÉTIQUETTES 3x8 (66x33,8mm — AVEC SYMBOLE MATIÈRE TOUJOURS AFFICHÉ AU DÉBUT), MATRICE & BILANS
 // ==========================================
-function afficherChoixEtiquettes() {
-    const selMat = document.getElementById('selectMatiereEtiquettes');
-    if (selMat && selMat.options.length <= 1) selMat.innerHTML = ['Toutes', ...new Set(baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean))].map(m => '<option value="' + escHTML(m) + '">' + escHTML(m) + '</option>').join('');
+let panierEtiquettesIds = [];
+
+function initialiserBarreFiltresEtiquettesAvancee() {
+    let selMat = document.getElementById('selectMatiereEtiquettes');
+    let selType = document.getElementById('selectTypeEtiquettes');
+    if (!selMat || !selType) return;
+
+    if (!document.getElementById('selectSequenceEtiquettes')) {
+        let selSeq = document.createElement('select');
+        selSeq.id = 'selectSequenceEtiquettes';
+        selSeq.onchange = function() { afficherResultatsRechercheEtiquettes(); };
+        selMat.parentNode.insertBefore(selSeq, selType);
+    }
+
+    if (!document.getElementById('inputRechercheEtiquettes')) {
+        let inpSearch = document.createElement('input');
+        inpSearch.type = 'text';
+        inpSearch.id = 'inputRechercheEtiquettes';
+        inpSearch.placeholder = '🔍 Rechercher (ex: Cartes à pinces, Fractions, G4)...';
+        inpSearch.style.minWidth = '240px';
+        inpSearch.oninput = function() { afficherResultatsRechercheEtiquettes(); };
+        selType.parentNode.insertBefore(inpSearch, selType.nextSibling);
+    }
+}
+
+function getAteliersFiltresEtiquettes() {
     const niv = document.getElementById('selectNiveauEtiquettes') ? document.getElementById('selectNiveauEtiquettes').value : 'Tous';
-    const mat = selMat ? selMat.value : 'Toutes', typeF = document.getElementById('selectTypeEtiquettes') ? document.getElementById('selectTypeEtiquettes').value : 'Tous';
-    const cont = document.getElementById('listeChoixEtiquettes'); if (!cont) return;
-    let liste = baseDonnees.filter(a => a && !estLeconProf(a) && (niv === 'Tous' || (a.niveau || "").toUpperCase().includes(niv)) && (mat === 'Toutes' || (a.matiere || "").trim() === mat) && (typeF === 'Tous' || (a.typeRes || "").trim() === typeF));
-    cont.innerHTML = liste.map(a => {
-        let rep = getRepereAtelierHtml(a, null, 18);
-        return '<label style="display:inline-block; width:280px; margin:3px 6px; font-size:13px; cursor:pointer;"><input type="checkbox" class="cb-etiq-item" value="' + a.id + '" checked onchange="genererApercuEtiquettes()"> [' + escHTML(a.niveau) + '] ' + (rep.codeTexte ? '<strong>' + escHTML(rep.codeTexte) + '</strong> — ' : '') + escHTML(a.ressource) + '</label>';
-    }).join('');
+    const mat = document.getElementById('selectMatiereEtiquettes') ? document.getElementById('selectMatiereEtiquettes').value : 'Toutes';
+    const seq = document.getElementById('selectSequenceEtiquettes') ? document.getElementById('selectSequenceEtiquettes').value : 'Toutes';
+    const typeF = document.getElementById('selectTypeEtiquettes') ? document.getElementById('selectTypeEtiquettes').value : 'Tous';
+    const q = (document.getElementById('inputRechercheEtiquettes') ? document.getElementById('inputRechercheEtiquettes').value : '').toLowerCase().trim();
+
+    return baseDonnees.filter(a => {
+        if (!a || estLeconProf(a)) return false;
+        if (niv !== 'Tous' && !(a.niveau || "").toUpperCase().includes(niv)) return false;
+        if (mat !== 'Toutes' && (a.matiere || "").trim() !== mat) return false;
+        if (seq !== 'Toutes' && !activiteAppartientASequence(a, seq)) return false;
+        if (typeF !== 'Tous' && (a.typeRes || "").trim() !== typeF) return false;
+        if (q) {
+            let txt = ((a.ressource || '') + ' ' + (a.sequence || '') + ' ' + (a.matiere || '') + ' ' + (a.lecon || '') + ' ' + (a.competence || '') + ' ' + (a.symbole || '')).toLowerCase();
+            if (!txt.includes(q)) return false;
+        }
+        return true;
+    });
+}
+
+function afficherChoixEtiquettes() {
+    initialiserBarreFiltresEtiquettesAvancee();
+
+    const selMat = document.getElementById('selectMatiereEtiquettes');
+    const niv = document.getElementById('selectNiveauEtiquettes') ? document.getElementById('selectNiveauEtiquettes').value : 'Tous';
+
+    if (selMat) {
+        let curMat = selMat.value || 'Toutes';
+        let matsDispo = ['Toutes', ...new Set(baseDonnees.filter(b => b && !estLeconProf(b) && (niv === 'Tous' || (b.niveau || '').toUpperCase().includes(niv))).map(b => (b.matiere || "").trim()).filter(Boolean))];
+        selMat.innerHTML = matsDispo.map(m => '<option value="' + escHTML(m) + '">' + (m === 'Toutes' ? 'Toutes les matières' : escHTML(m)) + '</option>').join('');
+        if (matsDispo.includes(curMat)) selMat.value = curMat;
+    }
+
+    const mat = selMat ? selMat.value : 'Toutes';
+    const selSeq = document.getElementById('selectSequenceEtiquettes');
+    if (selSeq) {
+        let curSeq = selSeq.value || 'Toutes';
+        let toutesSeqs = [];
+        baseDonnees.filter(b => b && !estLeconProf(b) && (niv === 'Tous' || (b.niveau || '').toUpperCase().includes(niv)) && (mat === 'Toutes' || (b.matiere || '').trim() === mat)).forEach(b => {
+            extraireListeSequences(b.sequence).forEach(s => toutesSeqs.push(s));
+        });
+        let seqsUnique = ['Toutes', ...new Set(toutesSeqs.filter(Boolean))].sort((a, b) => a === 'Toutes' ? -1 : (b === 'Toutes' ? 1 : a.localeCompare(b, 'fr')));
+        selSeq.innerHTML = seqsUnique.map(s => '<option value="' + escHTML(s) + '">' + (s === 'Toutes' ? '📑 Toutes les séquences' : '📑 Séq : ' + escHTML(s)) + '</option>').join('');
+        if (seqsUnique.includes(curSeq)) selSeq.value = curSeq;
+    }
+
+    afficherResultatsRechercheEtiquettes();
+}
+
+function toggleEtiquetteDansPanier(idAct) {
+    let idx = panierEtiquettesIds.indexOf(idAct);
+    if (idx > -1) {
+        panierEtiquettesIds.splice(idx, 1);
+    } else {
+        panierEtiquettesIds.push(idAct);
+    }
+    afficherResultatsRechercheEtiquettes();
     genererApercuEtiquettes();
 }
 
-function cocherToutesEtiquettes(etat) { document.querySelectorAll('.cb-etiq-item').forEach(cb => cb.checked = etat); genererApercuEtiquettes(); }
+function retirerEtiquetteDuPanierIndex(idxPanier) {
+    if (idxPanier >= 0 && idxPanier < panierEtiquettesIds.length) {
+        panierEtiquettesIds.splice(idxPanier, 1);
+        afficherResultatsRechercheEtiquettes();
+        genererApercuEtiquettes();
+    }
+}
+
+function dupliquerEtiquetteDansPanier(idAct) {
+    panierEtiquettesIds.push(idAct);
+    afficherResultatsRechercheEtiquettes();
+    genererApercuEtiquettes();
+}
+
+function viderPanierEtiquettes() {
+    panierEtiquettesIds = [];
+    afficherResultatsRechercheEtiquettes();
+    genererApercuEtiquettes();
+}
+
+function cocherToutesEtiquettes(etat) {
+    let listeFiltree = getAteliersFiltresEtiquettes();
+    if (etat) {
+        listeFiltree.forEach(a => {
+            if (!panierEtiquettesIds.includes(a.id)) panierEtiquettesIds.push(a.id);
+        });
+        showToast("✅ " + listeFiltree.length + " étiquette(s) du filtre ajoutée(s) à la planche !", "success");
+    } else {
+        let idsFiltres = new Set(listeFiltree.map(a => a.id));
+        panierEtiquettesIds = panierEtiquettesIds.filter(id => !idsFiltres.has(id));
+        showToast("Étiquettes du filtre retirées de la planche.", "success");
+    }
+    afficherResultatsRechercheEtiquettes();
+    genererApercuEtiquettes();
+}
+
+function afficherResultatsRechercheEtiquettes() {
+    const cont = document.getElementById('listeChoixEtiquettes');
+    if (!cont) return;
+    cont.style.maxHeight = '380px';
+
+    let liste = getAteliersFiltresEtiquettes();
+
+    let panierHtml = '<div style="background:#f4ecf7; border:2px solid #8e44ad; border-radius:8px; padding:10px 12px; margin-bottom:12px;">' +
+        '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:6px;">' +
+            '<strong style="color:#6c3483; font-size:13.5px;">📋 Ma planche d\'étiquettes à imprimer (' + panierEtiquettesIds.length + ' étiquette' + (panierEtiquettesIds.length > 1 ? 's' : '') + ' sélectionnée' + (panierEtiquettesIds.length > 1 ? 's' : '') + ') :</strong>' +
+            (panierEtiquettesIds.length > 0 ? '<button type="button" class="btn-remove" style="padding:3px 9px; font-size:11.5px;" onclick="viderPanierEtiquettes()">🗑️ Vider toute la planche</button>' : '') +
+        '</div>';
+
+    if (panierEtiquettesIds.length === 0) {
+        panierHtml += '<div style="font-size:12.5px; color:#666; font-style:italic;">Aucune étiquette sélectionnée. Filtrez par séquence ou recherchez un atelier ci-dessous puis cliquez dessus pour l\'ajouter à votre planche !</div>';
+    } else {
+        panierHtml += '<div style="display:flex; flex-wrap:wrap; gap:6px; max-height:115px; overflow-y:auto; padding-top:4px;">' +
+            panierEtiquettesIds.map((id, idxP) => {
+                let a = baseDonnees.find(b => b.id === id);
+                if (!a) return '';
+                let rep = getRepereAtelierHtml(a, null, 14);
+                return '<span class="comp-tag-pill" style="background:#fff; border-color:#8e44ad; color:#2c3e50; font-size:12px; padding:3px 8px;">' +
+                    '<strong>[' + escHTML(a.niveau) + ']</strong> ' +
+                    (rep.codeTexte ? '<strong>' + escHTML(rep.codeTexte) + '</strong> ' : '') +
+                    escHTML(a.ressource) + ' <small style="color:#6c3483;">(' + escHTML(a.sequence || a.matiere) + ')</small>' +
+                    ' <span style="cursor:pointer; color:#2980b9; font-weight:bold; margin-left:3px;" title="Ajouter un exemplaire supplémentaire de cette étiquette" onclick="dupliquerEtiquetteDansPanier(\'' + a.id + '\')">➕</span>' +
+                    ' <span class="comp-tag-remove" title="Retirer de la planche" onclick="retirerEtiquetteDuPanierIndex(' + idxP + ')">✖</span>' +
+                '</span>';
+            }).join('') +
+        '</div>';
+    }
+    panierHtml += '</div>';
+
+    let resultatsHtml = '<div style="font-size:12.5px; font-weight:bold; color:#1b4f72; margin-bottom:6px;">🔎 Ateliers trouvés dans ce filtre (' + liste.length + ') — Cliquez pour ajouter ou retirer de la planche :</div>';
+
+    if (liste.length === 0) {
+        resultatsHtml += '<div style="color:#7f8c8d; font-size:13px; padding:10px; text-align:center;">Aucun atelier ne correspond à cette recherche.</div>';
+    } else {
+        resultatsHtml += '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:6px;">' +
+            liste.map(a => {
+                let rep = getRepereAtelierHtml(a, null, 18);
+                let estSelectionne = panierEtiquettesIds.includes(a.id);
+                let bgCard = estSelectionne ? '#e8f8f5' : '#f8fafc';
+                let borderCard = estSelectionne ? '2px solid #27ae60' : '1px solid #cbd5e1';
+                return '<label style="display:flex; align-items:center; gap:7px; padding:6px 9px; border-radius:6px; background:' + bgCard + '; border:' + borderCard + '; font-size:12.5px; cursor:pointer;">' +
+                    '<input type="checkbox" class="cb-etiq-item" value="' + a.id + '" ' + (estSelectionne ? 'checked' : '') + ' onchange="toggleEtiquetteDansPanier(\'' + a.id + '\')" style="transform:scale(1.15); cursor:pointer;">' +
+                    '<div style="flex:1; line-height:1.25;">' +
+                        '<strong>[' + escHTML(a.niveau) + ']</strong> ' +
+                        (rep.codeTexte ? '<strong style="color:#1b4f72;">' + escHTML(rep.codeTexte) + '</strong> — ' : '') +
+                        '<strong>' + escHTML(a.ressource) + '</strong><br>' +
+                        '<small style="color:#555;">📑 ' + escHTML(a.sequence || 'Sans séquence') + (a.lecon ? ' (' + escHTML(a.lecon) + ')' : '') + ' • ' + escHTML(a.typeRes || '') + '</small>' +
+                    '</div>' +
+                '</label>';
+            }).join('') +
+        '</div>';
+    }
+
+    cont.innerHTML = panierHtml + resultatsHtml;
+    genererApercuEtiquettes();
+}
 
 function genererApercuEtiquettes() {
     const zone = document.getElementById('printEtiquettesContainer'); if (!zone) return;
@@ -5764,7 +5942,7 @@ function genererApercuEtiquettes() {
     zone.style.gridTemplateColumns = "repeat(" + nbCols + ", " + wMm + "mm)";
     zone.style.gap = "0mm";
 
-    let ids = []; document.querySelectorAll('.cb-etiq-item:checked').forEach(cb => ids.push(cb.value));
+    let ids = [...panierEtiquettesIds];
 
     zone.innerHTML = ids.map(id => {
         let a = baseDonnees.find(b => b.id === id); if (!a) return '';
@@ -5809,7 +5987,12 @@ function genererApercuEtiquettes() {
         '</div>';
     }).join('');
 }
+
 function lancerImpressionEtiquettes() {
+    if (panierEtiquettesIds.length === 0) {
+        showToast("⚠️ Sélectionnez au moins une étiquette à imprimer !", "error");
+        return;
+    }
     document.body.classList.remove('print-lecons-only');
     genererApercuEtiquettes();
     window.print();
