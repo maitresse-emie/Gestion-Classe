@@ -550,6 +550,7 @@ function assurerStructureSemaines(e) {
     if (e.semaineIndex === undefined || isNaN(parseInt(e.semaineIndex)) || e.semaineIndex < 0 || e.semaineIndex >= e.semaines.length) {
         e.semaineIndex = 0;
     }
+}
 
 function syncEleveVersSemaineActive(e) {
     if (!e) return;
