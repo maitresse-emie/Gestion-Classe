@@ -525,6 +525,9 @@ function assurerStructureSemaines(e) {
         }
     });
 
+  if (e.semaines && typeof e.semaines === 'object' && !Array.isArray(e.semaines)) {
+        e.semaines = Object.values(e.semaines);
+    }
     if (!e.semaines || !Array.isArray(e.semaines) || e.semaines.length === 0) {
         e.semaines = [{
             id: 'sem_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
@@ -535,8 +538,18 @@ function assurerStructureSemaines(e) {
         }];
         e.semaineIndex = 0;
     }
-    if (e.semaineIndex === undefined || e.semaineIndex < 0 || e.semaineIndex >= e.semaines.length) e.semaineIndex = 0;
-}
+    e.semaines = e.semaines.filter(Boolean);
+    e.semaines.forEach(s => {
+        if (!s.planHebdo || !Array.isArray(s.planHebdo)) s.planHebdo = [];
+        if (!s.priorites || !Array.isArray(s.priorites)) s.priorites = [];
+        if (!s.joursAssignes || typeof s.joursAssignes !== 'object') s.joursAssignes = {};
+        if (!s.sequencesChoisies || typeof s.sequencesChoisies !== 'object') s.sequencesChoisies = {};
+        if (!s.valides || typeof s.valides !== 'object') s.valides = {};
+        if (!s.suivi || typeof s.suivi !== 'object') s.suivi = {};
+    });
+    if (e.semaineIndex === undefined || isNaN(parseInt(e.semaineIndex)) || e.semaineIndex < 0 || e.semaineIndex >= e.semaines.length) {
+        e.semaineIndex = 0;
+    }
 
 function syncEleveVersSemaineActive(e) {
     if (!e) return;
@@ -1327,13 +1340,16 @@ function optimiserStockageMaintenant() {
 
 function calculTailleStockage() {
     localStorage.removeItem(KEY_SNAPSHOTS_SECOURS);
+    if (!Array.isArray(baseDonnees)) baseDonnees = [];
+    if (!eleves || typeof eleves !== 'object') eleves = {};
     setItemSafe(KEY_ATELIERS, compacterBasePourLocalStorage(baseDonnees));
 
-    let _lsTotal = 0, _xLen, _x;
-    for (_x in localStorage) {
-        if (!localStorage.hasOwnProperty(_x)) continue;
-        _xLen = ((localStorage[_x].length + _x.length) * 2);
-        _lsTotal += _xLen;
+    let _lsTotal = 0;
+    for (let i = 0; i < localStorage.length; i++) {
+        let k = localStorage.key(i);
+        if (!k) continue;
+        let val = localStorage.getItem(k) || "";
+        _lsTotal += (val.length + k.length) * 2;
     }
     let megaBytesLS = (_lsTotal / (1024 * 1024)).toFixed(2);
     let capaciteEtendueMo = 500;
@@ -1507,7 +1523,11 @@ function assurerStructureProgPeriodes() {
         let pObj = progPeriodesData.periodes[per];
         let nbCible = Math.max(1, Math.min(15, parseInt(pObj.nbSemaines) || 7));
         pObj.nbSemaines = nbCible;
+        if (pObj.semaines && typeof pObj.semaines === 'object' && !Array.isArray(pObj.semaines)) {
+            pObj.semaines = Object.values(pObj.semaines);
+        }
         if (!Array.isArray(pObj.semaines)) pObj.semaines = [];
+        pObj.semaines = pObj.semaines.filter(Boolean);
 
         while (pObj.semaines.length < nbCible) {
             pObj.semaines.push(creerSemaineProgVide(pObj.semaines.length, ""));
@@ -1520,7 +1540,11 @@ function assurerStructureProgPeriodes() {
                 if (!sem.niveaux[niv]) sem.niveaux[niv] = {};
                 ["francais", "maths"].forEach(pole => {
                     if (!sem.niveaux[niv][pole]) sem.niveaux[niv][pole] = { sequences: [], jours: {} };
+                    if (sem.niveaux[niv][pole].sequences && typeof sem.niveaux[niv][pole].sequences === 'object' && !Array.isArray(sem.niveaux[niv][pole].sequences)) {
+                        sem.niveaux[niv][pole].sequences = Object.values(sem.niveaux[niv][pole].sequences);
+                    }
                     if (!Array.isArray(sem.niveaux[niv][pole].sequences)) sem.niveaux[niv][pole].sequences = [];
+                    sem.niveaux[niv][pole].sequences = sem.niveaux[niv][pole].sequences.filter(s => s && s.nom);
                     if (!sem.niveaux[niv][pole].jours) sem.niveaux[niv][pole].jours = {};
                     JOURS_SEMAINE_PROF.forEach(j => {
                         let c = sem.niveaux[niv][pole].jours[j];
@@ -1539,6 +1563,9 @@ function assurerStructureProgPeriodes() {
             ["francais", "maths"].forEach(pole => {
                 if (!sem.ordrePassages[pole]) sem.ordrePassages[pole] = {};
                 JOURS_SEMAINE_PROF.forEach(j => {
+                    if (sem.ordrePassages[pole][j] && typeof sem.ordrePassages[pole][j] === 'object' && !Array.isArray(sem.ordrePassages[pole][j])) {
+                        sem.ordrePassages[pole][j] = Object.values(sem.ordrePassages[pole][j]);
+                    }
                     if (!Array.isArray(sem.ordrePassages[pole][j]) || sem.ordrePassages[pole][j].length < NB_SLOTS_PASSAGES_PROF) {
                         sem.ordrePassages[pole][j] = [...GROUPES_NIVEAUX_PROF];
                     }
@@ -1548,8 +1575,11 @@ function assurerStructureProgPeriodes() {
     });
 
     let pAct = progPeriodesData.periodes[progPeriodesData.periodeActiveDash];
-    if (progPeriodesData.semaineIndexDash < 0 || progPeriodesData.semaineIndexDash >= pAct.semaines.length) {
+    let idxDash = parseInt(progPeriodesData.semaineIndexDash);
+    if (isNaN(idxDash) || idxDash < 0 || !pAct || !Array.isArray(pAct.semaines) || idxDash >= pAct.semaines.length) {
         progPeriodesData.semaineIndexDash = 0;
+    } else {
+        progPeriodesData.semaineIndexDash = idxDash;
     }
 }
 
