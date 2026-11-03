@@ -835,7 +835,116 @@ function parseSiString(val) {
     return val;
 }
 
-function importerDonneesUniversel(rawData, modeFusionSansPerte = false) {
+function compterElementsProgPeriodes(pData) {
+    if (!pData || !pData.periodes || typeof pData.periodes !== 'object') return 0;
+    let total = 0;
+    Object.values(pData.periodes).forEach(pObj => {
+        if (!pObj) return;
+        if (pObj.dateDebutP_ISO) total++;
+        let sems = Array.isArray(pObj.semaines) ? pObj.semaines : (pObj.semaines && typeof pObj.semaines === 'object' ? Object.values(pObj.semaines) : []);
+        sems.forEach(sem => {
+            if (!sem || !sem.niveaux) return;
+            Object.values(sem.niveaux).forEach(nivObj => {
+                if (!nivObj) return;
+                ["francais", "maths"].forEach(pole => {
+                    let b = nivObj[pole];
+                    if (!b) return;
+                    let seqs = Array.isArray(b.sequences) ? b.sequences : (b.sequences && typeof b.sequences === 'object' ? Object.values(b.sequences) : []);
+                    total += seqs.filter(s => s && s.nom).length;
+                    if (b.jours && typeof b.jours === 'object') {
+                        Object.values(b.jours).forEach(j => {
+                            if (j && j.texte && j.texte.trim() !== "") total++;
+                        });
+                    }
+                });
+            });
+        });
+    });
+    return total;
+}
+
+function fusionnerProgPeriodesSansPerte(progCible, progSource) {
+    if (!progSource || typeof progSource !== 'object') return progCible;
+    if (!progCible || typeof progCible !== 'object') return progSource;
+
+    let res = JSON.parse(JSON.stringify(progCible));
+    if (progSource.periodeActiveDash) res.periodeActiveDash = progSource.periodeActiveDash;
+    if (progSource.semaineIndexDash !== undefined) res.semaineIndexDash = progSource.semaineIndexDash;
+    if (!res.periodes) res.periodes = {};
+
+    if (progSource.periodes && typeof progSource.periodes === 'object') {
+        PERIODES_LISTE.forEach(per => {
+            let srcP = progSource.periodes[per];
+            if (!srcP) return;
+            if (!res.periodes[per]) {
+                res.periodes[per] = JSON.parse(JSON.stringify(srcP));
+                return;
+            }
+            let cibP = res.periodes[per];
+            if (srcP.dateDebutP_ISO) cibP.dateDebutP_ISO = srcP.dateDebutP_ISO;
+            if (srcP.nbSemaines) cibP.nbSemaines = Math.max(cibP.nbSemaines || 7, srcP.nbSemaines);
+
+            let srcSems = Array.isArray(srcP.semaines) ? srcP.semaines : (srcP.semaines && typeof srcP.semaines === 'object' ? Object.values(srcP.semaines) : []);
+            let cibSems = Array.isArray(cibP.semaines) ? cibP.semaines : (cibP.semaines && typeof cibP.semaines === 'object' ? Object.values(cibP.semaines) : []);
+
+            let maxS = Math.max(srcSems.length, cibSems.length);
+            for (let i = 0; i < maxS; i++) {
+                if (!cibSems[i] && srcSems[i]) {
+                    cibSems[i] = JSON.parse(JSON.stringify(srcSems[i]));
+                    continue;
+                }
+                if (!srcSems[i]) continue;
+
+                let sSrc = srcSems[i], sCib = cibSems[i];
+                if (sSrc.dateDebutISO) { sCib.dateDebutISO = sSrc.dateDebutISO; sCib.dateDebut = sSrc.dateDebut || ""; sCib.dateFin = sSrc.dateFin || ""; }
+                if (sSrc.ordrePassages) sCib.ordrePassages = JSON.parse(JSON.stringify(sSrc.ordrePassages));
+                if (!sCib.niveaux) sCib.niveaux = {};
+
+                if (sSrc.niveaux) {
+                    NIVEAUX_LISTE.forEach(niv => {
+                        if (!sSrc.niveaux[niv]) return;
+                        if (!sCib.niveaux[niv]) { sCib.niveaux[niv] = JSON.parse(JSON.stringify(sSrc.niveaux[niv])); return; }
+                        ["francais", "maths"].forEach(pole => {
+                            let bSrc = sSrc.niveaux[niv][pole];
+                            if (!bSrc) return;
+                            if (!sCib.niveaux[niv][pole]) { sCib.niveaux[niv][pole] = JSON.parse(JSON.stringify(bSrc)); return; }
+                            let bCib = sCib.niveaux[niv][pole];
+
+                            let seqsSrc = Array.isArray(bSrc.sequences) ? bSrc.sequences : (bSrc.sequences && typeof bSrc.sequences === 'object' ? Object.values(bSrc.sequences) : []);
+                            let seqsCib = Array.isArray(bCib.sequences) ? bCib.sequences : (bCib.sequences && typeof bCib.sequences === 'object' ? Object.values(bCib.sequences) : []);
+                            seqsSrc.forEach(sq => {
+                                if (!sq || !sq.nom) return;
+                                let ex = seqsCib.find(x => x && x.nom && x.nom.toLowerCase() === sq.nom.toLowerCase());
+                                if (!ex) seqsCib.push({ nom: sq.nom, fait: Boolean(sq.fait) });
+                                else if (sq.fait) ex.fait = true;
+                            });
+                            bCib.sequences = seqsCib;
+
+                            if (!bCib.jours) bCib.jours = {};
+                            if (bSrc.jours) {
+                                JOURS_SEMAINE_PROF.forEach(j => {
+                                    let jSrc = bSrc.jours[j];
+                                    if (jSrc && ((jSrc.texte && jSrc.texte.trim() !== "") || jSrc.lien || jSrc.fait)) {
+                                        bCib.jours[j] = {
+                                            texte: jSrc.texte || (bCib.jours[j] ? bCib.jours[j].texte : "") || "",
+                                            lien: jSrc.lien || (bCib.jours[j] ? bCib.jours[j].lien : "") || "",
+                                            pageProf: jSrc.pageProf || (bCib.jours[j] ? bCib.jours[j].pageProf : "") || "",
+                                            fait: Boolean(jSrc.fait || (bCib.jours[j] && bCib.jours[j].fait))
+                                        };
+                                    }
+                                });
+                            }
+                        });
+                    });
+                }
+            }
+            cibP.semaines = cibSems;
+        });
+    }
+    return res;
+}
+
+function importerDonneesUniversel(rawData, modeFusionSansPerte = false, depuisSyncCloud = false) {
     if (!rawData) { showToast("Aucune donnée trouvée.", "error"); return false; }
     let data = parseSiString(rawData);
     if (data.classe_data && typeof data.classe_data === 'object') data = data.classe_data;
@@ -850,8 +959,8 @@ function importerDonneesUniversel(rawData, modeFusionSansPerte = false) {
     let nouvLeconsProf = parseSiString(data.planningLeconsProf || data[KEY_LECONS_PROF]);
     let nouvProgHebdo = parseSiString(data.progPeriodesData || data[KEY_PROG_HEBDO]);
 
-    if (!Array.isArray(nouvBase) && (!nouvEleves || typeof nouvEleves !== 'object')) {
-        showToast("⚠️ Format non reconnu : ni ateliers ni élèves trouvés.", "error");
+    if (!Array.isArray(nouvBase) && (!nouvEleves || typeof nouvEleves !== 'object') && !nouvProgHebdo && !nouvProg) {
+        showToast("⚠️ Format non reconnu : aucune donnée trouvée.", "error");
         return false;
     }
 
@@ -860,6 +969,12 @@ function importerDonneesUniversel(rawData, modeFusionSansPerte = false) {
     if (Array.isArray(nouvBase)) {
         if (modeFusionSansPerte && baseDonnees.length > 0) {
             fusionnerTableauBaseSansPerte(nouvBase);
+            let mapSource = new Map(nouvBase.filter(Boolean).map(x => [x.id, x]));
+            baseDonnees.forEach((item, idx) => {
+                if (item && mapSource.has(item.id)) {
+                    baseDonnees[idx] = { ...item, ...mapSource.get(item.id) };
+                }
+            });
         } else {
             baseDonnees = nouvBase;
         }
@@ -868,7 +983,7 @@ function importerDonneesUniversel(rawData, modeFusionSansPerte = false) {
     if (nouvEleves && typeof nouvEleves === 'object') {
         if (modeFusionSansPerte && Object.keys(eleves).length > 0) {
             Object.keys(nouvEleves).forEach(idEl => {
-                if (!eleves[idEl]) eleves[idEl] = nouvEleves[idEl];
+                eleves[idEl] = nouvEleves[idEl];
             });
         } else {
             eleves = nouvEleves;
@@ -889,22 +1004,45 @@ function importerDonneesUniversel(rawData, modeFusionSansPerte = false) {
         setItemSafe(KEY_IMAGES, JSON.stringify(imagesParType));
     }
     if (nouvProg && typeof nouvProg === 'object') {
-        programmations = modeFusionSansPerte ? { ...nouvProg, ...programmations } : nouvProg;
+        programmations = modeFusionSansPerte ? { ...programmations, ...nouvProg } : nouvProg;
         setItemSafe(KEY_PROG, JSON.stringify(programmations));
     }
-    if (Array.isArray(nouvArchives)) { dashboardArchives = nouvArchives; setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); }
-    if (nouvPrintCfg && typeof nouvPrintCfg === 'object') { printConfig = { ...printConfig, ...nouvPrintCfg }; setItemSafe(KEY_PRINT_CFG, JSON.stringify(printConfig)); }
+    if (Array.isArray(nouvArchives)) {
+        dashboardArchives = modeFusionSansPerte ? [...new Set([...dashboardArchives, ...nouvArchives])] : nouvArchives;
+        setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
+    }
+    if (nouvPrintCfg && typeof nouvPrintCfg === 'object') {
+        printConfig = { ...printConfig, ...nouvPrintCfg };
+        setItemSafe(KEY_PRINT_CFG, JSON.stringify(printConfig));
+    }
     if (Array.isArray(nouvSeqCustom)) {
         sequencesCustom = [...new Set([...sequencesCustom, ...nouvSeqCustom])];
         setItemSafe(KEY_SEQ_CUSTOM, JSON.stringify(sequencesCustom));
     }
-    if (nouvLeconsProf && typeof nouvLeconsProf === 'object' && !modeFusionSansPerte) { planningLeconsProf = nouvLeconsProf; setItemSafe(KEY_LECONS_PROF, JSON.stringify(planningLeconsProf)); }
-    if (nouvProgHebdo && typeof nouvProgHebdo === 'object' && (!modeFusionSansPerte || !progPeriodesData)) { progPeriodesData = nouvProgHebdo; setItemSafe(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData)); }
+    if (nouvLeconsProf && typeof nouvLeconsProf === 'object') {
+        planningLeconsProf = nouvLeconsProf;
+        setItemSafe(KEY_LECONS_PROF, JSON.stringify(planningLeconsProf));
+    }
+    if (nouvProgHebdo && typeof nouvProgHebdo === 'object') {
+        if (modeFusionSansPerte && progPeriodesData) {
+            progPeriodesData = fusionnerProgPeriodesSansPerte(progPeriodesData, nouvProgHebdo);
+        } else {
+            progPeriodesData = nouvProgHebdo;
+        }
+        if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
+        setItemSafe(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData));
+    }
     if (data.theme && !modeFusionSansPerte) appliquerThemeVisuel(data.theme);
 
-    marquerModificationLocale();
+    if (depuisSyncCloud && data.updatedAt) {
+        setItemSafe(KEY_LOCAL_UPDATED_AT, data.updatedAt);
+        sauvegarderDansIndexedDB();
+    } else {
+        marquerModificationLocale();
+    }
+
     rafraichirToutApresImport();
-    showToast("✅ Données chargées (" + baseDonnees.length + " éléments, " + Object.keys(eleves).length + " élèves) !", "success");
+    showToast("✅ Tout est synchronisé (" + baseDonnees.length + " éléments, " + Object.keys(eleves).length + " élèves, programmation & leçons) !", "success");
     return true;
 }
 
@@ -1060,39 +1198,54 @@ async function sauvegarderVersFirebase(forcerManuellement = false, keepaliveMode
 
 async function chargerDepuisFirebase(forcerFusionManuelle = false) {
     let statut = document.getElementById('statutFirebase');
-    if (statut) { statut.innerText = "⏳ Vérification et synchronisation intelligente avec Firebase..."; statut.style.color = "#f39c12"; }
+    if (statut) { statut.innerText = "⏳ Vérification et synchronisation complète avec Firebase..."; statut.style.color = "#f39c12"; }
     try {
-        let res = await fetch(URL_FIREBASE_FIXE + "/classe_data.json");
+        let res = await fetch(URL_FIREBASE_FIXE + "/classe_data.json", { cache: "no-store" });
         if (!res.ok) throw new Error("HTTP " + res.status);
         let data = await res.json();
         let nbBaseCloud = (data && Array.isArray(data.base)) ? data.base.length : 0;
         let nbElevesCloud = (data && data.eleves) ? Object.keys(data.eleves).length : 0;
+        let nbProgCloud = compterElementsProgPeriodes(data ? data.progPeriodesData : null) + (data && data.programmations ? Object.keys(data.programmations).length : 0);
 
-        if (data && (nbBaseCloud > 0 || nbElevesCloud > 0)) {
+        if (data && (nbBaseCloud > 0 || nbElevesCloud > 0 || nbProgCloud > 0)) {
             let localEstVide = (baseDonnees.length === 0 && Object.keys(eleves).length === 0);
+            let tsCloud = (data.updatedAt && !isNaN(Date.parse(data.updatedAt))) ? Date.parse(data.updatedAt) : 0;
+            let rawLocalTs = localStorage.getItem(KEY_LOCAL_UPDATED_AT);
+            let tsLocal = (rawLocalTs && !isNaN(Date.parse(rawLocalTs))) ? Date.parse(rawLocalTs) : 0;
 
-            if (localEstVide) {
-                importerDonneesUniversel(data, false);
+            let progLocalCount = compterElementsProgPeriodes(progPeriodesData);
+            let progCloudCount = compterElementsProgPeriodes(data.progPeriodesData);
+
+            if (localEstVide || forcerFusionManuelle || tsCloud > tsLocal || (progCloudCount > progLocalCount)) {
+                // Le Cloud est plus récent (ou contient la programmation faite sur l'autre ordinateur) : on charge tout !
+                importerDonneesUniversel(data, !localEstVide && !forcerFusionManuelle, true);
             } else {
+                // L'ordinateur local est plus récent, mais on fusionne quand même la base et la programmation du Cloud sans rien perdre
                 let nbRecupDuCloud = fusionnerTableauBaseSansPerte(data.base || []);
+                if (data.programmations && typeof data.programmations === 'object') {
+                    programmations = { ...data.programmations, ...programmations };
+                    setItemSafe(KEY_PROG, JSON.stringify(programmations));
+                }
+                if (data.progPeriodesData && typeof data.progPeriodesData === 'object') {
+                    progPeriodesData = fusionnerProgPeriodesSansPerte( data.progPeriodesData, progPeriodesData );
+                    if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
+                    setItemSafe(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData));
+                }
                 if (nbRecupDuCloud > 0) {
                     setItemSafe(KEY_ATELIERS, compacterBasePourLocalStorage(baseDonnees));
-                    sauvegarderDansIndexedDB();
-                    rafraichirToutApresImport();
-                    showToast("🔄 " + nbRecupDuCloud + " élément(s) récupéré(s) du Cloud et fusionné(s) sans perte !", "success");
-                } else if (forcerFusionManuelle) {
-                    importerDonneesUniversel(data, true);
                 }
-                if (baseDonnees.length >= nbBaseCloud) {
+                sauvegarderDansIndexedDB();
+                rafraichirToutApresImport();
+                if (tsLocal > tsCloud) {
                     sauvegarderVersFirebase(false);
                 }
             }
             if (statut) {
-                statut.innerText = "🔥 Cloud Firebase synchronisé sans perte (" + baseDonnees.length + " éléments, " + Object.keys(eleves).length + " élèves)";
+                statut.innerText = "🔥 Cloud Firebase synchronisé (Ateliers, Élèves, Programmation & Tableau de bord)";
                 statut.style.color = "#27ae60";
             }
         } else {
-            if (statut) { statut.innerText = "ℹ️ Cloud prêt. Vos données locales sont conservées."; statut.style.color = "#2980b9"; }
+            if (statut) { statut.innerText = "ℹ️ Cloud prêt. Envoi de vos données locales..."; statut.style.color = "#2980b9"; }
             if (baseDonnees.length > 0 || Object.keys(eleves).length > 0) sauvegarderVersFirebase(false);
         }
     } catch (e) {
