@@ -3661,9 +3661,29 @@ function toggleAfficherArchives() {
     if (btn) btn.innerText = afficherArchivesMode ? "🙈 Masquer les archives" : "👁️ Voir les archives";
     rafraichirDashboard();
 }
-function archiverItem(cle) { if (!dashboardArchives.includes(cle)) dashboardArchives.push(cle); setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); rafraichirDashboard(); }
-function restaurerArchive(cle) { dashboardArchives = dashboardArchives.filter(k => k !== cle); setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); rafraichirDashboard(); }
-function viderArchives() { if (confirm("Vider les archives ?")) { dashboardArchives = []; setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives)); rafraichirDashboard(); } }
+function archiverItem(cle) {
+    if (!dashboardArchives.includes(cle)) dashboardArchives.push(cle);
+    setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
+    marquerModificationLocale();
+    declencherAutoSaveFirebase();
+    rafraichirDashboard();
+}
+function restaurerArchive(cle) {
+    dashboardArchives = dashboardArchives.filter(k => k !== cle);
+    setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
+    marquerModificationLocale();
+    declencherAutoSaveFirebase();
+    rafraichirDashboard();
+}
+function viderArchives() {
+    if (confirm("Vider les archives ?")) {
+        dashboardArchives = [];
+        setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
+        marquerModificationLocale();
+        declencherAutoSaveFirebase();
+        rafraichirDashboard();
+    }
+}
 function setSuivi(idEl, idAct, statut) {
     let e = eleves[idEl]; if (!e) return;
     if (!e.suivi) e.suivi = {};
@@ -3687,6 +3707,12 @@ function definirLienRapideDepuisDash(idAct) {
         afficherBase();
         showToast("🔗 Lien enregistré !", "success");
     }
+}
+
+function estActiviteSupportAtelier(act) {
+    if (!act || !act.typeRes || estLeconProf(act) || estActiviteTablette(act)) return false;
+    let t = act.typeRes.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return t === "atelier" || t.includes("atelier");
 }
 
 function rafraichirDashboard() {
@@ -3784,7 +3810,7 @@ function rafraichirDashboard() {
         return;
     }
 
-    let lignesRemediation = '', tachesTablettesMap = {};
+    let lignesRemediation = '', tachesTablettesMap = {}, tachesAteliersMap = {};
     listeEl.forEach(e => {
         assurerStructureSemaines(e);
         (e.planHebdo || []).forEach(idAct => {
@@ -3804,11 +3830,20 @@ function rafraichirDashboard() {
                     tachesTablettesMap[act.id].elevesNoms.push(e.nom + " (" + e.niveau + ")");
                 }
             }
+            if (!estVal && estActiviteSupportAtelier(act)) {
+                let cleAt = "at_" + act.id, estArchAt = dashboardArchives.includes(cleAt);
+                if (afficherArchivesMode || !estArchAt) {
+                    if (!tachesAteliersMap[act.id]) tachesAteliersMap[act.id] = { act, elevesNoms: [], cleAt, estArchAt };
+                    tachesAteliersMap[act.id].elevesNoms.push(e.nom + " (" + e.niveau + ")");
+                }
+            }
         });
     });
 
     let tabKeys = Object.keys(tachesTablettesMap);
-    let html = blocAgendaProfHtml + '<div class="grid-2-cols no-print-lecons" style="margin-bottom:20px;">' +
+    let atKeys = Object.keys(tachesAteliersMap);
+
+    let html = blocAgendaProfHtml + '<div class="no-print-lecons" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px; margin-bottom:20px;">' +
         '<div class="card-panel" style="border-left:5px solid #c0392b;"><h3 style="color:#c0392b; margin-bottom:10px;">👩‍🏫 Besoins d\'ateliers dirigés & Remédiations</h3>' + (lignesRemediation ? '<table class="table-classique"><thead><tr><th>Élève</th><th>Matière</th><th>Atelier</th><th>Statut</th><th>Action</th></tr></thead><tbody>' + lignesRemediation + '</tbody></table>' : '<p style="color:#7f8c8d; font-size:13px;">Aucune remédiation en cours.</p>') + '</div>' +
         '<div class="card-panel" style="border-left:5px solid #8e44ad;"><h3 style="color:#6c3483; margin-bottom:10px;">📱 Préparation Tablettes (Anton / Scratch)</h3>' + (tabKeys.length > 0 ? '<table class="table-classique"><thead><tr><th>Support</th><th>Activité & Lien direct</th><th>Élèves à épingler</th><th>Action</th></tr></thead><tbody>' + tabKeys.map(k => {
             let item = tachesTablettesMap[k];
@@ -3822,6 +3857,16 @@ function rafraichirDashboard() {
                 '<td style="text-align:center;"><button type="button" class="filter-btn" title="Marquer comme épinglé sur Anton" onclick="' + (item.estArchTab ? 'restaurerArchive(\'' + item.cleTab + '\')' : 'archiverItem(\'' + item.cleTab + '\')') + '">' + (item.estArchTab ? '↩️' : '☑️ Épinglé') + '</button></td>' +
             '</tr>';
         }).join('') + '</tbody></table>' : '<p style="color:#7f8c8d; font-size:13px;">Aucune activité tablette à préparer.</p>') + '</div>' +
+        '<div class="card-panel" style="border-left:5px solid #27ae60;"><h3 style="color:#1e8449; margin-bottom:10px;">📦 Préparation Ateliers (Rangement Bac)</h3>' + (atKeys.length > 0 ? '<table class="table-classique"><thead><tr><th>N° / Repère</th><th>Atelier à mettre au bac</th><th>Élèves concernés</th><th>Action</th></tr></thead><tbody>' + atKeys.map(k => {
+            let item = tachesAteliersMap[k];
+            let repAt = getRepereAtelierHtml(item.act, null, 22);
+            return '<tr style="' + (item.estArchAt ? 'opacity:0.5;' : '') + '">' +
+                '<td style="text-align:center; background:' + repAt.bg + ';">' + (repAt.html ? repAt.html + '<br>' : '') + '<small style="color:#333; font-weight:bold;">[' + escHTML(item.act.niveau) + ']</small></td>' +
+                '<td><strong>' + escHTML(item.act.ressource) + '</strong><br><small style="color:#555;">' + escHTML(item.act.matiere) + ' — ' + escHTML(item.act.sequence) + (item.act.lecon ? ' (' + escHTML(item.act.lecon) + ')' : '') + '</small></td>' +
+                '<td><strong>' + escHTML(item.elevesNoms.join(', ')) + '</strong></td>' +
+                '<td style="text-align:center;"><button type="button" class="filter-btn" title="Marquer comme rangé dans le bac de la semaine" onclick="' + (item.estArchAt ? 'restaurerArchive(\'' + item.cleAt + '\')' : 'archiverItem(\'' + item.cleAt + '\')') + '">' + (item.estArchAt ? '↩️' : '☑️ Dans le bac') + '</button></td>' +
+            '</tr>';
+        }).join('') + '</tbody></table>' : '<p style="color:#7f8c8d; font-size:13px;">Aucun atelier matériel à préparer pour le bac cette semaine.</p>') + '</div>' +
     '</div><div class="dashboard-grid no-print-lecons">';
 
     listeEl.forEach(e => {
