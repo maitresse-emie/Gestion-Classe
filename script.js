@@ -599,553 +599,539 @@ setItemSafe(KEY_ATELIERS, compacterBasePourLocalStorage(baseDonnees));
 // 2. STOCKAGE HAUTE CAPACITÉ INDEXEDDB (500 Mo+) & SYNCHRO SANS PERTE
 // ==========================================
 if (navigator.storage && navigator.storage.persist) {
-    navigator.storage.persist().catch(() => {});
+    navigator.storage.persist().catch(() => {});
 }
 
 function marquerModificationLocale() {
-    let nowISO = new Date().toISOString();
-    setItemSafe(KEY_LOCAL_UPDATED_AT, nowISO);
-    sauvegarderDansIndexedDB();
-    enregistrerSnapshotSecoursAuto();
+    let nowISO = new Date().toISOString();
+    setItemSafe(KEY_LOCAL_UPDATED_AT, nowISO);
+    sauvegarderDansIndexedDB();
+    enregistrerSnapshotSecoursAuto();
 }
 
 function sauvegarderEleves() {
-    Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
-    setItemSafe(KEY_ELEVES, JSON.stringify(eleves));
-    marquerModificationLocale();
-    declencherAutoSaveFirebase();
+    Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
+    setItemSafe(KEY_ELEVES, JSON.stringify(eleves));
+    marquerModificationLocale();
+    declencherAutoSaveFirebase();
 }
 function sauvegarderBase() {
-    setItemSafe(KEY_ATELIERS, compacterBasePourLocalStorage(baseDonnees));
-    setItemSafe(KEY_SEQ_CUSTOM, JSON.stringify(sequencesCustom));
-    marquerModificationLocale();
-    declencherAutoSaveFirebase();
+    setItemSafe(KEY_ATELIERS, compacterBasePourLocalStorage(baseDonnees));
+    setItemSafe(KEY_SEQ_CUSTOM, JSON.stringify(sequencesCustom));
+    marquerModificationLocale();
+    declencherAutoSaveFirebase();
 }
 function sauvegarderProgrammations() {
-    setItemSafe(KEY_PROG, JSON.stringify(programmations));
-    marquerModificationLocale();
-    declencherAutoSaveFirebase();
+    setItemSafe(KEY_PROG, JSON.stringify(programmations));
+    marquerModificationLocale();
+    declencherAutoSaveFirebase();
 }
 function sauvegarderProgPeriodes() {
-    if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
-    setItemSafe(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData));
-    marquerModificationLocale();
-    declencherAutoSaveFirebase();
+    if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
+    setItemSafe(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData));
+    marquerModificationLocale();
+    declencherAutoSaveFirebase();
 }
 
 function ouvrirIndexedDB() {
-    return new Promise((resolve) => {
-        if (!window.indexedDB) return resolve(null);
-        let req = indexedDB.open('GestionClasseSecoursDB', 1);
-        req.onupgradeneeded = (e) => {
-            let db = e.target.result;
-            if (!db.objectStoreNames.contains('etat')) db.createObjectStore('etat');
-        };
-        req.onsuccess = (e) => resolve(e.target.result);
-        req.onerror = () => resolve(null);
-    });
+    return new Promise((resolve) => {
+        if (!window.indexedDB) return resolve(null);
+        let req = indexedDB.open('GestionClasseSecoursDB', 1);
+        req.onupgradeneeded = (e) => {
+            let db = e.target.result;
+            if (!db.objectStoreNames.contains('etat')) db.createObjectStore('etat');
+        };
+        req.onsuccess = (e) => resolve(e.target.result);
+        req.onerror = () => resolve(null);
+    });
 }
 
 async function sauvegarderDansIndexedDB() {
-    try {
-        let db = await ouvrirIndexedDB();
-        if (!db) return;
-        let payload = construirePayloadComplet();
-        let tx = db.transaction('etat', 'readwrite');
-        let store = tx.objectStore('etat');
-        store.put(payload, 'derniere_sauvegarde');
-        store.put(snapshotsMemoire, 'snapshots_secours');
-    } catch (e) {}
+    try {
+        let db = await ouvrirIndexedDB();
+        if (!db) return;
+        let payload = construirePayloadComplet();
+        let tx = db.transaction('etat', 'readwrite');
+        let store = tx.objectStore('etat');
+        store.put(payload, 'derniere_sauvegarde');
+        store.put(snapshotsMemoire, 'snapshots_secours');
+    } catch (e) {}
 }
 
 async function verifierSecoursIndexedDBAuDemarrage() {
-    try {
-        localStorage.removeItem(KEY_SNAPSHOTS_SECOURS);
+    return new Promise(async (resolve) => {
+        try {
+            localStorage.removeItem(KEY_SNAPSHOTS_SECOURS);
 
-        let db = await ouvrirIndexedDB();
-        if (!db) return;
-        let tx = db.transaction('etat', 'readonly');
-        let store = tx.objectStore('etat');
+            let db = await ouvrirIndexedDB();
+            if (!db) return resolve();
+            let tx = db.transaction('etat', 'readonly');
+            let store = tx.objectStore('etat');
 
-        let reqSnap = store.get('snapshots_secours');
-        reqSnap.onsuccess = () => {
-            if (Array.isArray(reqSnap.result) && reqSnap.result.length > 0) {
-                snapshotsMemoire = reqSnap.result;
-                afficherListeSnapshotsSecoursUI();
-            } else if (snapshotsMemoire.length > 0) {
-                sauvegarderDansIndexedDB();
-            }
-        };
+            let reqSnap = store.get('snapshots_secours');
+            reqSnap.onsuccess = () => {
+                if (Array.isArray(reqSnap.result) && reqSnap.result.length > 0) {
+                    snapshotsMemoire = reqSnap.result;
+                    afficherListeSnapshotsSecoursUI();
+                } else if (snapshotsMemoire.length > 0) {
+                    sauvegarderDansIndexedDB();
+                }
+            };
 
-        let req = store.get('derniere_sauvegarde');
-        req.onsuccess = () => {
-            let idbData = req.result;
-            if (!idbData) return;
+            let req = store.get('derniere_sauvegarde');
+            req.onsuccess = () => {
+                let idbData = req.result;
+                if (!idbData) return resolve();
 
-            let modifEffectuee = false;
-            if (Array.isArray(idbData.base) && idbData.base.length > 0) {
-                let nbAjoutes = fusionnerTableauBaseSansPerte(idbData.base);
-                if (nbAjoutes > 0) {
-                    setItemSafe(KEY_ATELIERS, compacterBasePourLocalStorage(baseDonnees));
-                    modifEffectuee = true;
-                    showToast("🛡️ " + nbAjoutes + " élément(s) chargé(s) depuis le stockage Haute Capacité IndexedDB !", "success");
-                }
-            }
-            if (idbData.eleves && typeof idbData.eleves === 'object' && Object.keys(eleves).length === 0 && Object.keys(idbData.eleves).length > 0) {
-                eleves = idbData.eleves;
-                Object.values(eleves).forEach(el => assurerStructureSemaines(el));
-                setItemSafe(KEY_ELEVES, JSON.stringify(eleves));
-                modifEffectuee = true;
-            }
-            if (idbData.programmations && typeof idbData.programmations === 'object' && Object.keys(programmations).length === 0) {
-                programmations = idbData.programmations;
-                setItemSafe(KEY_PROG, JSON.stringify(programmations));
-                modifEffectuee = true;
-            }
-            if (idbData.progPeriodesData && typeof idbData.progPeriodesData === 'object' && !progPeriodesData) {
-                progPeriodesData = idbData.progPeriodesData;
-                setItemSafe(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData));
-                modifEffectuee = true;
-            }
-            if (modifEffectuee) {
-                rafraichirToutApresImport();
-            }
-        };
-    } catch (e) {}
+                let rawLocalTs = localStorage.getItem(KEY_LOCAL_UPDATED_AT);
+                let tsLocal = (rawLocalTs && !isNaN(Date.parse(rawLocalTs))) ? Date.parse(rawLocalTs) : 0;
+                let tsIdb = (idbData.updatedAt && !isNaN(Date.parse(idbData.updatedAt))) ? Date.parse(idbData.updatedAt) : 0;
+                let localVide = (baseDonnees.length === 0 && Object.keys(eleves).length === 0);
+
+                if (localVide || tsIdb > tsLocal) {
+                    importerDonneesUniversel(idbData, false, true);
+                }
+                resolve();
+            };
+            req.onerror = () => resolve();
+        } catch (e) {
+            resolve();
+        }
+    });
 }
 
 let dernierSnapshotTimestamp = 0;
 function enregistrerSnapshotSecoursAuto(forcer = false) {
-    let now = Date.now();
-    if (!forcer && (now - dernierSnapshotTimestamp < 15000)) return;
-    if (baseDonnees.length === 0 && Object.keys(eleves).length === 0) return;
-    dernierSnapshotTimestamp = now;
-    try {
-        localStorage.removeItem(KEY_SNAPSHOTS_SECOURS);
-        let snap = {
-            dateFR: new Date().toLocaleString('fr-FR'),
-            nbBase: baseDonnees.length,
-            nbLecons: baseDonnees.filter(a => estLeconProf(a)).length,
-            nbEleves: Object.keys(eleves).length,
-            payload: construirePayloadComplet()
-        };
-        if (snapshotsMemoire.length > 0 && snapshotsMemoire[0].nbBase === snap.nbBase && snapshotsMemoire[0].nbLecons === snap.nbLecons && snapshotsMemoire[0].nbEleves === snap.nbEleves) {
-            snapshotsMemoire[0] = snap;
-        } else {
-            snapshotsMemoire.unshift(snap);
-        }
-        if (snapshotsMemoire.length > 8) snapshotsMemoire.length = 8;
-        sauvegarderDansIndexedDB();
-        afficherListeSnapshotsSecoursUI();
-    } catch (e) {}
+    let now = Date.now();
+    if (!forcer && (now - dernierSnapshotTimestamp < 15000)) return;
+    if (baseDonnees.length === 0 && Object.keys(eleves).length === 0) return;
+    dernierSnapshotTimestamp = now;
+    try {
+        localStorage.removeItem(KEY_SNAPSHOTS_SECOURS);
+        let snap = {
+            dateFR: new Date().toLocaleString('fr-FR'),
+            nbBase: baseDonnees.length,
+            nbLecons: baseDonnees.filter(a => estLeconProf(a)).length,
+            nbEleves: Object.keys(eleves).length,
+            payload: construirePayloadComplet()
+        };
+        if (snapshotsMemoire.length > 0 && snapshotsMemoire[0].nbBase === snap.nbBase && snapshotsMemoire[0].nbLecons === snap.nbLecons && snapshotsMemoire[0].nbEleves === snap.nbEleves) {
+            snapshotsMemoire[0] = snap;
+        } else {
+            snapshotsMemoire.unshift(snap);
+        }
+        if (snapshotsMemoire.length > 8) snapshotsMemoire.length = 8;
+        sauvegarderDansIndexedDB();
+        afficherListeSnapshotsSecoursUI();
+    } catch (e) {}
 }
 
 function afficherListeSnapshotsSecoursUI() {
-    let cont = document.getElementById('listeSnapshotsAutoContainer');
-    if (!cont) return;
-    if (!Array.isArray(snapshotsMemoire) || snapshotsMemoire.length === 0) {
-        cont.innerHTML = '<em style="color:#7f8c8d; font-size:12.5px;">Aucune copie automatique enregistrée pour le moment (s\'enregistre automatiquement dès votre prochaine modification).</em>';
-        return;
-    }
-    cont.innerHTML = snapshotsMemoire.map((s, idx) =>
-        '<div style="display:flex; justify-content:space-between; align-items:center; background:#fff; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:12.5px; flex-wrap:wrap; gap:8px;">' +
-            '<span>🕒 <strong>' + escHTML(s.dateFR) + '</strong> — <strong>' + s.nbBase + '</strong> éléments (dont <strong>' + (s.nbLecons || 0) + '</strong> 👩‍🏫 leçons) & <strong>' + s.nbEleves + '</strong> élèves <small style="color:#16a085;">(Stocké sur IndexedDB Haute Capacité)</small></span>' +
-            '<div style="display:flex; gap:6px;">' +
-                '<button type="button" class="btn-action" style="padding:3px 8px; font-size:11.5px;" onclick="restaurerSnapshotSecours(' + idx + ', true)" title="Récupère uniquement les éléments manquants de cette copie sans rien effacer">➕ Fusionner les manquants</button>' +
-                '<button type="button" class="filter-btn" style="padding:3px 8px; font-size:11.5px;" onclick="restaurerSnapshotSecours(' + idx + ', false)" title="Remplace toute la base par cette copie">↩️ Restaurer cet état</button>' +
-            '</div>' +
-        '</div>'
-    ).join('');
+    let cont = document.getElementById('listeSnapshotsAutoContainer');
+    if (!cont) return;
+    if (!Array.isArray(snapshotsMemoire) || snapshotsMemoire.length === 0) {
+        cont.innerHTML = '<em style="color:#7f8c8d; font-size:12.5px;">Aucune copie automatique enregistrée pour le moment (s\'enregistre automatiquement dès votre prochaine modification).</em>';
+        return;
+    }
+    cont.innerHTML = snapshotsMemoire.map((s, idx) =>
+        '<div style="display:flex; justify-content:space-between; align-items:center; background:#fff; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:12.5px; flex-wrap:wrap; gap:8px;">' +
+            '<span>🕒 <strong>' + escHTML(s.dateFR) + '</strong> — <strong>' + s.nbBase + '</strong> éléments (dont <strong>' + (s.nbLecons || 0) + '</strong> 👩‍🏫 leçons) & <strong>' + s.nbEleves + '</strong> élèves <small style="color:#16a085;">(Stocké sur IndexedDB Haute Capacité)</small></span>' +
+            '<div style="display:flex; gap:6px;">' +
+                '<button type="button" class="btn-action" style="padding:3px 8px; font-size:11.5px;" onclick="restaurerSnapshotSecours(' + idx + ', true)" title="Récupère uniquement les éléments manquants de cette copie sans rien effacer">➕ Fusionner les manquants</button>' +
+                '<button type="button" class="filter-btn" style="padding:3px 8px; font-size:11.5px;" onclick="restaurerSnapshotSecours(' + idx + ', false)" title="Remplace toute la base par cette copie">↩️ Restaurer cet état</button>' +
+            '</div>' +
+        '</div>'
+    ).join('');
 }
 
 function restaurerSnapshotSecours(idx, modeFusion = true) {
-    let snap = snapshotsMemoire[idx];
-    if (!snap || !snap.payload) return;
-    if (modeFusion) {
-        let ajoutes = fusionnerTableauBaseSansPerte(snap.payload.base || []);
-        sauvegarderBase();
-        rafraichirToutApresImport();
-        showToast("✅ " + ajoutes + " élément(s) manquant(s) récupéré(s) depuis la copie du " + snap.dateFR + " !", "success");
-    } else if (confirm("Restaurer intégralement la copie du " + snap.dateFR + " (" + snap.nbBase + " éléments) ?")) {
-        importerDonneesUniversel(snap.payload, false);
-    }
+    let snap = snapshotsMemoire[idx];
+    if (!snap || !snap.payload) return;
+    if (modeFusion) {
+        let ajoutes = fusionnerTableauBaseSansPerte(snap.payload.base || []);
+        sauvegarderBase();
+        rafraichirToutApresImport();
+        showToast("✅ " + ajoutes + " élément(s) manquant(s) récupéré(s) depuis la copie du " + snap.dateFR + " !", "success");
+    } else if (confirm("Restaurer intégralement la copie du " + snap.dateFR + " (" + snap.nbBase + " éléments) ?")) {
+        importerDonneesUniversel(snap.payload, false);
+    }
 }
 
 function signatureUniqueActivite(a) {
-    if (!a) return "";
-    return (a.niveau || "").trim().toUpperCase() + "||" + (a.matiere || "").trim().toLowerCase() + "||" + (a.sequence || "").trim().toLowerCase() + "||" + (a.lecon || "").trim().toLowerCase() + "||" + (a.ressource || "").trim().toLowerCase() + "||" + Boolean(a.estLecon);
+    if (!a) return "";
+    return (a.niveau || "").trim().toUpperCase() + "||" + (a.matiere || "").trim().toLowerCase() + "||" + (a.sequence || "").trim().toLowerCase() + "||" + (a.lecon || "").trim().toLowerCase() + "||" + (a.ressource || "").trim().toLowerCase() + "||" + Boolean(a.estLecon);
 }
 
 function fusionnerTableauBaseSansPerte(tableauExterne) {
-    if (!Array.isArray(tableauExterne)) return 0;
-    let idsConnus = new Set(baseDonnees.map(b => b && b.id).filter(Boolean));
-    let sigsConnues = new Set(baseDonnees.map(b => signatureUniqueActivite(b)).filter(Boolean));
-    let nbAjoutes = 0;
+    if (!Array.isArray(tableauExterne)) return 0;
+    let idsConnus = new Set(baseDonnees.map(b => b && b.id).filter(Boolean));
+    let sigsConnues = new Set(baseDonnees.map(b => signatureUniqueActivite(b)).filter(Boolean));
+    let nbAjoutes = 0;
 
-    tableauExterne.forEach(item => {
-        if (!item) return;
-        let sig = signatureUniqueActivite(item);
-        if (!idsConnus.has(item.id) && !sigsConnues.has(sig)) {
-            baseDonnees.push(item);
-            idsConnus.add(item.id);
-            sigsConnues.add(sig);
-            nbAjoutes++;
-        }
-    });
-    return nbAjoutes;
+    tableauExterne.forEach(item => {
+        if (!item) return;
+        let sig = signatureUniqueActivite(item);
+        if (!idsConnus.has(item.id) && !sigsConnues.has(sig)) {
+            baseDonnees.push(item);
+            idsConnus.add(item.id);
+            sigsConnues.add(sig);
+            nbAjoutes++;
+        }
+    });
+    return nbAjoutes;
 }
 
 function nettoyerArbrePourFirebase(val) {
-    if (Array.isArray(val)) {
-        return val.map(v => nettoyerArbrePourFirebase(v));
-    }
-    if (val && typeof val === 'object') {
-        let propre = {};
-        Object.keys(val).forEach(k => {
-            let kSafe = k.toString().replace(/[.\x24#[\]\/]/g, "_") || "_vide_";
-            propre[kSafe] = nettoyerArbrePourFirebase(val[k]);
-        });
-        return propre;
-    }
-    return val;
+    if (Array.isArray(val)) {
+        return val.map(v => nettoyerArbrePourFirebase(v));
+    }
+    if (val && typeof val === 'object') {
+        let propre = {};
+        Object.keys(val).forEach(k => {
+            let kSafe = k.toString().replace(/[.\x24#[\]\/]/g, "_") || "_vide_";
+            propre[kSafe] = nettoyerArbrePourFirebase(val[k]);
+        });
+        return propre;
+    }
+    return val;
 }
 
 function construirePayloadComplet() {
-    Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
-    if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
-    return {
-        base: baseDonnees,
-        eleves: eleves,
-        images: imagesParType,
-        archives: dashboardArchives,
-        programmations: programmations,
-        sequencesCustom: sequencesCustom,
-        planningLeconsProf: planningLeconsProf,
-        progPeriodesData: progPeriodesData,
-        printConfig: printConfig,
-        theme: localStorage.getItem(KEY_THEME) || 'pastel',
-        updatedAt: localStorage.getItem(KEY_LOCAL_UPDATED_AT) || new Date().toISOString()
-    };
+    Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
+    if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
+    return {
+        base: baseDonnees,
+        eleves: eleves,
+        images: imagesParType,
+        archives: dashboardArchives,
+        programmations: programmations,
+        sequencesCustom: sequencesCustom,
+        planningLeconsProf: planningLeconsProf,
+        progPeriodesData: progPeriodesData,
+        printConfig: printConfig,
+        theme: localStorage.getItem(KEY_THEME) || 'pastel',
+        updatedAt: localStorage.getItem(KEY_LOCAL_UPDATED_AT) || new Date().toISOString()
+    };
 }
 
 function parseSiString(val) {
-    if (typeof val === 'string') {
-        try { return JSON.parse(val); } catch (e) { return val; }
-    }
-    return val;
+    if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch (e) { return val; }
+    }
+    return val;
 }
 
 function compterElementsProgPeriodes(pData) {
-    if (!pData || !pData.periodes || typeof pData.periodes !== 'object') return 0;
-    let total = 0;
-    Object.values(pData.periodes).forEach(pObj => {
-        if (!pObj) return;
-        if (pObj.dateDebutP_ISO) total++;
-        let sems = Array.isArray(pObj.semaines) ? pObj.semaines : (pObj.semaines && typeof pObj.semaines === 'object' ? Object.values(pObj.semaines) : []);
-        sems.forEach(sem => {
-            if (!sem || !sem.niveaux) return;
-            Object.values(sem.niveaux).forEach(nivObj => {
-                if (!nivObj) return;
-                ["francais", "maths"].forEach(pole => {
-                    let b = nivObj[pole];
-                    if (!b) return;
-                    let seqs = Array.isArray(b.sequences) ? b.sequences : (b.sequences && typeof b.sequences === 'object' ? Object.values(b.sequences) : []);
-                    total += seqs.filter(s => s && s.nom).length;
-                    if (b.jours && typeof b.jours === 'object') {
-                        Object.values(b.jours).forEach(j => {
-                            if (j && j.texte && j.texte.trim() !== "") total++;
-                        });
-                    }
-                });
-            });
-        });
-    });
-    return total;
+    if (!pData || !pData.periodes || typeof pData.periodes !== 'object') return 0;
+    let total = 0;
+    Object.values(pData.periodes).forEach(pObj => {
+        if (!pObj) return;
+        if (pObj.dateDebutP_ISO) total++;
+        let sems = Array.isArray(pObj.semaines) ? pObj.semaines : (pObj.semaines && typeof pObj.semaines === 'object' ? Object.values(pObj.semaines) : []);
+        sems.forEach(sem => {
+            if (!sem || !sem.niveaux) return;
+            Object.values(sem.niveaux).forEach(nivObj => {
+                if (!nivObj) return;
+                ["francais", "maths"].forEach(pole => {
+                    let b = nivObj[pole];
+                    if (!b) return;
+                    let seqs = Array.isArray(b.sequences) ? b.sequences : (b.sequences && typeof b.sequences === 'object' ? Object.values(b.sequences) : []);
+                    total += seqs.filter(s => s && s.nom).length;
+                    if (b.jours && typeof b.jours === 'object') {
+                        Object.values(b.jours).forEach(j => {
+                            if (j && j.texte && j.texte.trim() !== "") total++;
+                        });
+                    }
+                });
+            });
+        });
+    });
+    return total;
 }
 
 function fusionnerProgPeriodesSansPerte(progCible, progSource) {
-    if (!progSource || typeof progSource !== 'object') return progCible;
-    if (!progCible || typeof progCible !== 'object') return progSource;
+    if (!progSource || typeof progSource !== 'object') return progCible;
+    if (!progCible || typeof progCible !== 'object') return progSource;
 
-    let res = JSON.parse(JSON.stringify(progCible));
-    if (progSource.periodeActiveDash) res.periodeActiveDash = progSource.periodeActiveDash;
-    if (progSource.semaineIndexDash !== undefined) res.semaineIndexDash = progSource.semaineIndexDash;
-    if (!res.periodes) res.periodes = {};
+    let res = JSON.parse(JSON.stringify(progCible));
+    if (progSource.periodeActiveDash) res.periodeActiveDash = progSource.periodeActiveDash;
+    if (progSource.semaineIndexDash !== undefined) res.semaineIndexDash = progSource.semaineIndexDash;
+    if (!res.periodes) res.periodes = {};
 
-    if (progSource.periodes && typeof progSource.periodes === 'object') {
-        PERIODES_LISTE.forEach(per => {
-            let srcP = progSource.periodes[per];
-            if (!srcP) return;
-            if (!res.periodes[per]) {
-                res.periodes[per] = JSON.parse(JSON.stringify(srcP));
-                return;
-            }
-            let cibP = res.periodes[per];
-            if (srcP.dateDebutP_ISO) cibP.dateDebutP_ISO = srcP.dateDebutP_ISO;
-            if (srcP.nbSemaines) cibP.nbSemaines = Math.max(cibP.nbSemaines || 7, srcP.nbSemaines);
+    if (progSource.periodes && typeof progSource.periodes === 'object') {
+        PERIODES_LISTE.forEach(per => {
+            let srcP = progSource.periodes[per];
+            if (!srcP) return;
+            if (!res.periodes[per]) {
+                res.periodes[per] = JSON.parse(JSON.stringify(srcP));
+                return;
+            }
+            let cibP = res.periodes[per];
+            if (srcP.dateDebutP_ISO) cibP.dateDebutP_ISO = srcP.dateDebutP_ISO;
+            if (srcP.nbSemaines) cibP.nbSemaines = Math.max(cibP.nbSemaines || 7, srcP.nbSemaines);
 
-            let srcSems = Array.isArray(srcP.semaines) ? srcP.semaines : (srcP.semaines && typeof srcP.semaines === 'object' ? Object.values(srcP.semaines) : []);
-            let cibSems = Array.isArray(cibP.semaines) ? cibP.semaines : (cibP.semaines && typeof cibP.semaines === 'object' ? Object.values(cibP.semaines) : []);
+            let srcSems = Array.isArray(srcP.semaines) ? srcP.semaines : (srcP.semaines && typeof srcP.semaines === 'object' ? Object.values(srcP.semaines) : []);
+            let cibSems = Array.isArray(cibP.semaines) ? cibP.semaines : (cibP.semaines && typeof cibP.semaines === 'object' ? Object.values(cibP.semaines) : []);
 
-            let maxS = Math.max(srcSems.length, cibSems.length);
-            for (let i = 0; i < maxS; i++) {
-                if (!cibSems[i] && srcSems[i]) {
-                    cibSems[i] = JSON.parse(JSON.stringify(srcSems[i]));
-                    continue;
-                }
-                if (!srcSems[i]) continue;
+            let maxS = Math.max(srcSems.length, cibSems.length);
+            for (let i = 0; i < maxS; i++) {
+                if (!cibSems[i] && srcSems[i]) {
+                    cibSems[i] = JSON.parse(JSON.stringify(srcSems[i]));
+                    continue;
+                }
+                if (!srcSems[i]) continue;
 
-                let sSrc = srcSems[i], sCib = cibSems[i];
-                if (sSrc.dateDebutISO) { sCib.dateDebutISO = sSrc.dateDebutISO; sCib.dateDebut = sSrc.dateDebut || ""; sCib.dateFin = sSrc.dateFin || ""; }
-                if (sSrc.ordrePassages) sCib.ordrePassages = JSON.parse(JSON.stringify(sSrc.ordrePassages));
-                if (!sCib.niveaux) sCib.niveaux = {};
+                let sSrc = srcSems[i], sCib = cibSems[i];
+                if (sSrc.dateDebutISO) { sCib.dateDebutISO = sSrc.dateDebutISO; sCib.dateDebut = sSrc.dateDebut || ""; sCib.dateFin = sSrc.dateFin || ""; }
+                if (sSrc.ordrePassages) sCib.ordrePassages = JSON.parse(JSON.stringify(sSrc.ordrePassages));
+                if (!sCib.niveaux) sCib.niveaux = {};
 
-                if (sSrc.niveaux) {
-                    NIVEAUX_LISTE.forEach(niv => {
-                        if (!sSrc.niveaux[niv]) return;
-                        if (!sCib.niveaux[niv]) { sCib.niveaux[niv] = JSON.parse(JSON.stringify(sSrc.niveaux[niv])); return; }
-                        ["francais", "maths"].forEach(pole => {
-                            let bSrc = sSrc.niveaux[niv][pole];
-                            if (!bSrc) return;
-                            if (!sCib.niveaux[niv][pole]) { sCib.niveaux[niv][pole] = JSON.parse(JSON.stringify(bSrc)); return; }
-                            let bCib = sCib.niveaux[niv][pole];
+                if (sSrc.niveaux) {
+                    NIVEAUX_LISTE.forEach(niv => {
+                        if (!sSrc.niveaux[niv]) return;
+                        if (!sCib.niveaux[niv]) { sCib.niveaux[niv] = JSON.parse(JSON.stringify(sSrc.niveaux[niv])); return; }
+                        ["francais", "maths"].forEach(pole => {
+                            let bSrc = sSrc.niveaux[niv][pole];
+                            if (!bSrc) return;
+                            if (!sCib.niveaux[niv][pole]) { sCib.niveaux[niv][pole] = JSON.parse(JSON.stringify(bSrc)); return; }
+                            let bCib = sCib.niveaux[niv][pole];
 
-                            let seqsSrc = Array.isArray(bSrc.sequences) ? bSrc.sequences : (bSrc.sequences && typeof bSrc.sequences === 'object' ? Object.values(bSrc.sequences) : []);
-                            let seqsCib = Array.isArray(bCib.sequences) ? bCib.sequences : (bCib.sequences && typeof bCib.sequences === 'object' ? Object.values(bCib.sequences) : []);
-                            seqsSrc.forEach(sq => {
-                                if (!sq || !sq.nom) return;
-                                let ex = seqsCib.find(x => x && x.nom && x.nom.toLowerCase() === sq.nom.toLowerCase());
-                                if (!ex) seqsCib.push({ nom: sq.nom, fait: Boolean(sq.fait) });
-                                else if (sq.fait) ex.fait = true;
-                            });
-                            bCib.sequences = seqsCib;
+                            let seqsSrc = Array.isArray(bSrc.sequences) ? bSrc.sequences : (bSrc.sequences && typeof bSrc.sequences === 'object' ? Object.values(bSrc.sequences) : []);
+                            let seqsCib = Array.isArray(bCib.sequences) ? bCib.sequences : (bCib.sequences && typeof bCib.sequences === 'object' ? Object.values(bCib.sequences) : []);
+                            seqsSrc.forEach(sq => {
+                                if (!sq || !sq.nom) return;
+                                let ex = seqsCib.find(x => x && x.nom && x.nom.toLowerCase() === sq.nom.toLowerCase());
+                                if (!ex) seqsCib.push({ nom: sq.nom, fait: Boolean(sq.fait) });
+                                else if (sq.fait) ex.fait = true;
+                            });
+                            bCib.sequences = seqsCib;
 
-                            if (!bCib.jours) bCib.jours = {};
-                            if (bSrc.jours) {
-                                JOURS_SEMAINE_PROF.forEach(j => {
-                                    let jSrc = bSrc.jours[j];
-                                    if (jSrc && ((jSrc.texte && jSrc.texte.trim() !== "") || jSrc.lien || jSrc.fait)) {
-                                        bCib.jours[j] = {
-                                            texte: jSrc.texte || (bCib.jours[j] ? bCib.jours[j].texte : "") || "",
-                                            lien: jSrc.lien || (bCib.jours[j] ? bCib.jours[j].lien : "") || "",
-                                            pageProf: jSrc.pageProf || (bCib.jours[j] ? bCib.jours[j].pageProf : "") || "",
-                                            fait: Boolean(jSrc.fait || (bCib.jours[j] && bCib.jours[j].fait))
-                                        };
-                                    }
-                                });
-                            }
-                        });
-                    });
-                }
-            }
-            cibP.semaines = cibSems;
-        });
-    }
-    return res;
+                            if (!bCib.jours) bCib.jours = {};
+                            if (bSrc.jours) {
+                                JOURS_SEMAINE_PROF.forEach(j => {
+                                    let jSrc = bSrc.jours[j];
+                                    if (jSrc && ((jSrc.texte && jSrc.texte.trim() !== "") || jSrc.lien || jSrc.fait)) {
+                                        bCib.jours[j] = {
+                                            texte: jSrc.texte || (bCib.jours[j] ? bCib.jours[j].texte : "") || "",
+                                            lien: jSrc.lien || (bCib.jours[j] ? bCib.jours[j].lien : "") || "",
+                                            pageProf: jSrc.pageProf || (bCib.jours[j] ? bCib.jours[j].pageProf : "") || "",
+                                            fait: Boolean(jSrc.fait || (bCib.jours[j] && bCib.jours[j].fait))
+                                        };
+                                    }
+                                });
+                            }
+                        });
+                    });
+                }
+            }
+            cibP.semaines = cibSems;
+        });
+    }
+    return res;
 }
 
 function importerDonneesUniversel(rawData, modeFusionSansPerte = false, depuisSyncCloud = false) {
-    if (!rawData) { showToast("Aucune donnée trouvée.", "error"); return false; }
-    let data = parseSiString(rawData);
-    if (data.classe_data && typeof data.classe_data === 'object') data = data.classe_data;
+    if (!rawData) { showToast("Aucune donnée trouvée.", "error"); return false; }
+    let data = parseSiString(rawData);
+    if (data.classe_data && typeof data.classe_data === 'object') data = data.classe_data;
 
-    let nouvBase = parseSiString(data.base || data.ateliers || data.baseDonnees || data[KEY_ATELIERS] || (Array.isArray(data) ? data : null));
-    let nouvEleves = parseSiString(data.eleves || data[KEY_ELEVES] || null);
-    let nouvImages = parseSiString(data.images || data.imagesParType || data[KEY_IMAGES]);
-    let nouvProg = parseSiString(data.programmations || data[KEY_PROG]);
-    let nouvArchives = parseSiString(data.archives || data.dashboardArchives || data[KEY_ARCHIVES_TODO]);
-    let nouvPrintCfg = parseSiString(data.printConfig || data[KEY_PRINT_CFG]);
-    let nouvSeqCustom = parseSiString(data.sequencesCustom || data[KEY_SEQ_CUSTOM]);
-    let nouvLeconsProf = parseSiString(data.planningLeconsProf || data[KEY_LECONS_PROF]);
-    let nouvProgHebdo = parseSiString(data.progPeriodesData || data[KEY_PROG_HEBDO]);
+    let nouvBase = parseSiString(data.base || data.ateliers || data.baseDonnees || data[KEY_ATELIERS] || (Array.isArray(data) ? data : null));
+    let nouvEleves = parseSiString(data.eleves || data[KEY_ELEVES] || null);
+    let nouvImages = parseSiString(data.images || data.imagesParType || data[KEY_IMAGES]);
+    let nouvProg = parseSiString(data.programmations || data[KEY_PROG]);
+    let nouvArchives = parseSiString(data.archives || data.dashboardArchives || data[KEY_ARCHIVES_TODO]);
+    let nouvPrintCfg = parseSiString(data.printConfig || data[KEY_PRINT_CFG]);
+    let nouvSeqCustom = parseSiString(data.sequencesCustom || data[KEY_SEQ_CUSTOM]);
+    let nouvLeconsProf = parseSiString(data.planningLeconsProf || data[KEY_LECONS_PROF]);
+    let nouvProgHebdo = parseSiString(data.progPeriodesData || data[KEY_PROG_HEBDO]);
 
-    if (!Array.isArray(nouvBase) && (!nouvEleves || typeof nouvEleves !== 'object') && !nouvProgHebdo && !nouvProg) {
-        showToast("⚠️ Format non reconnu : aucune donnée trouvée.", "error");
-        return false;
-    }
+    if (!Array.isArray(nouvBase) && (!nouvEleves || typeof nouvEleves !== 'object') && !nouvProgHebdo && !nouvProg) {
+        showToast("⚠️ Format non reconnu : aucune donnée trouvée.", "error");
+        return false;
+    }
 
-    enregistrerSnapshotSecoursAuto(true);
+    enregistrerSnapshotSecoursAuto(true);
 
-    if (Array.isArray(nouvBase)) {
-        if (modeFusionSansPerte && baseDonnees.length > 0) {
-            fusionnerTableauBaseSansPerte(nouvBase);
-            let mapSource = new Map(nouvBase.filter(Boolean).map(x => [x.id, x]));
-            baseDonnees.forEach((item, idx) => {
-                if (item && mapSource.has(item.id)) {
-                    baseDonnees[idx] = { ...item, ...mapSource.get(item.id) };
-                }
-            });
-        } else {
-            baseDonnees = nouvBase;
-        }
-        setItemSafe(KEY_ATELIERS, compacterBasePourLocalStorage(baseDonnees));
-    }
-    if (nouvEleves && typeof nouvEleves === 'object') {
-        if (modeFusionSansPerte && Object.keys(eleves).length > 0) {
-            Object.keys(nouvEleves).forEach(idEl => {
-                eleves[idEl] = nouvEleves[idEl];
-            });
-        } else {
-            eleves = nouvEleves;
-        }
-        Object.values(eleves).forEach(el => assurerStructureSemaines(el));
-        setItemSafe(KEY_ELEVES, JSON.stringify(eleves));
-    }
-    if (nouvImages && typeof nouvImages === 'object') {
-        imagesParType = { ...imagesParType, ...nouvImages };
-        if (!imagesParType["Leçon"]) {
-            imagesParType["Leçon"] = { img: "", emoji: "👩‍🏫", remplacerNum: true, appliquerCouleur: false, isTablette: false };
-        }
-        Object.keys(imagesParType).forEach(k => {
-            if (typeof imagesParType[k] === 'object' && imagesParType[k] !== null && imagesParType[k].emoji === undefined) {
-                imagesParType[k].emoji = (k.toLowerCase() === 'jeu' ? '🎲' : '');
-            }
-        });
-        setItemSafe(KEY_IMAGES, JSON.stringify(imagesParType));
-    }
-    if (nouvProg && typeof nouvProg === 'object') {
-        programmations = modeFusionSansPerte ? { ...programmations, ...nouvProg } : nouvProg;
-        setItemSafe(KEY_PROG, JSON.stringify(programmations));
-    }
-    if (Array.isArray(nouvArchives)) {
-        dashboardArchives = modeFusionSansPerte ? [...new Set([...dashboardArchives, ...nouvArchives])] : nouvArchives;
-        setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
-    }
-    if (nouvPrintCfg && typeof nouvPrintCfg === 'object') {
-        printConfig = { ...printConfig, ...nouvPrintCfg };
-        setItemSafe(KEY_PRINT_CFG, JSON.stringify(printConfig));
-    }
-    if (Array.isArray(nouvSeqCustom)) {
-        sequencesCustom = [...new Set([...sequencesCustom, ...nouvSeqCustom])];
-        setItemSafe(KEY_SEQ_CUSTOM, JSON.stringify(sequencesCustom));
-    }
-    if (nouvLeconsProf && typeof nouvLeconsProf === 'object') {
-        planningLeconsProf = nouvLeconsProf;
-        setItemSafe(KEY_LECONS_PROF, JSON.stringify(planningLeconsProf));
-    }
-    if (nouvProgHebdo && typeof nouvProgHebdo === 'object') {
-        if (modeFusionSansPerte && progPeriodesData) {
-            progPeriodesData = fusionnerProgPeriodesSansPerte(progPeriodesData, nouvProgHebdo);
-        } else {
-            progPeriodesData = nouvProgHebdo;
-        }
-        if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
-        setItemSafe(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData));
-    }
-    if (data.theme && !modeFusionSansPerte) appliquerThemeVisuel(data.theme);
+    if (Array.isArray(nouvBase)) {
+        if (modeFusionSansPerte && baseDonnees.length > 0) {
+            fusionnerTableauBaseSansPerte(nouvBase);
+            let mapSource = new Map(nouvBase.filter(Boolean).map(x => [x.id, x]));
+            baseDonnees.forEach((item, idx) => {
+                if (item && mapSource.has(item.id)) {
+                    baseDonnees[idx] = { ...item, ...mapSource.get(item.id) };
+                }
+            });
+        } else {
+            baseDonnees = nouvBase;
+        }
+        setItemSafe(KEY_ATELIERS, compacterBasePourLocalStorage(baseDonnees));
+    }
+    if (nouvEleves && typeof nouvEleves === 'object') {
+        if (modeFusionSansPerte && Object.keys(eleves).length > 0) {
+            Object.keys(nouvEleves).forEach(idEl => {
+                eleves[idEl] = nouvEleves[idEl];
+            });
+        } else {
+            eleves = nouvEleves;
+        }
+        Object.values(eleves).forEach(el => assurerStructureSemaines(el));
+        setItemSafe(KEY_ELEVES, JSON.stringify(eleves));
+    }
+    if (nouvImages && typeof nouvImages === 'object') {
+        imagesParType = { ...imagesParType, ...nouvImages };
+        if (!imagesParType["Leçon"]) {
+            imagesParType["Leçon"] = { img: "", emoji: "👩‍🏫", remplacerNum: true, appliquerCouleur: false, isTablette: false };
+        }
+        Object.keys(imagesParType).forEach(k => {
+            if (typeof imagesParType[k] === 'object' && imagesParType[k] !== null && imagesParType[k].emoji === undefined) {
+                imagesParType[k].emoji = (k.toLowerCase() === 'jeu' ? '🎲' : '');
+            }
+        });
+        setItemSafe(KEY_IMAGES, JSON.stringify(imagesParType));
+    }
+    if (nouvProg && typeof nouvProg === 'object') {
+        programmations = modeFusionSansPerte ? { ...programmations, ...nouvProg } : nouvProg;
+        setItemSafe(KEY_PROG, JSON.stringify(programmations));
+    }
+    if (Array.isArray(nouvArchives)) {
+        dashboardArchives = modeFusionSansPerte ? [...new Set([...dashboardArchives, ...nouvArchives])] : nouvArchives;
+        setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
+    }
+    if (nouvPrintCfg && typeof nouvPrintCfg === 'object') {
+        printConfig = { ...printConfig, ...nouvPrintCfg };
+        setItemSafe(KEY_PRINT_CFG, JSON.stringify(printConfig));
+    }
+    if (Array.isArray(nouvSeqCustom)) {
+        sequencesCustom = [...new Set([...sequencesCustom, ...nouvSeqCustom])];
+        setItemSafe(KEY_SEQ_CUSTOM, JSON.stringify(sequencesCustom));
+    }
+    if (nouvLeconsProf && typeof nouvLeconsProf === 'object') {
+        planningLeconsProf = nouvLeconsProf;
+        setItemSafe(KEY_LECONS_PROF, JSON.stringify(planningLeconsProf));
+    }
+    if (nouvProgHebdo && typeof nouvProgHebdo === 'object') {
+        if (modeFusionSansPerte && progPeriodesData) {
+            progPeriodesData = fusionnerProgPeriodesSansPerte(progPeriodesData, nouvProgHebdo);
+        } else {
+            progPeriodesData = nouvProgHebdo;
+        }
+        if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
+        setItemSafe(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData));
+    }
+    if (data.theme && !modeFusionSansPerte) appliquerThemeVisuel(data.theme);
 
-    if (depuisSyncCloud && data.updatedAt) {
-        setItemSafe(KEY_LOCAL_UPDATED_AT, data.updatedAt);
-        sauvegarderDansIndexedDB();
-    } else {
-        marquerModificationLocale();
-    }
+    if (depuisSyncCloud && data.updatedAt) {
+        setItemSafe(KEY_LOCAL_UPDATED_AT, data.updatedAt);
+        sauvegarderDansIndexedDB();
+    } else {
+        marquerModificationLocale();
+    }
 
-    rafraichirToutApresImport();
-    showToast("✅ Tout est synchronisé (" + baseDonnees.length + " éléments, " + Object.keys(eleves).length + " élèves, programmation & leçons) !", "success");
-    return true;
+    rafraichirToutApresImport();
+    showToast("✅ Tout est synchronisé (" + baseDonnees.length + " éléments, " + Object.keys(eleves).length + " élèves, programmation & leçons) !", "success");
+    return true;
 }
 
 function migrerCouleurFrancaisCPVertClair() {
-    let modifie = false;
-    baseDonnees.forEach(a => {
-        if (!a) return;
-        let coulActuelle = (a.visuel || "").toLowerCase();
-        if (coulActuelle === "#d5a6bd" || coulActuelle === "#b6d7a8" || coulActuelle === "#9fc5e8") {
-            let nouvCoul = calculerCouleurAutomatique(a.matiere, a.niveau, a.typeRes);
-            if (nouvCoul && nouvCoul !== "#ffffff" && nouvCoul.toLowerCase() !== coulActuelle) {
-                a.visuel = nouvCoul;
-                modifie = true;
-            }
-        }
-    });
-    if (modifie) {
-        setItemSafe(KEY_ATELIERS, compacterBasePourLocalStorage(baseDonnees));
-    }
+    let modifie = false;
+    baseDonnees.forEach(a => {
+        if (!a) return;
+        let coulActuelle = (a.visuel || "").toLowerCase();
+        if (coulActuelle === "#d5a6bd" || coulActuelle === "#b6d7a8" || coulActuelle === "#9fc5e8") {
+            let nouvCoul = calculerCouleurAutomatique(a.matiere, a.niveau, a.typeRes);
+            if (nouvCoul && nouvCoul !== "#ffffff" && nouvCoul.toLowerCase() !== coulActuelle) {
+                a.visuel = nouvCoul;
+                modifie = true;
+            }
+        }
+    });
+    if (modifie) {
+        setItemSafe(KEY_ATELIERS, compacterBasePourLocalStorage(baseDonnees));
+    }
 }
 
 function rafraichirToutApresImport() {
-    if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
-    migrerCouleurFrancaisCPVertClair();
-    eliminerDoublonsHistoriques();
-    trierBaseDonnees();
-    majListeTypesSelect();
-    initialiserSelectsFormulaire();
-    majListeEleves();
-    initNiveaux();
-    initProgFilters();
-    chargerConfigImpressionUI();
-    afficherProgrammation();
-    afficherBase();
-    afficherChoixEtiquettes();
-    majSelectCouleursRapides();
-    calculTailleStockage();
-    afficherListeSnapshotsSecoursUI();
-    rafraichirDashboard();
-    if (idEleveCourant && eleves[idEleveCourant]) chargerEleve();
+    if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
+    migrerCouleurFrancaisCPVertClair();
+    eliminerDoublonsHistoriques();
+    trierBaseDonnees();
+    majListeTypesSelect();
+    initialiserSelectsFormulaire();
+    majListeEleves();
+    initNiveaux();
+    initProgFilters();
+    chargerConfigImpressionUI();
+    afficherProgrammation();
+    afficherBase();
+    afficherChoixEtiquettes();
+    majSelectCouleursRapides();
+    calculTailleStockage();
+    afficherListeSnapshotsSecoursUI();
+    rafraichirDashboard();
+    if (idEleveCourant && eleves[idEleveCourant]) chargerEleve();
 }
 
 function restaurerFichierJSON(event) {
-    let input = (event && event.target) ? event.target : document.getElementById('inputFichierJson');
-    if (!input || !input.files || !input.files[0]) { showToast("Sélectionnez un fichier .json.", "error"); return; }
-    let fichier = input.files[0];
-    let lecteur = new FileReader();
-    lecteur.onload = function(e) {
-        try {
-            importerDonneesUniversel(JSON.parse(e.target.result), false);
-        } catch (err) {
-            showToast("Erreur : ce fichier n'est pas un JSON valide.", "error");
-        }
-        input.value = "";
-    };
-    lecteur.readAsText(fichier);
+    let input = (event && event.target) ? event.target : document.getElementById('inputFichierJson');
+    if (!input || !input.files || !input.files[0]) { showToast("Sélectionnez un fichier .json.", "error"); return; }
+    let fichier = input.files[0];
+    let lecteur = new FileReader();
+    lecteur.onload = function(e) {
+        try {
+            importerDonneesUniversel(JSON.parse(e.target.result), false);
+        } catch (err) {
+            showToast("Erreur : ce fichier n'est pas un JSON valide.", "error");
+        }
+        input.value = "";
+    };
+    lecteur.readAsText(fichier);
 }
 
 function restaurerSauvegarde() {
-    let input = document.getElementById('inputFichierJson');
-    if (input && input.files && input.files[0]) restaurerFichierJSON({ target: input });
-    else {
-        let texte = document.getElementById('textareaJsonSecours');
-        if (texte && texte.value.trim() !== "") restaurerDepuisTexteColle();
-        else { if (input) input.click(); showToast("Sélectionnez votre fichier JSON.", "success"); }
-    }
+    let input = document.getElementById('inputFichierJson');
+    if (input && input.files && input.files[0]) restaurerFichierJSON({ target: input });
+    else {
+        let texte = document.getElementById('textareaJsonSecours');
+        if (texte && texte.value.trim() !== "") restaurerDepuisTexteColle();
+        else { if (input) input.click(); showToast("Sélectionnez votre fichier JSON.", "success"); }
+    }
 }
 window.restaurerSauvegarde = restaurerSauvegarde;
 window.restaurerFichierJSON = restaurerFichierJSON;
 
 function restaurerDepuisTexteColle() {
-    let zone = document.getElementById('textareaJsonSecours');
-    if (!zone || !zone.value.trim()) { showToast("Collez votre JSON d'abord.", "error"); return; }
-    let txt = zone.value.trim();
-    if (txt.startsWith('"') && txt.endsWith('"')) {
-        try { txt = JSON.parse(txt); } catch (e) {}
-    }
-    try {
-        let parsed = typeof txt === 'string' ? JSON.parse(txt) : txt;
-        if (importerDonneesUniversel(parsed, false)) zone.value = "";
-    } catch (err) {
-        showToast("Le texte collé n'est pas un JSON valide.", "error");
-    }
+    let zone = document.getElementById('textareaJsonSecours');
+    if (!zone || !zone.value.trim()) { showToast("Collez votre JSON d'abord.", "error"); return; }
+    let txt = zone.value.trim();
+    if (txt.startsWith('"') && txt.endsWith('"')) {
+        try { txt = JSON.parse(txt); } catch (e) {}
+    }
+    try {
+        let parsed = typeof txt === 'string' ? JSON.parse(txt) : txt;
+        if (importerDonneesUniversel(parsed, false)) zone.value = "";
+    } catch (err) {
+        showToast("Le texte collé n'est pas un JSON valide.", "error");
+    }
 }
 
 function exporterSauvegardeJSON() {
-    const payload = construirePayloadComplet();
-    payload.exportedAt = new Date().toISOString();
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = "Sauvegarde_GestionClasse_" + new Date().toISOString().slice(0, 10) + ".json";
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast("💾 Fichier de sauvegarde téléchargé !", "success");
+    const payload = construirePayloadComplet();
+    payload.exportedAt = new Date().toISOString();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "Sauvegarde_GestionClasse_" + new Date().toISOString().slice(0, 10) + ".json";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast("💾 Fichier de sauvegarde téléchargé !", "success");
 }
 
 function viderCacheApplication() {
-    if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(regs => { for (let r of regs) r.unregister(); });
-    if ('caches' in window) caches.keys().then(keys => { for (let k of keys) caches.delete(k); });
-    showToast("🧹 Cache purgé ! Rechargement...", "success");
-    setTimeout(() => location.reload(true), 800);
+    if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(regs => { for (let r of regs) r.unregister(); });
+    if ('caches' in window) caches.keys().then(keys => { for (let k of keys) caches.delete(k); });
+    showToast("🧹 Cache purgé ! Rechargement...", "success");
+    setTimeout(() => location.reload(true), 800);
 }
 
 let timerFirebaseSave = null;
@@ -1153,146 +1139,150 @@ let sauvegardeFirebaseEnAttente = false;
 const URL_FIREBASE_FIXE = "https://gestionclasse-cc401-default-rtdb.europe-west1.firebasedatabase.app";
 
 function majBadgeSecuriteUI(texte, couleurBg, couleurTexte) {
-    let b = document.getElementById('badgeSecuriteBase');
-    if (b) {
-        b.innerText = texte;
-        b.style.background = couleurBg;
-        b.style.color = couleurTexte;
-    }
+    let b = document.getElementById('badgeSecuriteBase');
+    if (b) {
+        b.innerText = texte;
+        b.style.background = couleurBg;
+        b.style.color = couleurTexte;
+    }
 }
 
 async function sauvegarderVersFirebase(forcerManuellement = false, keepaliveMode = false) {
-    if (!forcerManuellement && baseDonnees.length === 0 && Object.keys(eleves).length === 0) return;
-    sauvegardeFirebaseEnAttente = false;
-    majBadgeSecuriteUI("⏳ Synchro Cloud en cours...", "#fef9e7", "#7d6608");
+    if (!forcerManuellement && baseDonnees.length === 0 && Object.keys(eleves).length === 0) return;
+    sauvegardeFirebaseEnAttente = false;
+    majBadgeSecuriteUI("⏳ Synchro Cloud en cours...", "#fef9e7", "#7d6608");
 
-    const rawPayload = construirePayloadComplet();
-    const safePayload = nettoyerArbrePourFirebase(rawPayload);
+    const rawPayload = construirePayloadComplet();
+    const safePayload = nettoyerArbrePourFirebase(rawPayload);
 
-    try {
-        let res = await fetch(URL_FIREBASE_FIXE + "/classe_data.json", {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(safePayload),
-            keepalive: keepaliveMode
-        });
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        let heure = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        let statut = document.getElementById('statutFirebase');
-        if (statut) {
-            statut.innerText = "🔥 Synchro Cloud OK à " + heure + " (" + baseDonnees.length + " éléments, " + Object.keys(eleves).length + " élèves)";
-            statut.style.color = "#27ae60";
-        }
-        majBadgeSecuriteUI("🛡️ Sauvegardé (Haute Capacité + Cloud " + heure + ")", "#e8f8f5", "#117864");
-        if (forcerManuellement) showToast("⬆️ Données envoyées et sécurisées sur Firebase !", "success");
-    } catch (e) {
-        let statut = document.getElementById('statutFirebase');
-        if (statut) {
-            statut.innerText = "⚠️ Sauvegardé sur l'appareil (Cloud hors-ligne : " + e.message + ")";
-            statut.style.color = "#e67e22";
-        }
-        majBadgeSecuriteUI("🛡️ Sauvegardé sur l'appareil (IndexedDB 500 Mo+)", "#fef9e7", "#d35400");
-        if (forcerManuellement) showToast("Erreur Firebase : " + e.message, "error");
-    }
+    try {
+        let res = await fetch(URL_FIREBASE_FIXE + "/classe_data.json", {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(safePayload),
+            keepalive: keepaliveMode
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        let heure = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        let statut = document.getElementById('statutFirebase');
+        if (statut) {
+            statut.innerText = "🔥 Synchro Cloud OK à " + heure + " (" + baseDonnees.length + " éléments, " + Object.keys(eleves).length + " élèves)";
+            statut.style.color = "#27ae60";
+        }
+        majBadgeSecuriteUI("🛡️ Sauvegardé (Haute Capacité + Cloud " + heure + ")", "#e8f8f5", "#117864");
+        if (forcerManuellement) showToast("⬆️ Données envoyées et sécurisées sur Firebase !", "success");
+    } catch (e) {
+        let statut = document.getElementById('statutFirebase');
+        if (statut) {
+            statut.innerText = "⚠️ Sauvegardé sur l'appareil (Cloud hors-ligne : " + e.message + ")";
+            statut.style.color = "#e67e22";
+        }
+        majBadgeSecuriteUI("🛡️ Sauvegardé sur l'appareil (IndexedDB 500 Mo+)", "#fef9e7", "#d35400");
+        if (forcerManuellement) showToast("Erreur Firebase : " + e.message, "error");
+    }
 }
 
-async function chargerDepuisFirebase(forcerFusionManuelle = false) {
-    let statut = document.getElementById('statutFirebase');
-    if (statut) { statut.innerText = "⏳ Vérification et synchronisation complète avec Firebase..."; statut.style.color = "#f39c12"; }
-    try {
-        let res = await fetch(URL_FIREBASE_FIXE + "/classe_data.json", { cache: "no-store" });
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        let data = await res.json();
-        let nbBaseCloud = (data && Array.isArray(data.base)) ? data.base.length : 0;
-        let nbElevesCloud = (data && data.eleves) ? Object.keys(data.eleves).length : 0;
-        let nbProgCloud = compterElementsProgPeriodes(data ? data.progPeriodesData : null) + (data && data.programmations ? Object.keys(data.programmations).length : 0);
+async function chargerDepuisFirebase(forcerManuellement = false) {
+    let statut = document.getElementById('statutFirebase');
+    if (statut) {
+        statut.innerText = "⏳ Vérification de la version la plus récente sur Firebase...";
+        statut.style.color = "#f39c12";
+    }
+    try {
+        let res = await fetch(URL_FIREBASE_FIXE + "/classe_data.json", { cache: "no-store" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        let data = await res.json();
 
-        if (data && (nbBaseCloud > 0 || nbElevesCloud > 0 || nbProgCloud > 0)) {
-            let localEstVide = (baseDonnees.length === 0 && Object.keys(eleves).length === 0);
-            let tsCloud = (data.updatedAt && !isNaN(Date.parse(data.updatedAt))) ? Date.parse(data.updatedAt) : 0;
-            let rawLocalTs = localStorage.getItem(KEY_LOCAL_UPDATED_AT);
-            let tsLocal = (rawLocalTs && !isNaN(Date.parse(rawLocalTs))) ? Date.parse(rawLocalTs) : 0;
+        let nbBaseCloud = (data && Array.isArray(data.base)) ? data.base.length : 0;
+        let nbElevesCloud = (data && data.eleves) ? Object.keys(data.eleves).length : 0;
+        let nbProgCloud = compterElementsProgPeriodes(data ? data.progPeriodesData : null) + (data && data.programmations ? Object.keys(data.programmations).length : 0);
 
-            let progLocalCount = compterElementsProgPeriodes(progPeriodesData);
-            let progCloudCount = compterElementsProgPeriodes(data.progPeriodesData);
+        if (data && (nbBaseCloud > 0 || nbElevesCloud > 0 || nbProgCloud > 0)) {
+            let localEstVide = (baseDonnees.length === 0 && Object.keys(eleves).length === 0);
+            let tsCloud = (data.updatedAt && !isNaN(Date.parse(data.updatedAt))) ? Date.parse(data.updatedAt) : 0;
+            let rawLocalTs = localStorage.getItem(KEY_LOCAL_UPDATED_AT);
+            let tsLocal = (rawLocalTs && !isNaN(Date.parse(rawLocalTs))) ? Date.parse(rawLocalTs) : 0;
 
-            if (localEstVide || forcerFusionManuelle || tsCloud > tsLocal || (progCloudCount > progLocalCount)) {
-                // Le Cloud est plus récent (ou contient la programmation faite sur l'autre ordinateur) : on charge tout !
-                importerDonneesUniversel(data, !localEstVide && !forcerFusionManuelle, true);
-            } else {
-                // L'ordinateur local est plus récent, mais on fusionne quand même la base et la programmation du Cloud sans rien perdre
-                let nbRecupDuCloud = fusionnerTableauBaseSansPerte(data.base || []);
-                if (data.programmations && typeof data.programmations === 'object') {
-                    programmations = { ...data.programmations, ...programmations };
-                    setItemSafe(KEY_PROG, JSON.stringify(programmations));
-                }
-                if (data.progPeriodesData && typeof data.progPeriodesData === 'object') {
-                    progPeriodesData = fusionnerProgPeriodesSansPerte( data.progPeriodesData, progPeriodesData );
-                    if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
-                    setItemSafe(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData));
-                }
-                if (nbRecupDuCloud > 0) {
-                    setItemSafe(KEY_ATELIERS, compacterBasePourLocalStorage(baseDonnees));
-                }
-                sauvegarderDansIndexedDB();
-                rafraichirToutApresImport();
-                if (tsLocal > tsCloud) {
-                    sauvegarderVersFirebase(false);
-                }
-            }
-            if (statut) {
-                statut.innerText = "🔥 Cloud Firebase synchronisé (Ateliers, Élèves, Programmation & Tableau de bord)";
-                statut.style.color = "#27ae60";
-            }
-        } else {
-            if (statut) { statut.innerText = "ℹ️ Cloud prêt. Envoi de vos données locales..."; statut.style.color = "#2980b9"; }
-            if (baseDonnees.length > 0 || Object.keys(eleves).length > 0) sauvegarderVersFirebase(false);
-        }
-    } catch (e) {
-        if (statut) { statut.innerText = "⚠️ Mode hors-ligne (vos données locales sont protégées) : " + e.message; statut.style.color = "#e67e22"; }
-    }
+            let heureCloud = tsCloud > 0 ? new Date(tsCloud).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : "";
+            let heureLocal = tsLocal > 0 ? new Date(tsLocal).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : "";
+
+            if (localEstVide || forcerManuellement || tsCloud > tsLocal) {
+                importerDonneesUniversel(data, false, true);
+                if (statut) {
+                    statut.innerText = "🔥 Version Cloud plus récente chargée (" + heureCloud + ")";
+                    statut.style.color = "#27ae60";
+                }
+                majBadgeSecuriteUI("🛡️ À jour avec le Cloud (" + heureCloud + ")", "#e8f8f5", "#117864");
+            } else if (tsLocal > tsCloud) {
+                await sauvegarderVersFirebase(false);
+                if (statut) {
+                    statut.innerText = "🔥 Version locale plus récente (" + heureLocal + ") envoyée vers le Cloud";
+                    statut.style.color = "#27ae60";
+                }
+            } else {
+                if (statut) {
+                    statut.innerText = "🔥 Synchronisé — Dernière sauvegarde à jour (" + (heureLocal || "OK") + ")";
+                    statut.style.color = "#27ae60";
+                }
+                majBadgeSecuriteUI("🛡️ Synchronisé (" + (heureLocal || "OK") + ")", "#e8f8f5", "#117864");
+            }
+        } else {
+            if (statut) { statut.innerText = "ℹ️ Cloud prêt. Envoi de vos données locales..."; statut.style.color = "#2980b9"; }
+            if (baseDonnees.length > 0 || Object.keys(eleves).length > 0) sauvegarderVersFirebase(false);
+        }
+    } catch (e) {
+        if (statut) { statut.innerText = "⚠️ Mode hors-ligne (vos données locales sont protégées) : " + e.message; statut.style.color = "#e67e22"; }
+    }
 }
 
 async function inspecterToutesBranchesFirebase() {
-    try {
-        let res = await fetch(URL_FIREBASE_FIXE + "/.json");
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        let rootData = await res.json();
-        if (!rootData) { showToast("La base Firebase est vide.", "error"); return; }
-        if (importerDonneesUniversel(rootData, true)) return;
-        for (let cle of Object.keys(rootData)) {
-            if (rootData[cle] && typeof rootData[cle] === 'object' && importerDonneesUniversel(rootData[cle], true)) return;
-        }
-        showToast("Aucune sauvegarde exploitable trouvée.", "error");
-    } catch (e) { showToast("Erreur : " + e.message, "error"); }
+    try {
+        let res = await fetch(URL_FIREBASE_FIXE + "/.json");
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        let rootData = await res.json();
+        if (!rootData) { showToast("La base Firebase est vide.", "error"); return; }
+        if (importerDonneesUniversel(rootData, true)) return;
+        for (let cle of Object.keys(rootData)) {
+            if (rootData[cle] && typeof rootData[cle] === 'object' && importerDonneesUniversel(rootData[cle], true)) return;
+        }
+        showToast("Aucune sauvegarde exploitable trouvée.", "error");
+    } catch (e) { showToast("Erreur : " + e.message, "error"); }
 }
 
 function declencherAutoSaveFirebase() {
-    sauvegardeFirebaseEnAttente = true;
-    clearTimeout(timerFirebaseSave);
-    timerFirebaseSave = setTimeout(() => sauvegarderVersFirebase(false, false), 300);
+    sauvegardeFirebaseEnAttente = true;
+    clearTimeout(timerFirebaseSave);
+    timerFirebaseSave = setTimeout(() => sauvegarderVersFirebase(false, false), 300);
 }
 
 window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && sauvegardeFirebaseEnAttente) {
-        clearTimeout(timerFirebaseSave);
-        sauvegarderVersFirebase(false, true);
-    }
+    if (document.visibilityState === 'hidden' && sauvegardeFirebaseEnAttente) {
+        clearTimeout(timerFirebaseSave);
+        sauvegarderVersFirebase(false, true);
+    } else if (document.visibilityState === 'visible' && !sauvegardeFirebaseEnAttente) {
+        chargerDepuisFirebase(false);
+    }
+});
+
+window.addEventListener('focus', () => {
+    if (!sauvegardeFirebaseEnAttente) {
+        chargerDepuisFirebase(false);
+    }
 });
 
 window.addEventListener('beforeunload', () => {
-    if (sauvegardeFirebaseEnAttente) {
-        clearTimeout(timerFirebaseSave);
-        sauvegarderVersFirebase(false, true);
-    }
+    if (sauvegardeFirebaseEnAttente) {
+        clearTimeout(timerFirebaseSave);
+        sauvegarderVersFirebase(false, true);
+    }
 });
 
 let connexionInitialeFirebaseFaite = false;
-function tenterConnexionAutoFirebase() {
-    if (connexionInitialeFirebaseFaite) return;
-    connexionInitialeFirebaseFaite = true;
-    verifierSecoursIndexedDBAuDemarrage();
-    chargerDepuisFirebase(false);
+async function tenterConnexionAutoFirebase() {
+    if (connexionInitialeFirebaseFaite) return;
+    connexionInitialeFirebaseFaite = true;
+    await verifierSecoursIndexedDBAuDemarrage();
+    await chargerDepuisFirebase(false);
 }
 
 // ==========================================
