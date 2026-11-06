@@ -3657,502 +3657,753 @@ function rafraichirFicheImpression() {
 }
 
 // ==========================================
-// 6. ONGLET 3 : TABLEAU DE BORD SYNCHRONISÉ AVEC LA PROGRAMMATION (FRANÇAIS CP EN VERT CLAIR)
+// 6. ONGLET 3 : TABLEAU DE BORD 100% UNIFIÉ SUR LA MÊME SEMAINE (LEÇONS + ATELIERS + ÉLÈVES)
 // ==========================================
 function getStyleNiveauProf(pole, niv) {
-    if (pole === 'francais') {
-        if (niv === 'CP') return { bg: COULEUR_FRANCAIS_CP_VERT_CLAIR, text: '#1b4332' };
-        if (niv === 'CE1') return { bg: COULEUR_FRANCAIS_CE_TURQUOISE, text: '#0b3b2e' };
-        if (niv === 'CE2') return { bg: COULEUR_FRANCAIS_CE_TURQUOISE, text: '#0b3b2e' };
-        if (niv === 'CM1') return { bg: COULEUR_FRANCAIS_CM_BLEU_SOUTENU, text: '#0d2b45' };
-        if (niv === 'CM2' || niv === 'CM1-CM2') return { bg: COULEUR_FRANCAIS_CM_BLEU_SOUTENU, text: '#0d2b45' };
-    } else {
-        if (niv === 'CP') return { bg: '#ffe599', text: '#7c2d12' };
-        if (niv === 'CE1') return { bg: '#f6b26b', text: '#784212' };
-        if (niv === 'CE2') return { bg: '#f5cba7', text: '#784212' };
-        if (niv === 'CM1') return { bg: '#ea9999', text: '#641e16' };
-        if (niv === 'CM2' || niv === 'CM1-CM2') return { bg: '#e67e73', text: '#641e16' };
-    }
-    return { bg: '#ecf0f1', text: '#2c3e50' };
+    if (pole === 'francais') {
+        if (niv === 'CP') return { bg: COULEUR_FRANCAIS_CP_VERT_CLAIR, text: '#1b4332' };
+        if (niv === 'CE1') return { bg: COULEUR_FRANCAIS_CE_TURQUOISE, text: '#0b3b2e' };
+        if (niv === 'CE2') return { bg: COULEUR_FRANCAIS_CE_TURQUOISE, text: '#0b3b2e' };
+        if (niv === 'CM1') return { bg: COULEUR_FRANCAIS_CM_BLEU_SOUTENU, text: '#0d2b45' };
+        if (niv === 'CM2' || niv === 'CM1-CM2') return { bg: COULEUR_FRANCAIS_CM_BLEU_SOUTENU, text: '#0d2b45' };
+    } else {
+        if (niv === 'CP') return { bg: '#ffe599', text: '#7c2d12' };
+        if (niv === 'CE1') return { bg: '#f6b26b', text: '#784212' };
+        if (niv === 'CE2') return { bg: '#f5cba7', text: '#784212' };
+        if (niv === 'CM1') return { bg: '#ea9999', text: '#641e16' };
+        if (niv === 'CM2' || niv === 'CM1-CM2') return { bg: '#e67e73', text: '#641e16' };
+    }
+    return { bg: '#ecf0f1', text: '#2c3e50' };
+}
+
+// Trouve chez un élève la semaine qui correspond EXACTEMENT à la semaine affichée sur le Tableau de bord
+// (Même si vous étiez en train de préparer sa semaine suivante dans l'onglet 1 !)
+function obtenirContexteSemaineElevePourDashboard(e, perDash, semIdxDash) {
+    assurerStructureSemaines(e);
+    syncEleveVersSemaineActive(e);
+
+    let pObj = progPeriodesData.periodes[perDash];
+    let semProg = (pObj && pObj.semaines && pObj.semaines[semIdxDash]) ? pObj.semaines[semIdxDash] : null;
+    let dateCibleISO = (semProg && semProg.dateDebutISO) ? semProg.dateDebutISO : "";
+
+    // 1. Recherche par période et numéro de semaine explicitement associés
+    let idx = e.semaines.findIndex(s => s && s.progPeriodeCible === perDash && parseInt(s.progSemaineCible) === semIdxDash);
+
+    // 2. Sinon recherche par date de Lundi identique
+    if (idx === -1 && dateCibleISO) {
+        idx = e.semaines.findIndex(s => s && s.dateDebutISO === dateCibleISO);
+    }
+
+    // 3. Sinon, si l'élève n'a qu'une seule semaine en cours (et qu'elle n'est pas taguée sur une autre semaine future)
+    if (idx === -1 && e.semaines.length === 1) {
+        let s0 = e.semaines[0];
+        let tagueAilleurs = (s0.progPeriodeCible && (s0.progPeriodeCible !== perDash || parseInt(s0.progSemaineCible) !== semIdxDash));
+        if (!tagueAilleurs) idx = 0;
+    }
+
+    // 4. Sinon correspondance par position (Semaine 1 -> index 0, Semaine 2 -> index 1...)
+    if (idx === -1 && semIdxDash < e.semaines.length) {
+        let sCand = e.semaines[semIdxDash];
+        let tagueAilleurs = (sCand && sCand.progPeriodeCible && (sCand.progPeriodeCible !== perDash || parseInt(sCand.progSemaineCible) !== semIdxDash));
+        if (!tagueAilleurs) idx = semIdxDash;
+    }
+
+    // 5. Repli par défaut sur la semaine en cours (index 0) et jamais sur une semaine d'avance non concernée
+    if (idx === -1 && e.semaines.length > 0) {
+        let s0 = e.semaines[0];
+        let tagueAilleurs = (s0.progPeriodeCible && (s0.progPeriodeCible !== perDash || parseInt(s0.progSemaineCible) !== semIdxDash));
+        if (!tagueAilleurs) idx = 0;
+    }
+
+    if (idx !== -1 && e.semaines[idx]) {
+        let semObj = e.semaines[idx];
+        return {
+            semObj: semObj,
+            idxDansEleve: idx,
+            planHebdo: semObj.planHebdo || [],
+            priorites: semObj.priorites || [],
+            valides: semObj.valides || {},
+            suivi: semObj.suivi || {},
+            joursAssignes: semObj.joursAssignes || {},
+            sequencesChoisies: semObj.sequencesChoisies || {},
+            aucunPlanPourCetteSemaine: false
+        };
+    }
+
+    return {
+        semObj: null,
+        idxDansEleve: -1,
+        planHebdo: [],
+        priorites: [],
+        valides: {},
+        suivi: {},
+        joursAssignes: {},
+        sequencesChoisies: {},
+        aucunPlanPourCetteSemaine: true
+    };
+}
+
+// Aligne automatiquement la semaine active de chaque élève lorsqu'on change de semaine sur le Tableau de bord
+function synchroniserSemaineActiveElevesSurDashboard(perDash, semIdxDash) {
+    let pObj = progPeriodesData.periodes[perDash];
+    let semProg = (pObj && pObj.semaines && pObj.semaines[semIdxDash]) ? pObj.semaines[semIdxDash] : null;
+    let dateCibleISO = (semProg && semProg.dateDebutISO) ? semProg.dateDebutISO : "";
+
+    Object.values(eleves).forEach(e => {
+        assurerStructureSemaines(e);
+        syncEleveVersSemaineActive(e);
+        let idx = e.semaines.findIndex(s => s && s.progPeriodeCible === perDash && parseInt(s.progSemaineCible) === semIdxDash);
+        if (idx === -1 && dateCibleISO) {
+            idx = e.semaines.findIndex(s => s && s.dateDebutISO === dateCibleISO);
+        }
+        if (idx === -1 && e.semaines.length === 1 && !e.semaines[0].progPeriodeCible) {
+            idx = 0;
+        }
+        if (idx !== -1 && idx !== e.semaineIndex) {
+            chargerSemaineDepuisIndex(e, idx);
+        }
+    });
 }
 
 function changerPeriodeDashboard(nouvPer) {
-    assurerStructureProgPeriodes();
-    progPeriodesData.periodeActiveDash = nouvPer;
-    progPeriodesData.semaineIndexDash = 0;
-    sauvegarderProgPeriodes();
-    rafraichirDashboard();
+    assurerStructureProgPeriodes();
+    progPeriodesData.periodeActiveDash = nouvPer;
+    progPeriodesData.semaineIndexDash = 0;
+    synchroniserSemaineActiveElevesSurDashboard(nouvPer, 0);
+    sauvegarderProgPeriodes();
+    sauvegarderEleves();
+    if (idEleveCourant && eleves[idEleveCourant]) chargerEleve();
+    rafraichirDashboard();
 }
 
 function changerSemaineDashboard(nouvIdx) {
-    assurerStructureProgPeriodes();
-    progPeriodesData.semaineIndexDash = parseInt(nouvIdx) || 0;
-    sauvegarderProgPeriodes();
-    rafraichirDashboard();
+    assurerStructureProgPeriodes();
+    let idx = parseInt(nouvIdx) || 0;
+    progPeriodesData.semaineIndexDash = idx;
+    synchroniserSemaineActiveElevesSurDashboard(progPeriodesData.periodeActiveDash, idx);
+    sauvegarderProgPeriodes();
+    sauvegarderEleves();
+    if (idEleveCourant && eleves[idEleveCourant]) chargerEleve();
+    rafraichirDashboard();
 }
 
 function appliquerDateSemaineProf(dateISO) {
-    assurerStructureProgPeriodes();
-    let per = progPeriodesData.periodeActiveDash;
-    let idx = progPeriodesData.semaineIndexDash;
-    let pObj = progPeriodesData.periodes[per];
-    if (!pObj || !pObj.semaines[idx]) return;
-    if (idx === 0) {
-        pObj.dateDebutP_ISO = dateISO || "";
-        recalculerDatesPeriode(per);
-    } else {
-        let calc = calculerVendrediDepuisISO(dateISO);
-        pObj.semaines[idx].dateDebutISO = dateISO || "";
-        pObj.semaines[idx].dateDebut = calc.debutFR;
-        pObj.semaines[idx].dateFin = calc.finFR;
-    }
-    sauvegarderProgPeriodes();
-    rafraichirDashboard();
+    assurerStructureProgPeriodes();
+    let per = progPeriodesData.periodeActiveDash;
+    let idx = progPeriodesData.semaineIndexDash;
+    let pObj = progPeriodesData.periodes[per];
+    if (!pObj || !pObj.semaines[idx]) return;
+    if (idx === 0) {
+        pObj.dateDebutP_ISO = dateISO || "";
+        recalculerDatesPeriode(per);
+    } else {
+        let calc = calculerVendrediDepuisISO(dateISO);
+        pObj.semaines[idx].dateDebutISO = dateISO || "";
+        pObj.semaines[idx].dateDebut = calc.debutFR;
+        pObj.semaines[idx].dateFin = calc.finFR;
+    }
+    // Synchronise aussi la date sur la semaine correspondante des élèves
+    let semProg = pObj.semaines[idx];
+    Object.values(eleves).forEach(e => {
+        let ctx = obtenirContexteSemaineElevePourDashboard(e, per, idx);
+        if (ctx.semObj) {
+            ctx.semObj.dateDebutISO = semProg.dateDebutISO || "";
+            ctx.semObj.dateDebut = semProg.dateDebut || "";
+            ctx.semObj.dateFin = semProg.dateFin || "";
+            ctx.semObj.progPeriodeCible = per;
+            ctx.semObj.progSemaineCible = idx;
+            if (e.semaineIndex === ctx.idxDansEleve) {
+                e.dateDebutISO = ctx.semObj.dateDebutISO;
+                e.dateDebut = ctx.semObj.dateDebut;
+                e.dateFin = ctx.semObj.dateFin;
+            }
+        }
+    });
+    sauvegarderProgPeriodes();
+    sauvegarderEleves();
+    rafraichirDashboard();
 }
 
 function majSlotLeconProf(pole, jour, slotIdx, champ, valeur) {
-    assurerStructureProgPeriodes();
-    let per = progPeriodesData.periodeActiveDash;
-    let sIdx = progPeriodesData.semaineIndexDash;
-    let sem = progPeriodesData.periodes[per].semaines[sIdx];
-    if (!sem) return;
+    assurerStructureProgPeriodes();
+    let per = progPeriodesData.periodeActiveDash;
+    let sIdx = progPeriodesData.semaineIndexDash;
+    let sem = progPeriodesData.periodes[per].semaines[sIdx];
+    if (!sem) return;
 
-    let nivActuel = sem.ordrePassages[pole][jour][slotIdx] || GROUPES_NIVEAUX_PROF[slotIdx];
+    let nivActuel = sem.ordrePassages[pole][jour][slotIdx] || GROUPES_NIVEAUX_PROF[slotIdx];
 
-    if (champ === 'niveau') {
-        sem.ordrePassages[pole][jour][slotIdx] = valeur;
-        sauvegarderProgPeriodes();
-        rafraichirDashboard();
-        return;
-    }
+    if (champ === 'niveau') {
+        sem.ordrePassages[pole][jour][slotIdx] = valeur;
+        sauvegarderProgPeriodes();
+        rafraichirDashboard();
+        return;
+    }
 
-    let nivCible = nivActuel === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivActuel) ? nivActuel : "CP");
-    let cell = sem.niveaux[nivCible][pole].jours[jour];
-    cell[champ] = valeur;
+    let nivCible = nivActuel === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivActuel) ? nivActuel : "CP");
+    let cell = sem.niveaux[nivCible][pole].jours[jour];
+    cell[champ] = valeur;
 
-    if (champ === 'texte') {
-        let infos = trouverInfosDepuisBaseLecon(pole, nivCible, valeur);
-        cell.lien = infos.lien || "";
-        cell.pageProf = infos.pageProf || "";
-    }
+    if (champ === 'texte') {
+        let infos = trouverInfosDepuisBaseLecon(pole, nivCible, valeur);
+        cell.lien = infos.lien || "";
+        cell.pageProf = infos.pageProf || "";
+    }
 
-    sauvegarderProgPeriodes();
-    rafraichirDashboard();
+    sauvegarderProgPeriodes();
+    rafraichirDashboard();
 }
 
 function definirLienSlotLeconProf(pole, jour, slotIdx) {
-    assurerStructureProgPeriodes();
-    let per = progPeriodesData.periodeActiveDash;
-    let sIdx = progPeriodesData.semaineIndexDash;
-    let sem = progPeriodesData.periodes[per].semaines[sIdx];
-    let nivActuel = sem.ordrePassages[pole][jour][slotIdx] || GROUPES_NIVEAUX_PROF[slotIdx];
-    let nivCible = nivActuel === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivActuel) ? nivActuel : "CP");
-    let cell = sem.niveaux[nivCible][pole].jours[jour];
+    assurerStructureProgPeriodes();
+    let per = progPeriodesData.periodeActiveDash;
+    let sIdx = progPeriodesData.semaineIndexDash;
+    let sem = progPeriodesData.periodes[per].semaines[sIdx];
+    let nivActuel = sem.ordrePassages[pole][jour][slotIdx] || GROUPES_NIVEAUX_PROF[slotIdx];
+    let nivCible = nivActuel === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivActuel) ? nivActuel : "CP");
+    let cell = sem.niveaux[nivCible][pole].jours[jour];
 
-    let url = prompt('Collez ici le lien vers votre PDF, PowerPoint, Google Slides ou Canva à projeter pour "' + (cell.texte || nivCible) + '" :', cell.lien || "");
-    if (url !== null) {
-        cell.lien = url.trim();
-        sauvegarderProgPeriodes();
-        rafraichirDashboard();
-        showToast(cell.lien ? "📽️ Lien du document à projeter enregistré !" : "Lien retiré.", "success");
-    }
+    let url = prompt('Collez ici le lien vers votre PDF, PowerPoint, Google Slides ou Canva à projeter pour "' + (cell.texte || nivCible) + '" :', cell.lien || "");
+    if (url !== null) {
+        cell.lien = url.trim();
+        sauvegarderProgPeriodes();
+        rafraichirDashboard();
+        showToast(cell.lien ? "📽️ Lien du document à projeter enregistré !" : "Lien retiré.", "success");
+    }
 }
 
 function deplacerSlotLeconProf(pole, jour, slotIdx, direction) {
-    assurerStructureProgPeriodes();
-    let per = progPeriodesData.periodeActiveDash;
-    let sIdx = progPeriodesData.semaineIndexDash;
-    let sem = progPeriodesData.periodes[per].semaines[sIdx];
-    let nouvIdx = slotIdx + direction;
-    if (nouvIdx < 0 || nouvIdx >= NB_SLOTS_PASSAGES_PROF) return;
-    let arr = sem.ordrePassages[pole][jour];
-    let temp = arr[slotIdx];
-    arr[slotIdx] = arr[nouvIdx];
-    arr[nouvIdx] = temp;
-    sauvegarderProgPeriodes();
-    rafraichirDashboard();
+    assurerStructureProgPeriodes();
+    let per = progPeriodesData.periodeActiveDash;
+    let sIdx = progPeriodesData.semaineIndexDash;
+    let sem = progPeriodesData.periodes[per].semaines[sIdx];
+    let nouvIdx = slotIdx + direction;
+    if (nouvIdx < 0 || nouvIdx >= NB_SLOTS_PASSAGES_PROF) return;
+    let arr = sem.ordrePassages[pole][jour];
+    let temp = arr[slotIdx];
+    arr[slotIdx] = arr[nouvIdx];
+    arr[nouvIdx] = temp;
+    sauvegarderProgPeriodes();
+    rafraichirDashboard();
+}
+
+// Clôture unifiée : fait passer à la semaine suivante les Leçons + les Plans de tous les élèves + les Préparations
+function executerClotureUnifieeSemaine(per, idx) {
+    sauvegarderEtatAvantModifLecon("Clôture globale de " + per + " - Semaine " + (idx + 1));
+
+    // 1. Report des leçons et séquences non cochées vers la semaine suivante
+    let nbDecales = reporterEtDecalerSemaine(per, idx, null, null);
+
+    // 2. Calcul de la nouvelle Période / Semaine active
+    let pObj = progPeriodesData.periodes[per];
+    let nextPer = per;
+    let nextIdx = idx + 1;
+    if (nextIdx >= pObj.semaines.length) {
+        let pPos = PERIODES_LISTE.indexOf(per);
+        if (pPos >= 0 && pPos + 1 < PERIODES_LISTE.length) {
+            nextPer = PERIODES_LISTE[pPos + 1];
+            nextIdx = 0;
+        } else {
+            pObj.semaines.push(creerSemaineProgVide(pObj.semaines.length, ""));
+            pObj.nbSemaines = pObj.semaines.length;
+            recalculerDatesPeriode(per);
+        }
+    }
+
+    let pObjNext = progPeriodesData.periodes[nextPer];
+    let semProgNext = (pObjNext && pObjNext.semaines[nextIdx]) ? pObjNext.semaines[nextIdx] : null;
+
+    // 3. Clôture de la semaine correspondante pour chaque élève et alignement sur la nouvelle semaine
+    Object.values(eleves).forEach(e => {
+        assurerStructureSemaines(e);
+        syncEleveVersSemaineActive(e);
+        let ctx = obtenirContexteSemaineElevePourDashboard(e, per, idx);
+        if (ctx.idxDansEleve !== -1) {
+            chargerSemaineDepuisIndex(e, ctx.idxDansEleve);
+        } else {
+            chargerSemaineDepuisIndex(e, 0);
+        }
+        cloreSemainePourUnEleve(e);
+
+        // On marque la nouvelle semaine active de l'élève sur la nouvelle semaine du Tableau de bord
+        let semActiveEl = e.semaines[e.semaineIndex || 0];
+        if (semActiveEl) {
+            semActiveEl.progPeriodeCible = nextPer;
+            semActiveEl.progSemaineCible = nextIdx;
+            if (!semActiveEl.dateDebutISO && semProgNext && semProgNext.dateDebutISO) {
+                semActiveEl.dateDebutISO = semProgNext.dateDebutISO;
+                semActiveEl.dateDebut = semProgNext.dateDebut || "";
+                semActiveEl.dateFin = semProgNext.dateFin || "";
+                e.dateDebutISO = semActiveEl.dateDebutISO;
+                e.dateDebut = semActiveEl.dateDebut;
+                e.dateFin = semActiveEl.dateFin;
+            }
+        }
+    });
+
+    // 4. Nettoyage des archives de préparation (tablettes, bacs, fiches) pour repartir à neuf
+    dashboardArchives = [];
+    setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
+
+    // 5. Bascule du Tableau de bord sur la nouvelle semaine
+    progPeriodesData.periodeActiveDash = nextPer;
+    progPeriodesData.semaineIndexDash = nextIdx;
+
+    sauvegarderProgPeriodes();
+    sauvegarderEleves();
+    if (idEleveCourant && eleves[idEleveCourant]) chargerEleve();
+    rafraichirDashboard();
+    showToast("🏁 Passage à " + nextPer + " — Semaine " + (nextIdx + 1) + " effectué pour toute la classe (Leçons, Plans & Préparations) !", "success");
 }
 
 function cloreEtDecalerDepuisDashboard() {
-    assurerStructureProgPeriodes();
-    let per = progPeriodesData.periodeActiveDash;
-    let idx = progPeriodesData.semaineIndexDash;
-    if (!confirm("Clôturer la Semaine " + (idx + 1) + " (" + per + ") ?\n\n⏭️ Toutes les leçons et séquences NON COCHÉES seront automatiquement déplacées sur la Semaine " + (idx + 2) + " et décaleront la suite de votre programmation d'une semaine.")) return;
-
-    let nb = reporterEtDecalerSemaine(per, idx, null, null);
-    let pObj = progPeriodesData.periodes[per];
-    if (idx + 1 < pObj.semaines.length) {
-        progPeriodesData.semaineIndexDash = idx + 1;
-    }
-    sauvegarderProgPeriodes();
-    rafraichirDashboard();
-    if (idEleveCourant) afficherPlanHebdo();
-    showToast("✅ Semaine clôturée (" + nb + " élément(s) non fait(s) reporté(s) avec décalage) !", "success");
+    assurerStructureProgPeriodes();
+    let per = progPeriodesData.periodeActiveDash;
+    let idx = progPeriodesData.semaineIndexDash;
+    if (!confirm("🏁 Clôturer la Semaine " + (idx + 1) + " (" + per + ") et passer tout le Tableau de bord à la semaine suivante ?\n\n• Les leçons et séquences non cochées glisseront sur la Semaine " + (idx + 2) + "\n• Les ateliers non validés des élèves seront reportés sur leur plan de la Semaine " + (idx + 2) + "\n• Tout le Tableau de bord (leçons, ateliers dirigés, tablettes, bacs, fiches) passera sur la Semaine " + (idx + 2) + ".")) return;
+    executerClotureUnifieeSemaine(per, idx);
 }
 
+// On relie aussi le bouton "Clôturer la semaine de toute la classe" à cette même clôture unifiée
+cloturerSemaineClasseGlobale = function() {
+    cloreEtDecalerDepuisDashboard();
+};
+
 function recalerAvanceDepuisDashboard() {
-    assurerStructureProgPeriodes();
-    let per = progPeriodesData.periodeActiveDash;
-    let idx = progPeriodesData.semaineIndexDash;
-    let nb = recalerAvanceSemaine(per, idx, null, null);
-    rafraichirDashboard();
-    showToast(nb > 0 ? "⏮️ " + nb + " créneau(x) de la semaine suivante remonté(s) !" : "ℹ️ Aucun créneau libre à remonter sur cette semaine.", "success");
+    assurerStructureProgPeriodes();
+    let per = progPeriodesData.periodeActiveDash;
+    let idx = progPeriodesData.semaineIndexDash;
+    let nb = recalerAvanceSemaine(per, idx, null, null);
+    rafraichirDashboard();
+    showToast(nb > 0 ? "⏮️ " + nb + " créneau(x) de la semaine suivante remonté(s) !" : "ℹ️ Aucun créneau libre à remonter sur cette semaine.", "success");
 }
 
 function toggleApercuSemaineSuivanteDash() {
-    afficherSemaineSuivanteDash = !afficherSemaineSuivanteDash;
-    rafraichirDashboard();
+    afficherSemaineSuivanteDash = !afficherSemaineSuivanteDash;
+    rafraichirDashboard();
 }
 
 function cocherElementSemaineSuivanteDash(per, nextSemIdx, niv, pole, typeElem, cleJourOuSeq, isChecked) {
-    assurerStructureProgPeriodes();
-    let pObj = progPeriodesData.periodes[per];
-    if (!pObj || !pObj.semaines[nextSemIdx]) return;
-    let bloc = pObj.semaines[nextSemIdx].niveaux[niv][pole];
-    if (typeElem === 'seq') {
-        let sq = (bloc.sequences || []).find(s => s.nom === cleJourOuSeq);
-        if (sq) sq.fait = Boolean(isChecked);
-    } else if (typeElem === 'jour') {
-        if (bloc.jours[cleJourOuSeq]) {
-            bloc.jours[cleJourOuSeq].fait = Boolean(isChecked);
-            if (isChecked && confirm("Vous avez coché en avance la leçon de " + cleJourOuSeq + " (" + niv + ").\nVoulez-vous la vider de la Semaine " + (nextSemIdx + 1) + " et remonter automatiquement les séances des semaines suivantes ?")) {
-                bloc.jours[cleJourOuSeq] = { texte: "", lien: "", pageProf: "", fait: false };
-                recalerAvanceSemaine(per, nextSemIdx, niv, pole);
-            }
-        }
-    }
-    sauvegarderProgPeriodes();
-    rafraichirDashboard();
+    assurerStructureProgPeriodes();
+    let pObj = progPeriodesData.periodes[per];
+    if (!pObj || !pObj.semaines[nextSemIdx]) return;
+    let bloc = pObj.semaines[nextSemIdx].niveaux[niv][pole];
+    if (typeElem === 'seq') {
+        let sq = (bloc.sequences || []).find(s => s.nom === cleJourOuSeq);
+        if (sq) sq.fait = Boolean(isChecked);
+    } else if (typeElem === 'jour') {
+        if (bloc.jours[cleJourOuSeq]) {
+            bloc.jours[cleJourOuSeq].fait = Boolean(isChecked);
+            if (isChecked && confirm("Vous avez coché en avance la leçon de " + cleJourOuSeq + " (" + niv + ").\nVoulez-vous la vider de la Semaine " + (nextSemIdx + 1) + " et remonter automatiquement les séances des semaines suivantes ?")) {
+                bloc.jours[cleJourOuSeq] = { texte: "", lien: "", pageProf: "", fait: false };
+                recalerAvanceSemaine(per, nextSemIdx, niv, pole);
+            }
+        }
+    }
+    sauvegarderProgPeriodes();
+    rafraichirDashboard();
 }
 
 function imprimerPlanningLeconsProf() {
-    document.body.classList.add('print-lecons-only');
-    window.print();
-    setTimeout(() => {
-        document.body.classList.remove('print-lecons-only');
-    }, 600);
+    document.body.classList.add('print-lecons-only');
+    window.print();
+    setTimeout(() => {
+        document.body.classList.remove('print-lecons-only');
+    }, 600);
 }
 
 function genererDatalistSuggestionsLecons(pole, niveauGroupe, seqsPrioritaires = []) {
-    return [];
+    return [];
 }
 
 function genererTableauLeconsPoleHtml(pole, titre, couleurBandeau, sem) {
-    return "";
+    return "";
 }
 
 function toggleAfficherArchives() {
-    afficherArchivesMode = !afficherArchivesMode;
-    let btn = document.getElementById('btnToggleArchivesDash');
-    if (btn) btn.innerText = afficherArchivesMode ? "🙈 Masquer les archives" : "👁️ Voir les archives";
-    rafraichirDashboard();
+    afficherArchivesMode = !afficherArchivesMode;
+    let btn = document.getElementById('btnToggleArchivesDash');
+    if (btn) btn.innerText = afficherArchivesMode ? "🙈 Masquer les archives" : "👁️ Voir les archives";
+    rafraichirDashboard();
 }
 function archiverItem(cle) {
-    if (!dashboardArchives.includes(cle)) dashboardArchives.push(cle);
-    setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
-    marquerModificationLocale();
-    declencherAutoSaveFirebase();
-    rafraichirDashboard();
+    if (!dashboardArchives.includes(cle)) dashboardArchives.push(cle);
+    setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
+    marquerModificationLocale();
+    declencherAutoSaveFirebase();
+    rafraichirDashboard();
 }
 function restaurerArchive(cle) {
-    dashboardArchives = dashboardArchives.filter(k => k !== cle);
-    setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
-    marquerModificationLocale();
-    declencherAutoSaveFirebase();
-    rafraichirDashboard();
+    dashboardArchives = dashboardArchives.filter(k => k !== cle);
+    setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
+    marquerModificationLocale();
+    declencherAutoSaveFirebase();
+    rafraichirDashboard();
 }
 function viderArchives() {
-    if (confirm("Vider les archives ?")) {
-        dashboardArchives = [];
-        setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
-        marquerModificationLocale();
-        declencherAutoSaveFirebase();
-        rafraichirDashboard();
-    }
+    if (confirm("Vider les archives ?")) {
+        dashboardArchives = [];
+        setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
+        marquerModificationLocale();
+        declencherAutoSaveFirebase();
+        rafraichirDashboard();
+    }
 }
+
+// Modifie le statut (à revoir / à refaire) exactement sur la semaine affichée par le Tableau de bord
 function setSuivi(idEl, idAct, statut) {
-    let e = eleves[idEl]; if (!e) return;
-    if (!e.suivi) e.suivi = {};
-    if (!statut) delete e.suivi[idAct];
-    else e.suivi[idAct] = { statut: statut, commentaire: (e.suivi[idAct] && e.suivi[idAct].commentaire) || "" };
-    sauvegarderEleves(); rafraichirDashboard();
+    let e = eleves[idEl]; if (!e) return;
+    let per = progPeriodesData.periodeActiveDash;
+    let semIdx = progPeriodesData.semaineIndexDash;
+    let ctx = obtenirContexteSemaineElevePourDashboard(e, per, semIdx);
+    let idxprecedent = e.semaineIndex;
+    if (ctx.idxDansEleve !== -1 && ctx.idxDansEleve !== idxprecedent) {
+        chargerSemaineDepuisIndex(e, ctx.idxDansEleve);
+    }
+    if (!e.suivi) e.suivi = {};
+    if (!statut) delete e.suivi[idAct];
+    else e.suivi[idAct] = { statut: statut, commentaire: (e.suivi[idAct] && e.suivi[idAct].commentaire) || "" };
+    syncEleveVersSemaineActive(e);
+    if (ctx.idxDansEleve !== -1 && ctx.idxDansEleve !== idxprecedent) {
+        chargerSemaineDepuisIndex(e, idxprecedent);
+    }
+    sauvegarderEleves();
+    rafraichirDashboard();
 }
-function validerDepuisDashboard(idEl, idAct) { let e = eleves[idEl]; if (!e) return; marquerCommeValideSansRafraichir(idAct, e); sauvegarderEleves(); rafraichirDashboard(); showToast("Validé !", "success"); }
-function toggleExpandEleveDash(idEl) { if (dashboardExpanded.has(idEl)) dashboardExpanded.delete(idEl); else dashboardExpanded.add(idEl); rafraichirDashboard(); }
-function ouvrirEleveDepuisDashboard(idEl) { idEleveCourant = idEl; let sel = document.getElementById('selectEleveProfile'); if (sel) sel.value = idEl; changerOnglet('pageSuivi', document.querySelectorAll('.nav-btn')[0]); }
+
+// Valide l'atelier exactement sur la semaine affichée par le Tableau de bord
+function validerDepuisDashboard(idEl, idAct) {
+    let e = eleves[idEl]; if (!e) return;
+    let per = progPeriodesData.periodeActiveDash;
+    let semIdx = progPeriodesData.semaineIndexDash;
+    let ctx = obtenirContexteSemaineElevePourDashboard(e, per, semIdx);
+    let idxPrecedent = e.semaineIndex;
+    if (ctx.idxDansEleve !== -1 && ctx.idxDansEleve !== idxPrecedent) {
+        chargerSemaineDepuisIndex(e, ctx.idxDansEleve);
+    }
+    marquerCommeValideSansRafraichir(idAct, e);
+    syncEleveVersSemaineActive(e);
+    if (ctx.idxDansEleve !== -1 && ctx.idxDansEleve !== idxPrecedent) {
+        chargerSemaineDepuisIndex(e, idxPrecedent);
+    }
+    sauvegarderEleves();
+    rafraichirDashboard();
+    showToast("Validé !", "success");
+}
+
+function toggleExpandEleveDash(idEl) {
+    if (dashboardExpanded.has(idEl)) dashboardExpanded.delete(idEl);
+    else dashboardExpanded.add(idEl);
+    rafraichirDashboard();
+}
+
+// Quand on clique sur "Plan ➔" depuis une carte du Tableau de bord, on ouvre directement la semaine correspondante de l'élève
+function ouvrirEleveDepuisDashboard(idEl) {
+    idEleveCourant = idEl;
+    let e = eleves[idEl];
+    if (e) {
+        let per = progPeriodesData.periodeActiveDash;
+        let semIdx = progPeriodesData.semaineIndexDash;
+        let ctx = obtenirContexteSemaineElevePourDashboard(e, per, semIdx);
+        if (ctx.idxDansEleve !== -1) {
+            chargerSemaineDepuisIndex(e, ctx.idxDansEleve);
+            sauvegarderEleves();
+        }
+    }
+    let sel = document.getElementById('selectEleveProfile');
+    if (sel) sel.value = idEl;
+    changerOnglet('pageSuivi', document.querySelectorAll('.nav-btn')[0]);
+}
 
 function definirLienRapideDepuisDash(idAct) {
-    let a = baseDonnees.find(b => b.id === idAct);
-    if (!a) return;
-    let label = estLeconProf(a) ? "PDF / PowerPoint à projeter" : "Anton / activité en ligne";
-    let url = prompt('Collez ici le lien direct (' + label + ') pour "' + a.ressource + '" :', a.lienExterne || "");
-    if (url !== null) {
-        a.lienExterne = url.trim();
-        sauvegarderBase();
-        rafraichirDashboard();
-        afficherBase();
-        showToast("🔗 Lien enregistré !", "success");
-    }
+    let a = baseDonnees.find(b => b.id === idAct);
+    if (!a) return;
+    let label = estLeconProf(a) ? "PDF / PowerPoint à projeter" : "Anton / activité en ligne";
+    let url = prompt('Collez ici le lien direct (' + label + ') pour "' + a.ressource + '" :', a.lienExterne || "");
+    if (url !== null) {
+        a.lienExterne = url.trim();
+        sauvegarderBase();
+        rafraichirDashboard();
+        afficherBase();
+        showToast("🔗 Lien enregistré !", "success");
+    }
 }
 
 function estActiviteSupportAtelier(act) {
-    if (!act || !act.typeRes || estLeconProf(act) || estActiviteTablette(act)) return false;
-    let t = act.typeRes.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    return t === "atelier" || t.includes("atelier");
+    if (!act || !act.typeRes || estLeconProf(act) || estActiviteTablette(act)) return false;
+    let t = act.typeRes.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return t === "atelier" || t.includes("atelier");
 }
 
 function estActiviteSupportFiche(act) {
-    if (!act || !act.typeRes || estLeconProf(act) || estActiviteTablette(act)) return false;
-    let t = act.typeRes.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    if (t.includes("fichier jaune")) return false;
-    return t === "fiche" || t === "fiches" || t.includes("fiche") || t.includes("photocop");
+    if (!act || !act.typeRes || estLeconProf(act) || estActiviteTablette(act)) return false;
+    let t = act.typeRes.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (t.includes("fichier jaune")) return false;
+    return t === "fiche" || t === "fiches" || t.includes("fiche") || t.includes("photocop");
 }
 
 function basculerFicheTodoLot(idAct, idsElevesStr, toutArchiver) {
-    let idsEl = (idsElevesStr || "").split(',').filter(Boolean);
-    let cleGroupe = "fiche_" + idAct;
-    if (toutArchiver) {
-        if (!dashboardArchives.includes(cleGroupe)) dashboardArchives.push(cleGroupe);
-        idsEl.forEach(idE => {
-            let cleInd = "fiche_" + idAct + "_" + idE;
-            if (!dashboardArchives.includes(cleInd)) dashboardArchives.push(cleInd);
-        });
-    } else {
-        dashboardArchives = dashboardArchives.filter(k => k !== cleGroupe && !k.startsWith("fiche_" + idAct + "_"));
-    }
-    setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
-    marquerModificationLocale();
-    declencherAutoSaveFirebase();
-    rafraichirDashboard();
+    let idsEl = (idsElevesStr || "").split(',').filter(Boolean);
+    let cleGroupe = "fiche_" + idAct;
+    if (toutArchiver) {
+        if (!dashboardArchives.includes(cleGroupe)) dashboardArchives.push(cleGroupe);
+        idsEl.forEach(idE => {
+            let cleInd = "fiche_" + idAct + "_" + idE;
+            if (!dashboardArchives.includes(cleInd)) dashboardArchives.push(cleInd);
+        });
+    } else {
+        dashboardArchives = dashboardArchives.filter(k => k !== cleGroupe && !k.startsWith("fiche_" + idAct + "_"));
+    }
+    setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
+    marquerModificationLocale();
+    declencherAutoSaveFirebase();
+    rafraichirDashboard();
 }
 
 function rafraichirDashboard() {
-    const cont = document.getElementById('dashboardContent'); if (!cont) return;
-    assurerStructureProgPeriodes();
+    const cont = document.getElementById('dashboardContent'); if (!cont) return;
+    assurerStructureProgPeriodes();
 
-    let perActive = progPeriodesData.periodeActiveDash;
-    let semIdx = progPeriodesData.semaineIndexDash;
-    let pObj = progPeriodesData.periodes[perActive];
-    let semProf = pObj.semaines[semIdx];
+    let perActive = progPeriodesData.periodeActiveDash;
+    let semIdx = progPeriodesData.semaineIndexDash;
+    let pObj = progPeriodesData.periodes[perActive];
+    let semProf = pObj.semaines[semIdx];
 
-    let optionsPeriodesHtml = PERIODES_LISTE.map(p => '<option value="' + p + '" ' + (p === perActive ? 'selected' : '') + '>📅 ' + p + '</option>').join('');
-    let optionsSemProf = pObj.semaines.map((s, idx) => {
-        let dTxt = (s.dateDebut && s.dateFin) ? " (du " + s.dateDebut + " au " + s.dateFin + ")" : "";
-        return '<option value="' + idx + '" ' + (idx === semIdx ? 'selected' : '') + '>Semaine ' + (idx + 1) + dTxt + '</option>';
-    }).join('');
+    let optionsPeriodesHtml = PERIODES_LISTE.map(p => '<option value="' + p + '" ' + (p === perActive ? 'selected' : '') + '>📅 ' + p + '</option>').join('');
+    let optionsSemProf = pObj.semaines.map((s, idx) => {
+        let dTxt = (s.dateDebut && s.dateFin) ? " (du " + s.dateDebut + " au " + s.dateFin + ")" : "";
+        return '<option value="' + idx + '" ' + (idx === semIdx ? 'selected' : '') + '>Semaine ' + (idx + 1) + dTxt + '</option>';
+    }).join('');
 
-    let titreDatesAffiche = (semProf.dateDebut && semProf.dateFin)
-        ? perActive + " — Semaine " + (semIdx + 1) + " (du " + semProf.dateDebut + " au " + semProf.dateFin + ")"
-        : perActive + " — Semaine " + (semIdx + 1);
+    let titreDatesAffiche = (semProf.dateDebut && semProf.dateFin)
+        ? perActive + " — Semaine " + (semIdx + 1) + " (du " + semProf.dateDebut + " au " + semProf.dateFin + ")"
+        : perActive + " — Semaine " + (semIdx + 1);
 
-    let blocSemaineSuivanteHtml = '';
-    if (afficherSemaineSuivanteDash && semIdx + 1 < pObj.semaines.length) {
-        let semNext = pObj.semaines[semIdx + 1];
-        let itemsNextHtml = NIVEAUX_LISTE.map(niv => {
-            let lignesNiv = [];
-            ["francais", "maths"].forEach(pole => {
-                let bNext = semNext.niveaux[niv][pole];
-                let badgePole = pole === 'francais' ? '📘 Fr.' : '📕 Maths';
-                (bNext.sequences || []).forEach(sq => {
-                    lignesNiv.push('<label style="display:inline-flex; align-items:center; gap:4px; background:#fff; border:1px solid #cbd5e1; padding:2px 7px; border-radius:12px; font-size:11.5px; cursor:pointer;">' +
-                        '<input type="checkbox" ' + (sq.fait ? 'checked' : '') + ' onchange="cocherElementSemaineSuivanteDash(\'' + perActive + '\', ' + (semIdx + 1) + ', \'' + niv + '\', \'' + pole + '\', \'seq\', \'' + escJS(sq.nom) + '\', this.checked)">' +
-                        '<strong>' + badgePole + '</strong> 📑 ' + escHTML(sq.nom) +
-                    '</label>');
-                });
-                JOURS_SEMAINE_PROF.forEach(j => {
-                    let cj = bNext.jours[j];
-                    if (cj && cj.texte) {
-                        lignesNiv.push('<label style="display:inline-flex; align-items:center; gap:4px; background:#fff; border:1px solid #cbd5e1; padding:2px 7px; border-radius:12px; font-size:11.5px; cursor:pointer;">' +
-                            '<input type="checkbox" ' + (cj.fait ? 'checked' : '') + ' onchange="cocherElementSemaineSuivanteDash(\'' + perActive + '\', ' + (semIdx + 1) + ', \'' + niv + '\', \'' + pole + '\', \'jour\', \'' + j + '\', this.checked)">' +
-                            '<strong>' + badgePole + ' (' + j.slice(0, 3) + ')</strong> : ' + escHTML(cj.texte) +
-                        '</label>');
-                    }
-                });
-            });
-            return '<div style="margin-bottom:6px;"><strong>[' + niv + '] :</strong> ' + (lignesNiv.length > 0 ? lignesNiv.join(' ') : '<em style="color:#888; font-size:11.5px;">Rien de programmé en S+1</em>') + '</div>';
-        }).join('');
+    let blocSemaineSuivanteHtml = '';
+    if (afficherSemaineSuivanteDash && semIdx + 1 < pObj.semaines.length) {
+        let semNext = pObj.semaines[semIdx + 1];
+        let itemsNextHtml = NIVEAUX_LISTE.map(niv => {
+            let lignesNiv = [];
+            ["francais", "maths"].forEach(pole => {
+                let bNext = semNext.niveaux[niv][pole];
+                let badgePole = pole === 'francais' ? '📘 Fr.' : '📕 Maths';
+                (bNext.sequences || []).forEach(sq => {
+                    lignesNiv.push('<label style="display:inline-flex; align-items:center; gap:4px; background:#fff; border:1px solid #cbd5e1; padding:2px 7px; border-radius:12px; font-size:11.5px; cursor:pointer;">' +
+                        '<input type="checkbox" ' + (sq.fait ? 'checked' : '') + ' onchange="cocherElementSemaineSuivanteDash(\'' + perActive + '\', ' + (semIdx + 1) + ', \'' + niv + '\', \'' + pole + '\', \'seq\', \'' + escJS(sq.nom) + '\', this.checked)">' +
+                        '<strong>' + badgePole + '</strong> 📑 ' + escHTML(sq.nom) +
+                    '</label>');
+                });
+                JOURS_SEMAINE_PROF.forEach(j => {
+                    let cj = bNext.jours[j];
+                    if (cj && cj.texte) {
+                        lignesNiv.push('<label style="display:inline-flex; align-items:center; gap:4px; background:#fff; border:1px solid #cbd5e1; padding:2px 7px; border-radius:12px; font-size:11.5px; cursor:pointer;">' +
+                            '<input type="checkbox" ' + (cj.fait ? 'checked' : '') + ' onchange="cocherElementSemaineSuivanteDash(\'' + perActive + '\', ' + (semIdx + 1) + ', \'' + niv + '\', \'' + pole + '\', \'jour\', \'' + j + '\', this.checked)">' +
+                            '<strong>' + badgePole + ' (' + j.slice(0, 3) + ')</strong> : ' + escHTML(cj.texte) +
+                        '</label>');
+                    }
+                });
+            });
+            return '<div style="margin-bottom:6px;"><strong>[' + niv + '] :</strong> ' + (lignesNiv.length > 0 ? lignesNiv.join(' ') : '<em style="color:#888; font-size:11.5px;">Rien de programmé en S+1</em>') + '</div>';
+        }).join('');
 
-        blocSemaineSuivanteHtml = '<div class="card-panel no-print" style="margin-bottom:14px; background:#e8f8f5; border:1px solid #48c9b0;">' +
-            '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">' +
-                '<strong style="color:#0e6251;">⚡ Prendre de l\'avance / Rattraper : Cocher des éléments de la Semaine ' + (semIdx + 2) + ' (' + perActive + ')</strong>' +
-                '<button type="button" class="filter-btn" onclick="toggleApercuSemaineSuivanteDash()">✖ Masquer S+1</button>' +
-            '</div>' +
-            itemsNextHtml +
-        '</div>';
-    }
+        blocSemaineSuivanteHtml = '<div class="card-panel no-print" style="margin-bottom:14px; background:#e8f8f5; border:1px solid #48c9b0;">' +
+            '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">' +
+                '<strong style="color:#0e6251;">⚡ Prendre de l\'avance / Rattraper : Cocher des éléments de la Semaine ' + (semIdx + 2) + ' (' + perActive + ')</strong>' +
+                '<button type="button" class="filter-btn" onclick="toggleApercuSemaineSuivanteDash()">✖ Masquer S+1</button>' +
+            '</div>' +
+            itemsNextHtml +
+        '</div>';
+    }
 
-    let blocAgendaProfHtml =
-    '<div id="blocPlanningLeconsPrint" class="card-panel" style="margin-bottom:22px; background:#f8fbff; border:2px solid #1b4f72;">' +
-        '<div class="only-print-lecons" style="text-align:center; border-bottom:3px solid #1b4f72; padding-bottom:8px; margin-bottom:12px;">' +
-            '<h1 style="margin:0; font-size:20pt; color:#1b4f72;">👩‍🏫 PLANNING DES LEÇONS AVEC LA MAÎTRESSE — ' + escHTML(titreDatesAffiche) + '</h1>' +
-            '<p style="margin:4px 0 0 0; font-size:11pt; color:#333;">Ordre de passage des groupes de haut en bas (1<sup>er</sup> passage ➔ 5<sup>e</sup> passage)</p>' +
-        '</div>' +
-        '<div class="semaines-flex no-print" style="margin-bottom:14px; padding-bottom:10px; border-bottom:1px dashed #bdc3c7;">' +
-            '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
-                '<h3 style="margin:0; color:#1b4f72;">👩‍🏫 Leçons de la semaine (reliées à la Programmation) :</h3>' +
-                '<select onchange="changerPeriodeDashboard(this.value)" style="font-weight:bold; padding:6px 10px; border-radius:6px; border:1px solid #d35400; background:#fef9e7; color:#a04000;">' +
-                    optionsPeriodesHtml +
-                '</select>' +
-                '<select onchange="changerSemaineDashboard(this.value)" style="font-weight:bold; padding:6px 10px; border-radius:6px; border:1px solid #1b4f72;">' +
-                    optionsSemProf +
-                '</select>' +
-            '</div>' +
-            '<div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">' +
-                '<label style="font-size:13px; font-weight:bold;">Lundi : <input type="date" min="2025-01-01" max="2035-12-31" value="' + escHTML(semProf.dateDebutISO || '') + '" onchange="appliquerDateSemaineProf(this.value)"></label>' +
-                '<span style="font-weight:bold; color:#1b4f72; font-size:13px;">' + (semProf.dateFin ? '➔ au Vendredi ' + escHTML(semProf.dateFin) : '➔ Vendredi : --/--') + '</span>' +
-            '</div>' +
-            '<div style="display:flex; gap:6px; flex-wrap:wrap;">' +
-                '<button type="button" class="btn-action" onclick="imprimerPlanningLeconsProf()" style="background:#8e44ad !important; color:#fff !important;" title="Imprimer ce planning de leçons pour l\'afficher aux élèves">🖨️ Affiche élèves</button>' +
-                '<button type="button" class="filter-btn" onclick="toggleApercuSemaineSuivanteDash()" title="Voir et cocher en avance les séances de la semaine suivante">👀 S+1 (Avance)</button>' +
-                '<button type="button" class="btn-action" onclick="recalerAvanceDepuisDashboard()" title="Remonter les séances de la semaine suivante sur les créneaux vides">⏮️ Recaler l\'avance</button>' +
-                '<button type="button" class="btn-valid" onclick="cloreEtDecalerDepuisDashboard()" title="Clôturer cette semaine : les non-cochés glissent en S+1 et décalent toute la suite">⏭️ Clôturer & Décaler non-faits</button>' +
-            '</div>' +
-        '</div>' +
-        blocSemaineSuivanteHtml +
-        '<div class="grid-2-cols grid-lecons-poles">' +
-            genererTableauLeconsPoleHtml('francais', '📘 FRANÇAIS — Ordre des leçons explicites', '#1b4f72', semProf) +
-            genererTableauLeconsPoleHtml('maths', '📕 MATHÉMATIQUES — Ordre des leçons explicites', '#c0392b', semProf) +
-        '</div>' +
-    '</div>';
+    let blocAgendaProfHtml =
+    '<div id="blocPlanningLeconsPrint" class="card-panel" style="margin-bottom:22px; background:#f8fbff; border:2px solid #1b4f72;">' +
+        '<div class="only-print-lecons" style="text-align:center; border-bottom:3px solid #1b4f72; padding-bottom:8px; margin-bottom:12px;">' +
+            '<h1 style="margin:0; font-size:20pt; color:#1b4f72;">👩‍🏫 PLANNING DES LEÇONS AVEC LA MAÎTRESSE — ' + escHTML(titreDatesAffiche) + '</h1>' +
+            '<p style="margin:4px 0 0 0; font-size:11pt; color:#333;">Ordre de passage des groupes de haut en bas (1<sup>er</sup> passage ➔ 5<sup>e</sup> passage)</p>' +
+        '</div>' +
+        '<div class="semaines-flex no-print" style="margin-bottom:14px; padding-bottom:10px; border-bottom:1px dashed #bdc3c7;">' +
+            '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
+                '<h3 style="margin:0; color:#1b4f72;">🗓️ Semaine affichée sur tout le Tableau de bord :</h3>' +
+                '<select onchange="changerPeriodeDashboard(this.value)" style="font-weight:bold; padding:6px 10px; border-radius:6px; border:1px solid #d35400; background:#fef9e7; color:#a04000; cursor:pointer;">' +
+                    optionsPeriodesHtml +
+                '</select>' +
+                '<select onchange="changerSemaineDashboard(this.value)" style="font-weight:bold; padding:6px 10px; border-radius:6px; border:1px solid #1b4f72; cursor:pointer;">' +
+                    optionsSemProf +
+                '</select>' +
+            '</div>' +
+            '<div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">' +
+                '<label style="font-size:13px; font-weight:bold;">Lundi : <input type="date" min="2025-01-01" max="2035-12-31" value="' + escHTML(semProf.dateDebutISO || '') + '" onchange="appliquerDateSemaineProf(this.value)"></label>' +
+                '<span style="font-weight:bold; color:#1b4f72; font-size:13px;">' + (semProf.dateFin ? '➔ au Vendredi ' + escHTML(semProf.dateFin) : '➔ Vendredi : --/--') + '</span>' +
+            '</div>' +
+            '<div style="display:flex; gap:6px; flex-wrap:wrap;">' +
+                '<button type="button" class="btn-action" onclick="imprimerPlanningLeconsProf()" style="background:#8e44ad !important; color:#fff !important;" title="Imprimer ce planning de leçons pour l\'afficher aux élèves">🖨️ Affiche élèves</button>' +
+                '<button type="button" class="filter-btn" onclick="toggleApercuSemaineSuivanteDash()" title="Voir et cocher en avance les séances de la semaine suivante">👀 S+1 (Avance)</button>' +
+                '<button type="button" class="btn-action" onclick="recalerAvanceDepuisDashboard()" title="Remonter les séances de la semaine suivante sur les créneaux vides">⏮️ Recaler l\'avance</button>' +
+                '<button type="button" class="btn-valid" onclick="cloreEtDecalerDepuisDashboard()" title="Clôturer cette semaine pour toute la classe : leçons, plans élèves et préparations passent à la semaine suivante">⏭️ Clôturer & Passer à la suivante</button>' +
+            '</div>' +
+        '</div>' +
+        blocSemaineSuivanteHtml +
+        '<div class="grid-2-cols grid-lecons-poles">' +
+            genererTableauLeconsPoleHtml('francais', '📘 FRANÇAIS — Ordre des leçons explicites', '#1b4f72', semProf) +
+            genererTableauLeconsPoleHtml('maths', '📕 MATHÉMATIQUES — Ordre des leçons explicites', '#c0392b', semProf) +
+        '</div>' +
+    '</div>';
 
-    const listeEl = getElevesTries();
-    if (listeEl.length === 0) {
-        cont.innerHTML = blocAgendaProfHtml + '<div class="empty-state no-print-lecons"><h3>Aucun élève enregistré pour le suivi individuel.</h3></div>';
-        return;
-    }
+    const listeEl = getElevesTries();
+    if (listeEl.length === 0) {
+        cont.innerHTML = blocAgendaProfHtml + '<div class="empty-state no-print-lecons"><h3>Aucun élève enregistré pour le suivi individuel.</h3></div>';
+        return;
+    }
 
-    let lignesRemediation = '', tachesTablettesMap = {}, tachesAteliersMap = {}, tachesFichesMap = {};
-    listeEl.forEach(e => {
-        assurerStructureSemaines(e);
-        (e.planHebdo || []).forEach(idAct => {
-            let act = baseDonnees.find(b => b.id === idAct && !estLeconProf(b)); if (!act) return;
-            let estVal = e.valides && e.valides[idAct], s = e.suivi && e.suivi[idAct] ? e.suivi[idAct] : null;
-            if (s && (s.statut === 'a_revoir' || s.statut === 'a_refaire')) {
-                let cleRem = e.id + "_" + idAct, estArch = dashboardArchives.includes(cleRem);
-                if (afficherArchivesMode || !estArch) {
-                    let coul = getCouleurMatiereBandeau(act.matiere);
-                    lignesRemediation += '<tr style="' + (estArch ? 'opacity:0.5;' : '') + '"><td><strong>[' + escHTML(e.niveau) + '] ' + escHTML(e.nom) + '</strong></td><td><span style="background:' + coul.bg + '; color:#fff; padding:2px 6px; border-radius:4px; font-size:11px;">' + escHTML(act.matiere) + '</span> ' + escHTML(getSequenceActivePourEleve(e, act)) + '</td><td><strong>' + escHTML(act.ressource) + '</strong></td><td>' + (s.statut === 'a_revoir' ? '👩‍🏫' : '🔄') + '</td><td><button type="button" class="btn-valid" style="padding:3px 7px;" onclick="validerDepuisDashboard(\'' + e.id + '\', \'' + idAct + '\')">✅</button> <button type="button" class="filter-btn" style="padding:3px 7px;" onclick="' + (estArch ? 'restaurerArchive(\'' + cleRem + '\')' : 'archiverItem(\'' + cleRem + '\')') + '">' + (estArch ? '↩️' : '📥') + '</button></td></tr>';
-                }
-            }
-            if (!estVal && estActiviteTablette(act)) {
-                let cleTab = "tab_" + act.id, estArchTab = dashboardArchives.includes(cleTab);
-                if (afficherArchivesMode || !estArchTab) {
-                    if (!tachesTablettesMap[act.id]) tachesTablettesMap[act.id] = { act, elevesNoms: [], cleTab, estArchTab };
-                    tachesTablettesMap[act.id].elevesNoms.push(e.nom + " (" + e.niveau + ")");
-                }
-            }
-            if (!estVal && estActiviteSupportAtelier(act)) {
-                let cleAt = "at_" + act.id, estArchAt = dashboardArchives.includes(cleAt);
-                if (afficherArchivesMode || !estArchAt) {
-                    if (!tachesAteliersMap[act.id]) tachesAteliersMap[act.id] = { act, elevesNoms: [], cleAt, estArchAt };
-                    tachesAteliersMap[act.id].elevesNoms.push(e.nom + " (" + e.niveau + ")");
-                }
-            }
-            if (!estVal && estActiviteSupportFiche(act)) {
-                let cleFicheGroupe = "fiche_" + act.id;
-                let cleFicheEl = "fiche_" + act.id + "_" + e.id;
-                let estArchEl = dashboardArchives.includes(cleFicheGroupe) || dashboardArchives.includes(cleFicheEl);
-                if (afficherArchivesMode || !estArchEl) {
-                    if (!tachesFichesMap[act.id]) {
-                        tachesFichesMap[act.id] = { act, elevesItems: [], cleFicheGroupe };
-                    }
-                    tachesFichesMap[act.id].elevesItems.push({
-                        idEl: e.id,
-                        nom: e.nom,
-                        niveau: e.niveau,
-                        cleFicheEl: cleFicheEl,
-                        estArchEl: estArchEl
-                    });
-                }
-            }
-        });
-    });
+    let lignesRemediation = '', tachesTablettesMap = {}, tachesAteliersMap = {}, tachesFichesMap = {};
+    let contextesElevesMap = {};
 
-    let tabKeys = Object.keys(tachesTablettesMap);
-    let atKeys = Object.keys(tachesAteliersMap);
-    let ficheKeys = Object.keys(tachesFichesMap);
+    // Lecture stricte de la semaine sélectionnée pour chaque élève (aucun décalage même si une semaine d'avance est créée)
+    listeEl.forEach(e => {
+        let ctx = obtenirContexteSemaineElevePourDashboard(e, perActive, semIdx);
+        contextesElevesMap[e.id] = ctx;
 
-    let html = blocAgendaProfHtml + '<div class="no-print-lecons" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(310px, 1fr)); gap:16px; margin-bottom:20px;">' +
-        '<div class="card-panel" style="border-left:5px solid #c0392b;"><h3 style="color:#c0392b; margin-bottom:10px;">👩‍🏫 Besoins d\'ateliers dirigés & Remédiations</h3>' + (lignesRemediation ? '<table class="table-classique"><thead><tr><th>Élève</th><th>Matière</th><th>Atelier</th><th>Statut</th><th>Action</th></tr></thead><tbody>' + lignesRemediation + '</tbody></table>' : '<p style="color:#7f8c8d; font-size:13px;">Aucune remédiation en cours.</p>') + '</div>' +
-        '<div class="card-panel" style="border-left:5px solid #8e44ad;"><h3 style="color:#6c3483; margin-bottom:10px;">📱 Préparation Tablettes (Anton / Scratch)</h3>' + (tabKeys.length > 0 ? '<table class="table-classique"><thead><tr><th>Support</th><th>Activité & Lien direct</th><th>Élèves à épingler</th><th>Action</th></tr></thead><tbody>' + tabKeys.map(k => {
-            let item = tachesTablettesMap[k];
-            let btnLien = (item.act.lienExterne && item.act.lienExterne.trim() !== "")
-                ? '<a href="' + escHTML(item.act.lienExterne.trim()) + '" target="_blank" rel="noopener noreferrer" class="btn-action" style="display:inline-block; text-decoration:none; padding:3px 8px; font-size:11.5px; margin-top:4px; background:#8e44ad !important; color:#fff !important;">🔗 Ouvrir ' + escHTML(item.act.typeRes || 'Anton') + ' ↗</a> <button type="button" class="filter-btn" style="padding:2px 5px; font-size:10px; margin-top:4px;" onclick="definirLienRapideDepuisDash(\'' + item.act.id + '\')" title="Modifier le lien">✏️</button>'
-                : '<button type="button" class="filter-btn" style="padding:2px 6px; font-size:10.5px; margin-top:3px;" onclick="definirLienRapideDepuisDash(\'' + item.act.id + '\')" title="Ajouter le lien direct Anton">➕🔗 Ajouter lien</button>';
-            return '<tr style="' + (item.estArchTab ? 'opacity:0.5;' : '') + '">' +
-                '<td><strong>' + escHTML(item.act.typeRes) + '</strong><br><small style="color:#666;">' + escHTML(item.act.matiere) + '</small></td>' +
-                '<td><strong>' + escHTML(item.act.ressource) + '</strong><br><small style="color:#555;">' + escHTML(item.act.sequence) + ' ' + (item.act.lecon ? '(' + escHTML(item.act.lecon) + ')' : '') + '</small><br>' + btnLien + '</td>' +
-                '<td><strong>' + escHTML(item.elevesNoms.join(', ')) + '</strong></td>' +
-                '<td style="text-align:center;"><button type="button" class="filter-btn" title="Marquer comme épinglé sur Anton" onclick="' + (item.estArchTab ? 'restaurerArchive(\'' + item.cleTab + '\')' : 'archiverItem(\'' + item.cleTab + '\')') + '">' + (item.estArchTab ? '↩️' : '☑️ Épinglé') + '</button></td>' +
-            '</tr>';
-        }).join('') + '</tbody></table>' : '<p style="color:#7f8c8d; font-size:13px;">Aucune activité tablette à préparer.</p>') + '</div>' +
-        '<div class="card-panel" style="border-left:5px solid #27ae60;"><h3 style="color:#1e8449; margin-bottom:10px;">📦 Préparation Ateliers (Rangement Bac)</h3>' + (atKeys.length > 0 ? '<table class="table-classique"><thead><tr><th>N° / Repère</th><th>Atelier à mettre au bac</th><th>Élèves concernés</th><th>Action</th></tr></thead><tbody>' + atKeys.map(k => {
-            let item = tachesAteliersMap[k];
-            let repAt = getRepereAtelierHtml(item.act, null, 22);
-            return '<tr style="' + (item.estArchAt ? 'opacity:0.5;' : '') + '">' +
-                '<td style="text-align:center; background:' + repAt.bg + ';">' + (repAt.html ? repAt.html + '<br>' : '') + '<small style="color:#333; font-weight:bold;">[' + escHTML(item.act.niveau) + ']</small></td>' +
-                '<td><strong>' + escHTML(item.act.ressource) + '</strong><br><small style="color:#555;">' + escHTML(item.act.matiere) + ' — ' + escHTML(item.act.sequence) + (item.act.lecon ? ' (' + escHTML(item.act.lecon) + ')' : '') + '</small></td>' +
-                '<td><strong>' + escHTML(item.elevesNoms.join(', ')) + '</strong></td>' +
-                '<td style="text-align:center;"><button type="button" class="filter-btn" title="Marquer comme rangé dans le bac de la semaine" onclick="' + (item.estArchAt ? 'restaurerArchive(\'' + item.cleAt + '\')' : 'archiverItem(\'' + item.cleAt + '\')') + '">' + (item.estArchAt ? '↩️' : '☑️ Dans le bac') + '</button></td>' +
-            '</tr>';
-        }).join('') + '</tbody></table>' : '<p style="color:#7f8c8d; font-size:13px;">Aucun atelier matériel à préparer pour le bac cette semaine.</p>') + '</div>' +
-        '<div class="card-panel" style="border-left:5px solid #2980b9;"><h3 style="color:#1b4f72; margin-bottom:10px;">🖨️ Fiches à imprimer & distribuer</h3>' + (ficheKeys.length > 0 ? '<table class="table-classique"><thead><tr><th>Nb / Niveau</th><th>Fiche à photocopier</th><th>Élèves à qui donner la fiche</th><th>Action</th></tr></thead><tbody>' + ficheKeys.map(k => {
-            let item = tachesFichesMap[k];
-            let repF = getRepereAtelierHtml(item.act, null, 20);
-            let nbRestants = item.elevesItems.filter(el => !el.estArchEl).length;
-            let tousArch = (nbRestants === 0);
-            let idsStr = item.elevesItems.map(el => el.idEl).join(',');
+        (ctx.planHebdo || []).forEach(idAct => {
+            let act = baseDonnees.find(b => b.id === idAct && !estLeconProf(b)); if (!act) return;
+            let estVal = ctx.valides && ctx.valides[idAct];
+            let s = (ctx.suivi && ctx.suivi[idAct]) ? ctx.suivi[idAct] : null;
+            let seqActiveEl = (ctx.sequencesChoisies && ctx.sequencesChoisies[idAct]) ? ctx.sequencesChoisies[idAct] : getSequenceActivePourEleve(e, act);
 
-            let badgesElevesHtml = item.elevesItems.map(el => {
-                let stBtn = el.estArchEl
-                    ? 'background:#d4efdf; color:#1e8449; text-decoration:line-through; border-color:#a9dfbf;'
-                    : 'background:#eaf2f8; color:#1b4f72; border-color:#aed6f1; font-weight:bold;';
-                return '<button type="button" class="filter-btn" style="padding:2px 7px; margin:2px; font-size:11.5px; ' + stBtn + '" title="Cliquer quand la fiche est donnée à ' + escHTML(el.nom) + '" onclick="' + (el.estArchEl ? 'restaurerArchive(\'' + el.cleFicheEl + '\')' : 'archiverItem(\'' + el.cleFicheEl + '\')') + '">' +
-                    (el.estArchEl ? '✅ ' : '⬜ ') + '[' + escHTML(el.niveau) + '] ' + escHTML(el.nom) +
-                '</button>';
-            }).join(' ');
+            if (s && (s.statut === 'a_revoir' || s.statut === 'a_refaire')) {
+                let cleRem = e.id + "_" + idAct, estArch = dashboardArchives.includes(cleRem);
+                if (afficherArchivesMode || !estArch) {
+                    let coul = getCouleurMatiereBandeau(act.matiere);
+                    lignesRemediation += '<tr style="' + (estArch ? 'opacity:0.5;' : '') + '"><td><strong>[' + escHTML(e.niveau) + '] ' + escHTML(e.nom) + '</strong></td><td><span style="background:' + coul.bg + '; color:#fff; padding:2px 6px; border-radius:4px; font-size:11px;">' + escHTML(act.matiere) + '</span> ' + escHTML(seqActiveEl) + '</td><td><strong>' + escHTML(act.ressource) + '</strong></td><td>' + (s.statut === 'a_revoir' ? '👩‍🏫' : '🔄') + '</td><td><button type="button" class="btn-valid" style="padding:3px 7px;" onclick="validerDepuisDashboard(\'' + e.id + '\', \'' + idAct + '\')">✅</button> <button type="button" class="filter-btn" style="padding:3px 7px;" onclick="' + (estArch ? 'restaurerArchive(\'' + cleRem + '\')' : 'archiverItem(\'' + cleRem + '\')') + '">' + (estArch ? '↩️' : '📥') + '</button></td></tr>';
+                }
+            }
+            if (!estVal && estActiviteTablette(act)) {
+                let cleTab = "tab_" + act.id, estArchTab = dashboardArchives.includes(cleTab);
+                if (afficherArchivesMode || !estArchTab) {
+                    if (!tachesTablettesMap[act.id]) tachesTablettesMap[act.id] = { act, elevesNoms: [], cleTab, estArchTab };
+                    tachesTablettesMap[act.id].elevesNoms.push(e.nom + " (" + e.niveau + ")");
+                }
+            }
+            if (!estVal && estActiviteSupportAtelier(act)) {
+                let cleAt = "at_" + act.id, estArchAt = dashboardArchives.includes(cleAt);
+                if (afficherArchivesMode || !estArchAt) {
+                    if (!tachesAteliersMap[act.id]) tachesAteliersMap[act.id] = { act, elevesNoms: [], cleAt, estArchAt };
+                    tachesAteliersMap[act.id].elevesNoms.push(e.nom + " (" + e.niveau + ")");
+                }
+            }
+            if (!estVal && estActiviteSupportFiche(act)) {
+                let cleFicheGroupe = "fiche_" + act.id;
+                let cleFicheEl = "fiche_" + act.id + "_" + e.id;
+                let estArchEl = dashboardArchives.includes(cleFicheGroupe) || dashboardArchives.includes(cleFicheEl);
+                if (afficherArchivesMode || !estArchEl) {
+                    if (!tachesFichesMap[act.id]) {
+                        tachesFichesMap[act.id] = { act, elevesItems: [], cleFicheGroupe };
+                    }
+                    tachesFichesMap[act.id].elevesItems.push({
+                        idEl: e.id,
+                        nom: e.nom,
+                        niveau: e.niveau,
+                        cleFicheEl: cleFicheEl,
+                        estArchEl: estArchEl
+                    });
+                }
+            }
+        });
+    });
 
-            let btnLienFiche = (item.act.lienExterne && item.act.lienExterne.trim() !== "")
-                ? '<br><a href="' + escHTML(item.act.lienExterne.trim()) + '" target="_blank" rel="noopener noreferrer" class="btn-action" style="display:inline-block; text-decoration:none; padding:2px 7px; font-size:11px; margin-top:3px; background:#2980b9 !important; color:#fff !important;">📄 Ouvrir PDF ↗</a>'
-                : '';
+    let tabKeys = Object.keys(tachesTablettesMap);
+    let atKeys = Object.keys(tachesAteliersMap);
+    let ficheKeys = Object.keys(tachesFichesMap);
 
-            return '<tr style="' + (tousArch ? 'opacity:0.5;' : '') + '">' +
-                '<td style="text-align:center; background:' + repF.bg + ';">' +
-                    '<strong style="font-size:13px; color:#1b4f72;">🖨️ ' + (nbRestants > 0 ? nbRestants : item.elevesItems.length) + ' ex.</strong><br>' +
-                    (repF.html ? repF.html + '<br>' : '') +
-                    '<small style="color:#333; font-weight:bold;">[' + escHTML(item.act.niveau) + ']</small>' +
-                '</td>' +
-                '<td><strong>' + escHTML(item.act.ressource) + '</strong> ' + (item.act.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : '') + '<br><small style="color:#555;">' + escHTML(item.act.matiere) + ' — ' + escHTML(item.act.sequence) + (item.act.lecon ? ' (' + escHTML(item.act.lecon) + ')' : '') + '</small>' + btnLienFiche + '</td>' +
-                '<td><div style="display:flex; flex-wrap:wrap; gap:2px;">' + badgesElevesHtml + '</div></td>' +
-                '<td style="text-align:center;"><button type="button" class="filter-btn" title="Tout cocher comme imprimé et distribué" onclick="basculerFicheTodoLot(\'' + item.act.id + '\', \'' + idsStr + '\', ' + (!tousArch) + ')">' + (tousArch ? '↩️' : '☑️ Tout fait') + '</button></td>' +
-            '</tr>';
-        }).join('') + '</tbody></table>' : '<p style="color:#7f8c8d; font-size:13px;">Aucune fiche à imprimer ou distribuer cette semaine.</p>') + '</div>' +
-    '</div><div class="dashboard-grid no-print-lecons">';
-    listeEl.forEach(e => {
-        let planEl = getListeTrie(e.planHebdo, e.priorites || [], e);
-        let total = planEl.length, nbValides = planEl.filter(a => e.valides && e.valides[a.id]).length;
-        let pct = total > 0 ? Math.round((nbValides / total) * 100) : 0;
-        let nbTab = planEl.filter(b => b && estActiviteTablette(b)).length;
-        let isExp = dashboardExpanded.has(e.id), badgeParc = estEleveCM(e) ? ((e.parcours === 'orange') ? ' 🟠' : ' 🟡') : '';
-        let detailsPlanHtml = isExp ? '<div style="margin-top:10px; padding-top:8px; border-top:1px dashed #ccc; font-size:12.5px;">' + planEl.map((a, idx) => {
-            let fait = e.valides && e.valides[a.id], st = (e.suivi && e.suivi[a.id]) ? e.suivi[a.id].statut : "";
-            let iconeLien = (a.lienExterne && a.lienExterne.trim()) ? ' <a href="' + escHTML(a.lienExterne.trim()) + '" target="_blank" rel="noopener noreferrer" title="Ouvrir sur Anton" style="text-decoration:none;">🔗</a>' : '';
-            let isRec = e.recurrents && e.recurrents.includes(a.id);
-            return '<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #f1f5f9;"><span style="' + (fait ? 'text-decoration:line-through; color:#27ae60;' : '') + '"><strong>' + (idx + 1) + '.</strong> ' + escHTML(a.ressource) + (isRec ? ' 🔄' : '') + iconeLien + '</span><div style="display:flex; gap:3px;">' + (!fait ? '<button type="button" class="filter-btn" style="padding:1px 5px;" onclick="validerDepuisDashboard(\'' + e.id + '\', \'' + a.id + '\')">✅</button><button type="button" class="filter-btn" style="padding:1px 5px; ' + (st === 'a_revoir' ? 'background:#c0392b; color:#fff;' : '') + '" onclick="setSuivi(\'' + e.id + '\', \'' + a.id + '\', \'' + (st === 'a_revoir' ? '' : 'a_revoir') + '\')">👩‍🏫</button><button type="button" class="filter-btn" style="padding:1px 5px; ' + (st === 'a_refaire' ? 'background:#e67e22; color:#fff;' : '') + '" onclick="setSuivi(\'' + e.id + '\', \'' + a.id + '\', \'' + (st === 'a_refaire' ? '' : 'a_refaire') + '\')">🔄</button>' : '✅') + '</div></div>';
-        }).join('') + '</div>' : '';
+    let html = blocAgendaProfHtml +
+    '<div class="no-print-lecons" style="background:#eaf2f8; border-left:5px solid #1b4f72; padding:8px 14px; border-radius:6px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">' +
+        '<strong style="color:#1b4f72; font-size:14px;">📌 Suivi des ateliers, préparations & plans des élèves pour : ' + escHTML(titreDatesAffiche) + '</strong>' +
+        '<span style="font-size:12px; color:#34495e;">Toutes les cartes ci-dessous affichent strictement la <strong>Semaine ' + (semIdx + 1) + ' (' + escHTML(perActive) + ')</strong></span>' +
+    '</div>' +
+    '<div class="no-print-lecons" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(310px, 1fr)); gap:16px; margin-bottom:20px;">' +
+        '<div class="card-panel" style="border-left:5px solid #c0392b;"><h3 style="color:#c0392b; margin-bottom:10px;">👩‍🏫 Besoins d\'ateliers dirigés & Remédiations (S' + (semIdx + 1) + ')</h3>' + (lignesRemediation ? '<table class="table-classique"><thead><tr><th>Élève</th><th>Matière</th><th>Atelier</th><th>Statut</th><th>Action</th></tr></thead><tbody>' + lignesRemediation + '</tbody></table>' : '<p style="color:#7f8c8d; font-size:13px;">Aucune remédiation en cours sur cette semaine.</p>') + '</div>' +
+        '<div class="card-panel" style="border-left:5px solid #8e44ad;"><h3 style="color:#6c3483; margin-bottom:10px;">📱 Préparation Tablettes — Anton / Scratch (S' + (semIdx + 1) + ')</h3>' + (tabKeys.length > 0 ? '<table class="table-classique"><thead><tr><th>Support</th><th>Activité & Lien direct</th><th>Élèves à épingler</th><th>Action</th></tr></thead><tbody>' + tabKeys.map(k => {
+            let item = tachesTablettesMap[k];
+            let btnLien = (item.act.lienExterne && item.act.lienExterne.trim() !== "")
+                ? '<a href="' + escHTML(item.act.lienExterne.trim()) + '" target="_blank" rel="noopener noreferrer" class="btn-action" style="display:inline-block; text-decoration:none; padding:3px 8px; font-size:11.5px; margin-top:4px; background:#8e44ad !important; color:#fff !important;">🔗 Ouvrir ' + escHTML(item.act.typeRes || 'Anton') + ' ↗</a> <button type="button" class="filter-btn" style="padding:2px 5px; font-size:10px; margin-top:4px;" onclick="definirLienRapideDepuisDash(\'' + item.act.id + '\')" title="Modifier le lien">✏️</button>'
+                : '<button type="button" class="filter-btn" style="padding:2px 6px; font-size:10.5px; margin-top:3px;" onclick="definirLienRapideDepuisDash(\'' + item.act.id + '\')" title="Ajouter le lien direct Anton">➕🔗 Ajouter lien</button>';
+            return '<tr style="' + (item.estArchTab ? 'opacity:0.5;' : '') + '">' +
+                '<td><strong>' + escHTML(item.act.typeRes) + '</strong><br><small style="color:#666;">' + escHTML(item.act.matiere) + '</small></td>' +
+                '<td><strong>' + escHTML(item.act.ressource) + '</strong><br><small style="color:#555;">' + escHTML(item.act.sequence) + ' ' + (item.act.lecon ? '(' + escHTML(item.act.lecon) + ')' : '') + '</small><br>' + btnLien + '</td>' +
+                '<td><strong>' + escHTML(item.elevesNoms.join(', ')) + '</strong></td>' +
+                '<td style="text-align:center;"><button type="button" class="filter-btn" title="Marquer comme épinglé sur Anton" onclick="' + (item.estArchTab ? 'restaurerArchive(\'' + item.cleTab + '\')' : 'archiverItem(\'' + item.cleTab + '\')') + '">' + (item.estArchTab ? '↩️' : '☑️ Épinglé') + '</button></td>' +
+            '</tr>';
+        }).join('') + '</tbody></table>' : '<p style="color:#7f8c8d; font-size:13px;">Aucune activité tablette à préparer pour cette semaine.</p>') + '</div>' +
+        '<div class="card-panel" style="border-left:5px solid #27ae60;"><h3 style="color:#1e8449; margin-bottom:10px;">📦 Préparation Ateliers — Rangement Bac (S' + (semIdx + 1) + ')</h3>' + (atKeys.length > 0 ? '<table class="table-classique"><thead><tr><th>N° / Repère</th><th>Atelier à mettre au bac</th><th>Élèves concernés</th><th>Action</th></tr></thead><tbody>' + atKeys.map(k => {
+            let item = tachesAteliersMap[k];
+            let repAt = getRepereAtelierHtml(item.act, null, 22);
+            return '<tr style="' + (item.estArchAt ? 'opacity:0.5;' : '') + '">' +
+                '<td style="text-align:center; background:' + repAt.bg + ';">' + (repAt.html ? repAt.html + '<br>' : '') + '<small style="color:#333; font-weight:bold;">[' + escHTML(item.act.niveau) + ']</small></td>' +
+                '<td><strong>' + escHTML(item.act.ressource) + '</strong><br><small style="color:#555;">' + escHTML(item.act.matiere) + ' — ' + escHTML(item.act.sequence) + (item.act.lecon ? ' (' + escHTML(item.act.lecon) + ')' : '') + '</small></td>' +
+                '<td><strong>' + escHTML(item.elevesNoms.join(', ')) + '</strong></td>' +
+                '<td style="text-align:center;"><button type="button" class="filter-btn" title="Marquer comme rangé dans le bac de la semaine" onclick="' + (item.estArchAt ? 'restaurerArchive(\'' + item.cleAt + '\')' : 'archiverItem(\'' + item.cleAt + '\')') + '">' + (item.estArchAt ? '↩️' : '☑️ Dans le bac') + '</button></td>' +
+            '</tr>';
+        }).join('') + '</tbody></table>' : '<p style="color:#7f8c8d; font-size:13px;">Aucun atelier matériel à préparer pour le bac cette semaine.</p>') + '</div>' +
+        '<div class="card-panel" style="border-left:5px solid #2980b9;"><h3 style="color:#1b4f72; margin-bottom:10px;">🖨️ Fiches à imprimer & distribuer (S' + (semIdx + 1) + ')</h3>' + (ficheKeys.length > 0 ? '<table class="table-classique"><thead><tr><th>Nb / Niveau</th><th>Fiche à photocopier</th><th>Élèves à qui donner la fiche</th><th>Action</th></tr></thead><tbody>' + ficheKeys.map(k => {
+            let item = tachesFichesMap[k];
+            let repF = getRepereAtelierHtml(item.act, null, 20);
+            let nbRestants = item.elevesItems.filter(el => !el.estArchEl).length;
+            let tousArch = (nbRestants === 0);
+            let idsStr = item.elevesItems.map(el => el.idEl).join(',');
 
-        html += '<div class="dash-card">' +
-            '<div style="display:flex; justify-content:space-between; align-items:center;">' +
-                '<strong style="font-size:16px; color:#1b4f72; cursor:pointer;" onclick="toggleExpandEleveDash(\'' + e.id + '\')">' + (isExp ? '▼' : '▶') + ' [' + escHTML(e.niveau) + '] ' + escHTML(e.nom) + badgeParc + ' ' + (e.fichierJaune ? '📒' : '') + '</strong>' +
-                '<button type="button" class="filter-btn" onclick="ouvrirEleveDepuisDashboard(\'' + e.id + '\')">Plan ➔</button>' +
-            '</div>' +
-            '<div style="font-size:12.5px; color:#555; margin-top:6px;">Semaine ' + ((e.semaineIndex || 0) + 1) + ' • 📱 Tablettes : ' + nbTab + '/' + (e.maxTablettes ?? 2) + '</div>' +
-            '<div class="dash-progress-bar"><div class="dash-progress-fill" style="width:' + pct + '%;"></div></div>' +
-            '<div style="display:flex; justify-content:space-between; font-size:13px; font-weight:600;"><span>' + nbValides + ' / ' + total + ' validés</span><span style="color:#27ae60;">' + pct + '%</span></div>' +
-            detailsPlanHtml +
-        '</div>';
-    });
-    cont.innerHTML = html + '</div>';
+            let badgesElevesHtml = item.elevesItems.map(el => {
+                let stBtn = el.estArchEl
+                    ? 'background:#d4efdf; color:#1e8449; text-decoration:line-through; border-color:#a9dfbf;'
+                    : 'background:#eaf2f8; color:#1b4f72; border-color:#aed6f1; font-weight:bold;';
+                return '<button type="button" class="filter-btn" style="padding:2px 7px; margin:2px; font-size:11.5px; ' + stBtn + '" title="Cliquer quand la fiche est donnée à ' + escHTML(el.nom) + '" onclick="' + (el.estArchEl ? 'restaurerArchive(\'' + el.cleFicheEl + '\')' : 'archiverItem(\'' + el.cleFicheEl + '\')') + '">' +
+                    (el.estArchEl ? '✅ ' : '⬜ ') + '[' + escHTML(el.niveau) + '] ' + escHTML(el.nom) +
+                '</button>';
+            }).join(' ');
+
+            let btnLienFiche = (item.act.lienExterne && item.act.lienExterne.trim() !== "")
+                ? '<br><a href="' + escHTML(item.act.lienExterne.trim()) + '" target="_blank" rel="noopener noreferrer" class="btn-action" style="display:inline-block; text-decoration:none; padding:2px 7px; font-size:11px; margin-top:3px; background:#2980b9 !important; color:#fff !important;">📄 Ouvrir PDF ↗</a>'
+                : '';
+
+            return '<tr style="' + (tousArch ? 'opacity:0.5;' : '') + '">' +
+                '<td style="text-align:center; background:' + repF.bg + ';">' +
+                    '<strong style="font-size:13px; color:#1b4f72;">🖨️ ' + (nbRestants > 0 ? nbRestants : item.elevesItems.length) + ' ex.</strong><br>' +
+                    (repF.html ? repF.html + '<br>' : '') +
+                    '<small style="color:#333; font-weight:bold;">[' + escHTML(item.act.niveau) + ']</small>' +
+                '</td>' +
+                '<td><strong>' + escHTML(item.act.ressource) + '</strong> ' + (item.act.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : '') + '<br><small style="color:#555;">' + escHTML(item.act.matiere) + ' — ' + escHTML(item.act.sequence) + (item.act.lecon ? ' (' + escHTML(item.act.lecon) + ')' : '') + '</small>' + btnLienFiche + '</td>' +
+                '<td><div style="display:flex; flex-wrap:wrap; gap:2px;">' + badgesElevesHtml + '</div></td>' +
+                '<td style="text-align:center;"><button type="button" class="filter-btn" title="Tout cocher comme imprimé et distribué" onclick="basculerFicheTodoLot(\'' + item.act.id + '\', \'' + idsStr + '\', ' + (!tousArch) + ')">' + (tousArch ? '↩️' : '☑️ Tout fait') + '</button></td>' +
+            '</tr>';
+        }).join('') + '</tbody></table>' : '<p style="color:#7f8c8d; font-size:13px;">Aucune fiche à imprimer ou distribuer cette semaine.</p>') + '</div>' +
+    '</div><div class="dashboard-grid no-print-lecons">';
+
+    listeEl.forEach(e => {
+        let ctx = contextesElevesMap[e.id];
+        let planEl = getListeTrie(ctx.planHebdo, ctx.priorites || [], e);
+        let total = planEl.length, nbValides = planEl.filter(a => ctx.valides && ctx.valides[a.id]).length;
+        let pct = total > 0 ? Math.round((nbValides / total) * 100) : 0;
+        let nbTab = planEl.filter(b => b && estActiviteTablette(b)).length;
+        let isExp = dashboardExpanded.has(e.id), badgeParc = estEleveCM(e) ? ((e.parcours === 'orange') ? ' 🟠' : ' 🟡') : '';
+        let detailsPlanHtml = isExp ? '<div style="margin-top:10px; padding-top:8px; border-top:1px dashed #ccc; font-size:12.5px;">' + planEl.map((a, idx) => {
+            let fait = ctx.valides && ctx.valides[a.id], st = (ctx.suivi && ctx.suivi[a.id]) ? ctx.suivi[a.id].statut : "";
+            let iconeLien = (a.lienExterne && a.lienExterne.trim()) ? ' <a href="' + escHTML(a.lienExterne.trim()) + '" target="_blank" rel="noopener noreferrer" title="Ouvrir sur Anton" style="text-decoration:none;">🔗</a>' : '';
+            let isRec = e.recurrents && e.recurrents.includes(a.id);
+            return '<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; border-bottom:1px solid #f1f5f9;"><span style="' + (fait ? 'text-decoration:line-through; color:#27ae60;' : '') + '"><strong>' + (idx + 1) + '.</strong> ' + escHTML(a.ressource) + (isRec ? ' 🔄' : '') + iconeLien + '</span><div style="display:flex; gap:3px;">' + (!fait ? '<button type="button" class="filter-btn" style="padding:1px 5px;" onclick="validerDepuisDashboard(\'' + e.id + '\', \'' + a.id + '\')">✅</button><button type="button" class="filter-btn" style="padding:1px 5px; ' + (st === 'a_revoir' ? 'background:#c0392b; color:#fff;' : '') + '" onclick="setSuivi(\'' + e.id + '\', \'' + a.id + '\', \'' + (st === 'a_revoir' ? '' : 'a_revoir') + '\')">👩‍🏫</button><button type="button" class="filter-btn" style="padding:1px 5px; ' + (st === 'a_refaire' ? 'background:#e67e22; color:#fff;' : '') + '" onclick="setSuivi(\'' + e.id + '\', \'' + a.id + '\', \'' + (st === 'a_refaire' ? '' : 'a_refaire') + '\')">🔄</button>' : '✅') + '</div></div>';
+        }).join('') + '</div>' : '';
+
+        let labelSemaineCarte = perActive + ' - Semaine ' + (semIdx + 1) + (ctx.aucunPlanPourCetteSemaine ? ' (Non préparée)' : '');
+
+        html += '<div class="dash-card">' +
+            '<div style="display:flex; justify-content:space-between; align-items:center;">' +
+                '<strong style="font-size:16px; color:#1b4f72; cursor:pointer;" onclick="toggleExpandEleveDash(\'' + e.id + '\')">' + (isExp ? '▼' : '▶') + ' [' + escHTML(e.niveau) + '] ' + escHTML(e.nom) + badgeParc + ' ' + (e.fichierJaune ? '📒' : '') + '</strong>' +
+                '<button type="button" class="filter-btn" onclick="ouvrirEleveDepuisDashboard(\'' + e.id + '\')">Plan S' + (semIdx + 1) + ' ➔</button>' +
+            '</div>' +
+            '<div style="font-size:12.5px; color:#555; margin-top:6px;">' + escHTML(labelSemaineCarte) + ' • 📱 Tablettes : ' + nbTab + '/' + (e.maxTablettes ?? 2) + '</div>' +
+            '<div class="dash-progress-bar"><div class="dash-progress-fill" style="width:' + pct + '%;"></div></div>' +
+            '<div style="display:flex; justify-content:space-between; font-size:13px; font-weight:600;"><span>' + nbValides + ' / ' + total + ' validés</span><span style="color:#27ae60;">' + pct + '%</span></div>' +
+            detailsPlanHtml +
+        '</div>';
+    });
+    cont.innerHTML = html + '</div>';
 }
 // ==========================================
 // 7. ONGLET 4 : BASE DE DONNÉES, PAGE GUIDE ENSEIGNANT, TYPES CORRIGÉS & SAUVEGARDE IMMÉDIATE ANTI-PERTE
