@@ -5402,128 +5402,354 @@ majSlotLeconProf = function(pole, jour, slotIdx, champ, valeur) {
     rafraichirDashboard();
 };
 
+// Pile d'annulation (Undo) pour annuler en 1 clic n'importe quel clic par inadvertance (Fait, Lendemain ou Semaine +1)
+let pileUndoLeconsProf = [];
+
+function sauvegarderEtatAvantModifLecon(descriptionAction) {
+    assurerStructureProgPeriodes();
+    pileUndoLeconsProf.unshift({
+        description: descriptionAction,
+        heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        snapshot: JSON.parse(JSON.stringify(progPeriodesData))
+    });
+    if (pileUndoLeconsProf.length > 15) pileUndoLeconsProf.length = 15;
+}
+
+function annulerDerniereActionLeconProf() {
+    if (pileUndoLeconsProf.length === 0) {
+        showToast("Aucune action récente à annuler.", "error");
+        return;
+    }
+    let dernier = pileUndoLeconsProf.shift();
+    progPeriodesData = dernier.snapshot;
+    sauvegarderProgPeriodes();
+    rafraichirDashboard();
+    if (sousOngletProgActif !== 'ANNUEL') afficherProgrammation();
+    showToast("↩️ Action annulée (« " + dernier.description + " ») : tout le planning a été rétabli !", "success");
+}
+
+function basculerFaitLeconDashboard(pole, jour, slotIdx, nouvelEtatFait) {
+    assurerStructureProgPeriodes();
+    let per = progPeriodesData.periodeActiveDash;
+    let sIdx = progPeriodesData.semaineIndexDash;
+    let sem = progPeriodesData.periodes[per].semaines[sIdx];
+    if (!sem) return;
+
+    let nivActuel = sem.ordrePassages[pole][jour][slotIdx] || GROUPES_NIVEAUX_PROF[slotIdx];
+    let nivCible = nivActuel === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivActuel) ? nivActuel : "CP");
+    let cellOrig = sem.niveaux[nivCible][pole].jours[jour];
+    if (!cellOrig || !cellOrig.texte) return;
+
+    sauvegarderEtatAvantModifLecon((nouvelEtatFait ? "Fait : " : "Non fait : ") + cellOrig.texte + " (" + jour + ")");
+
+    let niveauxPartages = getNiveauxPartageantLecon(pole, nivActuel, cellOrig.texte);
+    niveauxPartages.forEach(nPart => {
+        sem.niveaux[nPart][pole].jours[jour].fait = Boolean(nouvelEtatFait);
+    });
+
+    sauvegarderProgPeriodes();
+    rafraichirDashboard();
+    showToast(nouvelEtatFait ? "✅ Leçon marquée comme faite !" : "↩️ Leçon remise « À faire ».", "success");
+}
+
+function decalerChaineChronologiqueJours(pObj, startSemIdx, startJourIdx, niv, pole, itemAInserer) {
+    let carry = {
+        texte: itemAInserer.texte || "",
+        lien: itemAInserer.lien || "",
+        pageProf: itemAInserer.pageProf || "",
+        fait: false
+    };
+    let s = startSemIdx;
+    let j = startJourIdx;
+
+    while (carry && carry.texte && carry.texte.trim() !== "") {
+        if (s >= pObj.semaines.length) {
+            pObj.semaines.push(creerSemaineProgVide(pObj.semaines.length, ""));
+            pObj.nbSemaines = pObj.semaines.length;
+        }
+        let jourNom = JOURS_SEMAINE_PROF[j];
+        let cellCible = pObj.semaines[s].niveaux[niv][pole].jours[jourNom];
+
+        // Si le créneau sur lequel on arrive a déjà été fait, on le saute sans y toucher
+        if (cellCible && cellCible.fait && cellCible.texte && cellCible.texte.trim() !== "") {
+            j++;
+            if (j >= JOURS_SEMAINE_PROF.length) { j = 0; s++; }
+            continue;
+        }
+
+        let ancien = (cellCible && cellCible.texte && cellCible.texte.trim() !== "")
+            ? { texte: cellCible.texte, lien: cellCible.lien || "", pageProf: cellCible.pageProf || "", fait: false }
+            : null;
+
+        pObj.semaines[s].niveaux[niv][pole].jours[jourNom] = {
+            texte: carry.texte,
+            lien: carry.lien || "",
+            pageProf: carry.pageProf || "",
+            fait: false
+        };
+
+        // S'assurer que la séquence correspondante suit dans la semaine s si besoin
+        let infos = trouverInfosDepuisBaseLecon(pole, niv, carry.texte);
+        if (infos.sequence && !pObj.semaines[s].niveaux[niv][pole].sequences.some(sq => sq.nom.toLowerCase() === infos.sequence.toLowerCase())) {
+            pObj.semaines[s].niveaux[niv][pole].sequences.push({ nom: infos.sequence, fait: false });
+        }
+
+        carry = ancien;
+        j++;
+        if (j >= JOURS_SEMAINE_PROF.length) {
+            j = 0;
+            s++;
+        }
+    }
+}
+
+function decalerChaineSemaineSuivanteMemeJour(pObj, startSemIdx, jourNom, niv, pole, itemAInserer) {
+    let carry = {
+        texte: itemAInserer.texte || "",
+        lien: itemAInserer.lien || "",
+        pageProf: itemAInserer.pageProf || "",
+        fait: false
+    };
+    let s = startSemIdx;
+
+    while (carry && carry.texte && carry.texte.trim() !== "") {
+        if (s >= pObj.semaines.length) {
+            pObj.semaines.push(creerSemaineProgVide(pObj.semaines.length, ""));
+            pObj.nbSemaines = pObj.semaines.length;
+        }
+        let cellCible = pObj.semaines[s].niveaux[niv][pole].jours[jourNom];
+
+        if (cellCible && cellCible.fait && cellCible.texte && cellCible.texte.trim() !== "") {
+            s++;
+            continue;
+        }
+
+        let ancien = (cellCible && cellCible.texte && cellCible.texte.trim() !== "")
+            ? { texte: cellCible.texte, lien: cellCible.lien || "", pageProf: cellCible.pageProf || "", fait: false }
+            : null;
+
+        pObj.semaines[s].niveaux[niv][pole].jours[jourNom] = {
+            texte: carry.texte,
+            lien: carry.lien || "",
+            pageProf: carry.pageProf || "",
+            fait: false
+        };
+
+        let infos = trouverInfosDepuisBaseLecon(pole, niv, carry.texte);
+        if (infos.sequence && !pObj.semaines[s].niveaux[niv][pole].sequences.some(sq => sq.nom.toLowerCase() === infos.sequence.toLowerCase())) {
+            pObj.semaines[s].niveaux[niv][pole].sequences.push({ nom: infos.sequence, fait: false });
+        }
+
+        carry = ancien;
+        s++;
+    }
+}
+
+function reporterLeconSlotDashboard(pole, jour, slotIdx, modeDecalage) {
+    assurerStructureProgPeriodes();
+    let per = progPeriodesData.periodeActiveDash;
+    let sIdx = progPeriodesData.semaineIndexDash;
+    let pObj = progPeriodesData.periodes[per];
+    let sem = pObj.semaines[sIdx];
+    if (!sem) return;
+
+    let nivSlot = sem.ordrePassages[pole][jour][slotIdx] || GROUPES_NIVEAUX_PROF[slotIdx];
+    let nivDataKey = nivSlot === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivSlot) ? nivSlot : "");
+    if (!nivDataKey) return;
+
+    let cellOrig = sem.niveaux[nivDataKey][pole].jours[jour];
+    if (!cellOrig || !cellOrig.texte || cellOrig.texte.trim() === "") return;
+
+    let titreLecon = cellOrig.texte;
+    let niveauxPartages = getNiveauxPartageantLecon(pole, nivSlot, titreLecon);
+    let idxJour = JOURS_SEMAINE_PROF.indexOf(jour);
+
+    let labelAction = (modeDecalage === 'lendemain')
+        ? ("Report lendemain : " + titreLecon + " (" + nivSlot + " - " + jour + ")")
+        : ("Report Semaine +1 : " + titreLecon + " (" + nivSlot + " - " + jour + ")");
+    sauvegarderEtatAvantModifLecon(labelAction);
+
+    niveauxPartages.forEach(nPart => {
+        let cActuelle = sem.niveaux[nPart][pole].jours[jour];
+        let itemADecaler = {
+            texte: cActuelle.texte || titreLecon,
+            lien: cActuelle.lien || "",
+            pageProf: cActuelle.pageProf || "",
+            fait: false
+        };
+
+        // Libérer le créneau d'origine
+        sem.niveaux[nPart][pole].jours[jour] = { texte: "", lien: "", pageProf: "", fait: false };
+
+        if (modeDecalage === 'lendemain') {
+            let nextS = sIdx;
+            let nextJ = idxJour + 1;
+            if (nextJ >= JOURS_SEMAINE_PROF.length) {
+                nextJ = 0;
+                nextS = sIdx + 1;
+            }
+            decalerChaineChronologiqueJours(pObj, nextS, nextJ, nPart, pole, itemADecaler);
+        } else {
+            decalerChaineSemaineSuivanteMemeJour(pObj, sIdx + 1, jour, nPart, pole, itemADecaler);
+        }
+    });
+
+    recalculerDatesPeriode(per);
+    sauvegarderProgPeriodes();
+    rafraichirDashboard();
+
+    if (modeDecalage === 'lendemain') {
+        let destJour = (idxJour + 1 < JOURS_SEMAINE_PROF.length) ? JOURS_SEMAINE_PROF[idxJour + 1] : "Lundi (Semaine " + (sIdx + 2) + ")";
+        showToast("➡️ Leçon reportée à " + destJour + " (toutes les leçons suivantes ont été décalées) !", "success");
+    } else {
+        showToast("⏭️ Leçon reportée à " + jour + " de la Semaine " + (sIdx + 2) + " (avec décalage de la suite) !", "success");
+    }
+}
+
 genererTableauLeconsPoleHtml = function(pole, titre, couleurBandeau, sem) {
-    const labelsOrdre = ["1er passage", "2e passage", "3e passage", "4e passage", "5e passage"];
+    const labelsOrdre = ["1er passage", "2e passage", "3e passage", "4e passage", "5e passage"];
 
-    let rowsHtml = [0, 1, 2, 3, 4].map(slotIdx => {
-        let cellsHtml = JOURS_SEMAINE_PROF.map(jour => {
-            let nivSlot = (sem.ordrePassages[pole] && sem.ordrePassages[pole][jour] && sem.ordrePassages[pole][jour][slotIdx] !== undefined)
-                ? sem.ordrePassages[pole][jour][slotIdx]
-                : GROUPES_NIVEAUX_PROF[slotIdx];
-            let nivDataKey = nivSlot === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivSlot) ? nivSlot : "");
-            let cell = (nivDataKey && sem.niveaux[nivDataKey] && sem.niveaux[nivDataKey][pole])
-                ? sem.niveaux[nivDataKey][pole].jours[jour]
-                : { texte: "", lien: "", pageProf: "", fait: false };
+    let barreUndoHtml = '';
+    if (pileUndoLeconsProf.length > 0) {
+        let derniere = pileUndoLeconsProf[0];
+        barreUndoHtml = '<div class="no-print" style="background:#fff3cd; border:1px solid #f39c12; color:#7d6608; padding:6px 10px; border-radius:6px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; font-size:12px;">' +
+            '<span>🕒 <strong>Dernière action (' + escHTML(derniere.heure) + ') :</strong> ' + escHTML(derniere.description) + '</span>' +
+            '<button type="button" class="btn-action" style="background:#d35400 !important; color:#fff !important; padding:4px 10px; font-size:12px; font-weight:bold;" onclick="annulerDerniereActionLeconProf()">↩️ Annuler cette action (rétablir le planning)</button>' +
+        '</div>';
+    }
 
-            let seqsDuNiveau = (nivDataKey && sem.niveaux[nivDataKey] && sem.niveaux[nivDataKey][pole])
-                ? (sem.niveaux[nivDataKey][pole].sequences || [])
-                : [];
-            let nomsSeqsSem = seqsDuNiveau.map(s => s.nom);
+    let rowsHtml = [0, 1, 2, 3, 4].map(slotIdx => {
+        let cellsHtml = JOURS_SEMAINE_PROF.map(jour => {
+            let nivSlot = (sem.ordrePassages[pole] && sem.ordrePassages[pole][jour] && sem.ordrePassages[pole][jour][slotIdx] !== undefined)
+                ? sem.ordrePassages[pole][jour][slotIdx]
+                : GROUPES_NIVEAUX_PROF[slotIdx];
+            let nivDataKey = nivSlot === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivSlot) ? nivSlot : "");
+            let cell = (nivDataKey && sem.niveaux[nivDataKey] && sem.niveaux[nivDataKey][pole])
+                ? sem.niveaux[nivDataKey][pole].jours[jour]
+                : { texte: "", lien: "", pageProf: "", fait: false };
 
-            let rappelSeqHtml = seqsDuNiveau.length > 0
-                ? '<div style="font-size:10.5px; color:#7d6608; background:#fef9e7; border:1px solid #f5b041; border-radius:4px; padding:1px 4px; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="Séquence(s) programmée(s) : ' + escHTML(nomsSeqsSem.join(', ')) + '">📑 ' + escHTML(nomsSeqsSem.join(', ')) + '</div>'
-                : '';
+            let seqsDuNiveau = (nivDataKey && sem.niveaux[nivDataKey] && sem.niveaux[nivDataKey][pole])
+                ? (sem.niveaux[nivDataKey][pole].sequences || [])
+                : [];
+            let nomsSeqsSem = seqsDuNiveau.map(s => s.nom);
 
-            let stNiv = getStyleNiveauProf(pole, nivSlot);
-            let bgCell = cell.fait ? "#d4efdf" : "#ffffff";
+            let rappelSeqHtml = seqsDuNiveau.length > 0
+                ? '<div style="font-size:10.5px; color:#7d6608; background:#fef9e7; border:1px solid #f5b041; border-radius:4px; padding:1px 4px; margin-bottom:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="Séquence(s) programmée(s) : ' + escHTML(nomsSeqsSem.join(', ')) + '">📑 ' + escHTML(nomsSeqsSem.join(', ')) + '</div>'
+                : '';
 
-            let optionsNiv = '<option value="" ' + (!nivSlot ? 'selected' : '') + '>-- Pause / Libre --</option>' +
-                OPTIONS_NIVEAUX_PROF_SELECT.map(n => '<option value="' + n + '" ' + (nivSlot === n ? 'selected' : '') + '>' + n + '</option>').join('');
+            let stNiv = getStyleNiveauProf(pole, nivSlot);
+            let bgCell = cell.fait ? "#d4efdf" : "#ffffff";
 
-            let leconsDispo = getLeconsPreEnregistreesPourSequencesSemaine(pole, nivSlot, nomsSeqsSem);
-            let valActuelle = (cell.texte || "").trim();
-            let optionsLeconsHtml = "";
+            let optionsNiv = '<option value="" ' + (!nivSlot ? 'selected' : '') + '>-- Pause / Libre --</option>' +
+                OPTIONS_NIVEAUX_PROF_SELECT.map(n => '<option value="' + n + '" ' + (nivSlot === n ? 'selected' : '') + '>' + n + '</option>').join('');
 
-            if (nomsSeqsSem.length === 0) {
-                optionsLeconsHtml = '<option value="">-- Aucune séquence cette semaine --</option>';
-            } else if (leconsDispo.length === 0) {
-                optionsLeconsHtml = '<option value="">-- Aucune leçon 👩‍🏫 dans cette séquence --</option>';
-            } else {
-                optionsLeconsHtml = '<option value="">-- Choisir la leçon (' + leconsDispo.length + ') --</option>' +
-                    leconsDispo.map(l => '<option value="' + escHTML(l.label) + '" ' + (l.label === valActuelle ? 'selected' : '') + '>👩‍🏫 ' + escHTML(l.label) + (l.lien ? ' 📽️' : '') + '</option>').join('');
-            }
-            if (valActuelle && !leconsDispo.some(l => l.label === valActuelle)) {
-                optionsLeconsHtml += '<option value="' + escHTML(valActuelle) + '" selected>👩‍🏫 ' + escHTML(valActuelle) + '</option>';
-            }
+            let leconsDispo = getLeconsPreEnregistreesPourSequencesSemaine(pole, nivSlot, nomsSeqsSem);
+            let valActuelle = (cell.texte || "").trim();
+            let optionsLeconsHtml = "";
 
-            let infosBase = trouverInfosDepuisBaseLecon(pole, nivSlot, cell.texte);
-            let lienDoc = infosBase.lien || ((cell.lien && cell.lien.trim()) ? cell.lien.trim() : "");
-            let pageGuide = infosBase.pageProf || ((cell.pageProf && cell.pageProf.trim()) ? cell.pageProf.trim() : "");
+            if (nomsSeqsSem.length === 0) {
+                optionsLeconsHtml = '<option value="">-- Aucune séquence cette semaine --</option>';
+            } else if (leconsDispo.length === 0) {
+                optionsLeconsHtml = '<option value="">-- Aucune leçon 👩‍🏫 dans cette séquence --</option>';
+            } else {
+                optionsLeconsHtml = '<option value="">-- Choisir la leçon (' + leconsDispo.length + ') --</option>' +
+                    leconsDispo.map(l => '<option value="' + escHTML(l.label) + '" ' + (l.label === valActuelle ? 'selected' : '') + '>👩‍🏫 ' + escHTML(l.label) + (l.lien ? ' 📽️' : '') + '</option>').join('');
+            }
+            if (valActuelle && !leconsDispo.some(l => l.label === valActuelle)) {
+                optionsLeconsHtml += '<option value="' + escHTML(valActuelle) + '" selected>👩‍🏫 ' + escHTML(valActuelle) + '</option>';
+            }
 
-            let badgeGuideHtml = pageGuide
-                ? '<span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ' + escHTML(pageGuide) + '</span>'
-                : '';
+            let infosBase = trouverInfosDepuisBaseLecon(pole, nivSlot, cell.texte);
+            let lienDoc = infosBase.lien || ((cell.lien && cell.lien.trim()) ? cell.lien.trim() : "");
+            let pageGuide = infosBase.pageProf || ((cell.pageProf && cell.pageProf.trim()) ? cell.pageProf.trim() : "");
 
-            let btnDocHtml = lienDoc
-                ? '<div style="display:flex; gap:3px; align-items:center; margin-top:4px; flex-wrap:wrap;">' +
-                      badgeGuideHtml +
-                      '<a href="' + escHTML(lienDoc) + '" target="_blank" rel="noopener noreferrer" class="btn-action" style="flex:1; text-align:center; text-decoration:none; padding:2px 6px; font-size:11px; background:#8e44ad !important; color:#fff !important; border-radius:4px;" title="Ouvrir le diaporama (PDF / PowerPoint) à projeter">📽️ Projeter ↗</a>' +
-                      '<button type="button" class="filter-btn" style="padding:2px 5px; font-size:10px;" title="Modifier le lien" onclick="definirLienSlotLeconProf(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ')">✏️</button>' +
-                  '</div>'
-                : '<div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">' +
-                      '<span>' + badgeGuideHtml + '</span>' +
-                      '<button type="button" class="filter-btn" style="padding:1px 5px; font-size:10px; opacity:0.8;" title="Ajouter un lien PDF ou PowerPoint à projeter" onclick="definirLienSlotLeconProf(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ')">➕📎 PDF/PPT</button>' +
-                  '</div>';
+            let badgeGuideHtml = pageGuide
+                ? '<span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ' + escHTML(pageGuide) + '</span>'
+                : '';
 
-            return '<td style="background:' + bgCell + '; padding:6px; vertical-align:top; border:1px solid #cbd5e1;">' +
-                '<div class="no-print">' +
-                    '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:3px;">' +
-                        '<select onchange="majSlotLeconProf(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ', \'niveau\', this.value)" style="background:' + stNiv.bg + '; color:' + stNiv.text + '; font-weight:bold; font-size:12px; padding:2px 6px; border-radius:5px; border:1px solid rgba(0,0,0,0.18); cursor:pointer;">' +
-                            optionsNiv +
-                        '</select>' +
-                        '<div style="display:flex; align-items:center; gap:2px;">' +
-                            (slotIdx > 0 ? '<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Monter ce groupe plus tôt" onclick="deplacerSlotLeconProf(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ', -1)">▲</button>' : '') +
-                            (slotIdx < (NB_SLOTS_PASSAGES_PROF - 1) ? '<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Descendre ce groupe plus tard" onclick="deplacerSlotLeconProf(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ', 1)">▼</button>' : '') +
-                            '<label style="font-size:11px; font-weight:bold; color:' + (cell.fait ? '#1e8449' : '#7f8c8d') + '; cursor:pointer; margin-left:3px; display:flex; align-items:center; gap:2px;" title="Cocher quand la leçon a été donnée">' +
-                                '<input type="checkbox" ' + (cell.fait ? 'checked' : '') + ' onchange="majSlotLeconProf(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ', \'fait\', this.checked)" style="cursor:pointer;">' +
-                                (cell.fait ? '✅' : '') +
-                            '</label>' +
-                        '</div>' +
-                    '</div>' +
-                    rappelSeqHtml +
-                    '<select onchange="majSlotLeconProf(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ', \'texte\', this.value)" style="width:100%; padding:5px 6px; font-size:12px; font-weight:' + (valActuelle ? '600' : 'normal') + '; border:1px solid #cbd5e1; border-radius:5px; ' + (cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;') + '">' +
-                        optionsLeconsHtml +
-                    '</select>' +
-                    btnDocHtml +
-                '</div>' +
-                '<div class="only-print-lecons" style="text-align:center; padding:3px 2px;">' +
-                    (nivSlot ? '<div style="display:inline-block; background:' + stNiv.bg + ' !important; color:' + stNiv.text + ' !important; font-weight:bold; font-size:11.5pt; padding:2px 10px; border-radius:6px; border:1px solid #2c3e50; margin-bottom:4px;">' + escHTML(nivSlot) + '</div>' : '') +
-                    '<div id="print_txt_' + pole + '_' + jour + '_' + slotIdx + '" style="font-size:11pt; font-weight:bold; color:#1e293b; line-height:1.2; ' + (cell.fait ? 'text-decoration:line-through; opacity:0.6;' : '') + '">' +
-                        escHTML(cell.texte || '—') +
-                    '</div>' +
-                '</div>' +
-            '</td>';
-        }).join('');
+            let btnDocHtml = lienDoc
+                ? '<div style="display:flex; gap:3px; align-items:center; margin-top:4px; flex-wrap:wrap;">' +
+                      badgeGuideHtml +
+                      '<a href="' + escHTML(lienDoc) + '" target="_blank" rel="noopener noreferrer" class="btn-action" style="flex:1; text-align:center; text-decoration:none; padding:2px 6px; font-size:11px; background:#8e44ad !important; color:#fff !important; border-radius:4px;" title="Ouvrir le diaporama (PDF / PowerPoint) à projeter">📽️ Projeter ↗</a>' +
+                      '<button type="button" class="filter-btn" style="padding:2px 5px; font-size:10px;" title="Modifier le lien" onclick="definirLienSlotLeconProf(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ')">✏️</button>' +
+                  '</div>'
+                : '<div style="display:flex; justify-content:space-between; align-items:center; margin-top:3px;">' +
+                      '<span>' + badgeGuideHtml + '</span>' +
+                      '<button type="button" class="filter-btn" style="padding:1px 5px; font-size:10px; opacity:0.8;" title="Ajouter un lien PDF ou PowerPoint à projeter" onclick="definirLienSlotLeconProf(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ')">➕📎 PDF/PPT</button>' +
+                  '</div>';
 
-        return '<tr>' +
-            '<td style="font-weight:bold; font-size:12.5px; text-align:center; background:#f1f5f9; color:#1e293b; width:88px;">' +
-                '<span style="display:inline-block; background:' + couleurBandeau + '; color:#fff; border-radius:50%; width:22px; height:22px; line-height:22px; font-size:12px; margin-bottom:2px;">' + (slotIdx + 1) + '</span><br>' +
-                '<small>' + labelsOrdre[slotIdx] + '</small>' +
-            '</td>' +
-            cellsHtml +
-        '</tr>';
-    }).join('');
+            let labelBtnLendemain = (jour === "Vendredi") ? "➡️ Lun. S+1" : (jour === "Mardi" ? "➡️ Jeudi" : "➡️ Lendemain");
 
-    return '<div class="card-panel card-pole-lecon" style="border-top:4px solid ' + couleurBandeau + '; padding:12px 14px;">' +
-        '<div style="background:' + couleurBandeau + ' !important; color:#ffffff !important; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:14px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">' +
-            '<span>' + titre + '</span>' +
-            '<small style="font-weight:normal; opacity:0.95;">⬇ Ordre de passage de haut en bas (1er ➔ 5e)</small>' +
-        '</div>' +
-        '<div style="overflow-x:auto;">' +
-            '<table class="table-classique" style="table-layout:fixed; min-width:620px;">' +
-                '<thead>' +
-                    '<tr>' +
-                        '<th style="width:88px; text-align:center;">Passage</th>' +
-                        '<th style="text-align:center;">LUNDI</th>' +
-                        '<th style="text-align:center;">MARDI</th>' +
-                        '<th style="text-align:center;">JEUDI</th>' +
-                        '<th style="text-align:center;">VENDREDI</th>' +
-                    '</tr>' +
-                '</thead>' +
-                '<tbody>' + rowsHtml + '</tbody>' +
-            '</table>' +
-        '</div>' +
-    '</div>';
+            let barreStatutEtReportHtml = valActuelle ? (
+                cell.fait
+                    ? '<div style="margin-top:5px; display:flex; gap:4px; align-items:center; justify-content:space-between; background:#abebc6; padding:3px 6px; border-radius:5px; border:1px solid #27ae60;">' +
+                          '<span style="font-size:11px; font-weight:bold; color:#145a32;">✅ Leçon faite</span>' +
+                          '<button type="button" class="filter-btn" style="padding:1px 6px; font-size:10.5px; background:#fff; color:#c0392b; border-color:#e74c3c; font-weight:bold;" title="Annuler : remettre cette leçon comme non faite" onclick="basculerFaitLeconDashboard(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ', false)">↩️ Annuler</button>' +
+                      '</div>'
+                    : '<div style="margin-top:5px; display:flex; gap:3px; align-items:center; flex-wrap:wrap; padding-top:4px; border-top:1px dashed #cbd5e1;">' +
+                          '<button type="button" class="btn-valid" style="flex:1; padding:3px 5px; font-size:10.5px;" title="Marquer cette leçon comme faite" onclick="basculerFaitLeconDashboard(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ', true)">✅ Fait</button>' +
+                          '<button type="button" class="filter-btn" style="padding:3px 5px; font-size:10px; background:#fef9e7; color:#9a7d0a; border-color:#f1c40f; font-weight:bold;" title="Reporter au prochain jour de classe et décaler toutes les leçons suivantes" onclick="reporterLeconSlotDashboard(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ', \'lendemain\')">' + labelBtnLendemain + '</button>' +
+                          '<button type="button" class="filter-btn" style="padding:3px 5px; font-size:10px; background:#fdedec; color:#922b21; border-color:#e74c3c; font-weight:bold;" title="Reporter à la semaine prochaine (même jour) et décaler la suite" onclick="reporterLeconSlotDashboard(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ', \'semaine\')">⏭️ Sem. +1</button>' +
+                      '</div>'
+            ) : '';
+
+            return '<td style="background:' + bgCell + '; padding:6px; vertical-align:top; border:1px solid #cbd5e1;">' +
+                '<div class="no-print">' +
+                    '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; gap:3px;">' +
+                        '<select onchange="majSlotLeconProf(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ', \'niveau\', this.value)" style="background:' + stNiv.bg + '; color:' + stNiv.text + '; font-weight:bold; font-size:12px; padding:2px 6px; border-radius:5px; border:1px solid rgba(0,0,0,0.18); cursor:pointer;">' +
+                            optionsNiv +
+                        '</select>' +
+                        '<div style="display:flex; align-items:center; gap:2px;">' +
+                            (slotIdx > 0 ? '<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Monter ce groupe plus tôt" onclick="deplacerSlotLeconProf(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ', -1)">▲</button>' : '') +
+                            (slotIdx < (NB_SLOTS_PASSAGES_PROF - 1) ? '<button type="button" class="filter-btn" style="padding:1px 4px; font-size:10px;" title="Descendre ce groupe plus tard" onclick="deplacerSlotLeconProf(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ', 1)">▼</button>' : '') +
+                        '</div>' +
+                    '</div>' +
+                    rappelSeqHtml +
+                    '<select onchange="majSlotLeconProf(\'' + pole + '\', \'' + jour + '\', ' + slotIdx + ', \'texte\', this.value)" style="width:100%; padding:5px 6px; font-size:12px; font-weight:' + (valActuelle ? '600' : 'normal') + '; border:1px solid #cbd5e1; border-radius:5px; ' + (cell.fait ? 'text-decoration:line-through; color:#1e8449; background:#e8f8f5;' : 'background:#fff;') + '">' +
+                        optionsLeconsHtml +
+                    '</select>' +
+                    btnDocHtml +
+                    barreStatutEtReportHtml +
+                '</div>' +
+                '<div class="only-print-lecons" style="text-align:center; padding:3px 2px;">' +
+                    (nivSlot ? '<div style="display:inline-block; background:' + stNiv.bg + ' !important; color:' + stNiv.text + ' !important; font-weight:bold; font-size:11.5pt; padding:2px 10px; border-radius:6px; border:1px solid #2c3e50; margin-bottom:4px;">' + escHTML(nivSlot) + '</div>' : '') +
+                    '<div id="print_txt_' + pole + '_' + jour + '_' + slotIdx + '" style="font-size:11pt; font-weight:bold; color:#1e293b; line-height:1.2; ' + (cell.fait ? 'text-decoration:line-through; opacity:0.6;' : '') + '">' +
+                        escHTML(cell.texte || '—') +
+                    '</div>' +
+                '</div>' +
+            '</td>';
+        }).join('');
+
+        return '<tr>' +
+            '<td style="font-weight:bold; font-size:12.5px; text-align:center; background:#f1f5f9; color:#1e293b; width:88px;">' +
+                '<span style="display:inline-block; background:' + couleurBandeau + '; color:#fff; border-radius:50%; width:22px; height:22px; line-height:22px; font-size:12px; margin-bottom:2px;">' + (slotIdx + 1) + '</span><br>' +
+                '<small>' + labelsOrdre[slotIdx] + '</small>' +
+            '</td>' +
+            cellsHtml +
+        '</tr>';
+    }).join('');
+
+    return '<div class="card-panel card-pole-lecon" style="border-top:4px solid ' + couleurBandeau + '; padding:12px 14px;">' +
+        '<div style="background:' + couleurBandeau + ' !important; color:#ffffff !important; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:14px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">' +
+            '<span>' + titre + '</span>' +
+            '<small style="font-weight:normal; opacity:0.95;">⬇ Ordre de passage de haut en bas (1er ➔ 5e)</small>' +
+        '</div>' +
+        barreUndoHtml +
+        '<div style="overflow-x:auto;">' +
+            '<table class="table-classique" style="table-layout:fixed; min-width:620px;">' +
+                '<thead>' +
+                    '<tr>' +
+                        '<th style="width:88px; text-align:center;">Passage</th>' +
+                        '<th style="text-align:center;">LUNDI</th>' +
+                        '<th style="text-align:center;">MARDI</th>' +
+                        '<th style="text-align:center;">JEUDI</th>' +
+                        '<th style="text-align:center;">VENDREDI</th>' +
+                    '</tr>' +
+                '</thead>' +
+                '<tbody>' + rowsHtml + '</tbody>' +
+            '</table>' +
+        '</div>' +
+    '</div>';
 };
 
 function initProgFilters() {
