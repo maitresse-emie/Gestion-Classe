@@ -2633,16 +2633,25 @@ function afficherRessourcesDisponibles() {
                     '<button type="button" class="filter-btn" onclick="mettreEnAttente(\'' + a.id + '\')" title="Mettre en réserve">⏳</button>' +
                     '<button type="button" class="btn-valid" onclick="validerDirectement(\'' + a.id + '\')" title="Valider pour cette séquence">✅</button>' +
                     '<button type="button" class="filter-btn" onclick="masquerActivite(\'' + a.id + '\')" title="Masquer">🙈</button>' +
+               '<td>' +
+                '<div style="display:flex; gap:4px; flex-wrap:wrap;">' +
+                    '<button type="button" class="btn-action" onclick="ajouterAuPlan(\'' + a.id + '\')">➕ Plan</button>' +
+                    '<button type="button" class="filter-btn" style="' + (isRec ? 'background:#8e44ad; color:#fff;' : '') + '" title="Épingler comme rituel récurrent chaque semaine pour cet élève" onclick="toggleRecurrentEleve(\'' + a.id + '\')">🔄 Hebdo</button>' +
+                    '<button type="button" class="filter-btn" onclick="mettreEnAttente(\'' + a.id + '\')" title="Mettre en réserve">⏳</button>' +
+                    '<button type="button" class="btn-valid" onclick="validerDirectement(\'' + a.id + '\')" title="Valider pour cette séquence">✅</button>' +
+                    '<button type="button" class="filter-btn" onclick="masquerActivite(\'' + a.id + '\')" title="Masquer">🙈</button>' +
                 '</div>' +
             '</td>' +
         '</tr>';
     });
     tbody.innerHTML = html;
 }
-    if (!idEleveCourant || !eleves[idEleveCourant]) return;
-    let eleve = eleves[idEleveCourant]; if (!eleve.joursAssignes) eleve.joursAssignes = {};
-    if (jour) eleve.joursAssignes[idActivite] = jour; else delete eleve.joursAssignes[idActivite];
-    sauvegarderEleves(); afficherPlanHebdo();
+
+function assignerJour(idActivite, jour) {
+    if (!idEleveCourant || !eleves[idEleveCourant]) return;
+    let eleve = eleves[idEleveCourant]; if (!eleve.joursAssignes) eleve.joursAssignes = {};
+    if (jour) eleve.joursAssignes[idActivite] = jour; else delete eleve.joursAssignes[idActivite];
+    sauvegarderEleves(); afficherPlanHebdo();
 }
 
 function changerSequenceChoisiePlan(idActivite, nouvSeq) {
