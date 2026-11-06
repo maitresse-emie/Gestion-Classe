@@ -1889,64 +1889,144 @@ function recalerAvanceSemaine(per, semIdx, niveauFiltre = null, poleFiltre = nul
     return nbRemontes;
 }
 
-function getSuggestionsSequencesEtEvalsPourEleve(eleve) {
-    assurerStructureProgPeriodes();
-    if (!eleve) return { per: 'P1', semNum: 1, seqsSemaineCourante: [], seqsSemainePrecedentePourEval: [] };
+function determinerPeriodeEtSemainePourEleve(eleve) {
+    assurerStructureProgPeriodes();
+    let perDefaut = progPeriodesData.periodeActiveDash || 'P1';
+    let semIdxDefaut = progPeriodesData.semaineIndexDash || 0;
+    if (!eleve) return { per: perDefaut, semIdx: semIdxDefaut };
 
-    let niv = (eleve.niveau || "CP").toUpperCase();
-    if (!NIVEAUX_LISTE.includes(niv)) niv = "CP";
+    let semActiveEl = (eleve.semaines && eleve.semaines[eleve.semaineIndex || 0]) ? eleve.semaines[eleve.semaineIndex || 0] : null;
 
-    let per = progPeriodesData.periodeActiveDash || 'P1';
-    let semIdx = progPeriodesData.semaineIndexDash || 0;
-    let pObj = progPeriodesData.periodes[per];
-    if (!pObj || !pObj.semaines[semIdx]) return { per, semNum: 1, seqsSemaineCourante: [], seqsSemainePrecedentePourEval: [] };
+    // 1. Si vous avez choisi manuellement une période/semaine cible sur cette semaine de l'élève
+    if (semActiveEl && semActiveEl.progPeriodeCible && PERIODES_LISTE.includes(semActiveEl.progPeriodeCible)) {
+        let pObj = progPeriodesData.periodes[semActiveEl.progPeriodeCible];
+        let sIdx = parseInt(semActiveEl.progSemaineCible);
+        if (pObj && !isNaN(sIdx) && sIdx >= 0 && sIdx < pObj.semaines.length) {
+            return { per: semActiveEl.progPeriodeCible, semIdx: sIdx };
+        }
+    }
 
-    let semCourante = pObj.semaines[semIdx];
-    let seqsCourantes = [];
-    ["francais", "maths"].forEach(pole => {
-        let b = semCourante.niveaux[niv] ? semCourante.niveaux[niv][pole] : null;
-        if (b && Array.isArray(b.sequences)) {
-            b.sequences.forEach(s => {
-                if (s && s.nom && !seqsCourantes.includes(s.nom)) seqsCourantes.push(s.nom);
-            });
-        }
-    });
+    // 2. Si la semaine de l'élève a une date de début (Lundi), on cherche la semaine correspondante dans la Programmation
+    let dateElISO = (semActiveEl && semActiveEl.dateDebutISO) ? semActiveEl.dateDebutISO : (eleve.dateDebutISO || "");
+    if (dateElISO) {
+        for (let p of PERIODES_LISTE) {
+            let pObj = progPeriodesData.periodes[p];
+            if (pObj && Array.isArray(pObj.semaines)) {
+                let foundIdx = pObj.semaines.findIndex(s => s && s.dateDebutISO === dateElISO);
+                if (foundIdx > -1) {
+                    return { per: p, semIdx: foundIdx };
+                }
+            }
+        }
+    }
 
-    let semPrecedente = null;
-    if (semIdx > 0) {
-        semPrecedente = pObj.semaines[semIdx - 1];
-    } else {
-        let idxPer = PERIODES_LISTE.indexOf(per);
-        if (idxPer > 0) {
-            let perPrec = progPeriodesData.periodes[PERIODES_LISTE[idxPer - 1]];
-            if (perPrec && perPrec.semaines.length > 0) {
-                semPrecedente = perPrec.semaines[perPrec.semaines.length - 1];
-            }
-        }
-    }
+    // 3. Sinon, on suit le numéro de la semaine sélectionnée chez l'élève (Semaine 1 -> S1, Semaine 2 -> S2...) dans la période active
+    let pObjCourant = progPeriodesData.periodes[perDefaut];
+    if (pObjCourant && Array.isArray(pObjCourant.semaines)) {
+        let idxEl = parseInt(eleve.semaineIndex) || 0;
+        let idxCible = (eleve.semaines && eleve.semaines.length > 1) ? idxEl : semIdxDefaut;
+        if (idxCible >= 0 && idxCible < pObjCourant.semaines.length) {
+            return { per: perDefaut, semIdx: idxCible };
+        }
+    }
 
-    let seqsEvalSPlusUn = [];
-    if (semPrecedente && semPrecedente.niveaux[niv]) {
-        ["francais", "maths"].forEach(pole => {
-            let bPrev = semPrecedente.niveaux[niv][pole];
-            if (bPrev && Array.isArray(bPrev.sequences)) {
-                bPrev.sequences.forEach(s => {
-                    if (s && s.nom && !seqsEvalSPlusUn.includes(s.nom)) {
-                        seqsEvalSPlusUn.push(s.nom);
-                    }
-                });
-            }
-        });
-    }
-
-    return {
-        per,
-        semNum: semIdx + 1,
-        seqsSemaineCourante: seqsCourantes,
-        seqsSemainePrecedentePourEval: seqsEvalSPlusUn
-    };
+    return { per: perDefaut, semIdx: semIdxDefaut };
 }
 
+function changerCibleProgDepuisSuiviEleve(nouvPer, nouvSemIdx) {
+    assurerStructureProgPeriodes();
+    let per = PERIODES_LISTE.includes(nouvPer) ? nouvPer : (progPeriodesData.periodeActiveDash || 'P1');
+    let pObj = progPeriodesData.periodes[per];
+    let sIdx = parseInt(nouvSemIdx) || 0;
+    if (pObj && (sIdx < 0 || sIdx >= pObj.semaines.length)) sIdx = 0;
+
+    // On synchronise aussi la période/semaine active pour que toute l'application suive votre sélection
+    progPeriodesData.periodeActiveDash = per;
+    progPeriodesData.semaineIndexDash = sIdx;
+
+    if (idEleveCourant && eleves[idEleveCourant]) {
+        let e = eleves[idEleveCourant];
+        assurerStructureSemaines(e);
+        let semActiveEl = e.semaines[e.semaineIndex || 0];
+        if (semActiveEl) {
+            semActiveEl.progPeriodeCible = per;
+            semActiveEl.progSemaineCible = sIdx;
+            let semProg = pObj && pObj.semaines[sIdx] ? pObj.semaines[sIdx] : null;
+            if (!e.dateDebutISO && semProg && semProg.dateDebutISO) {
+                e.dateDebutISO = semProg.dateDebutISO;
+                e.dateDebut = semProg.dateDebut || "";
+                e.dateFin = semProg.dateFin || "";
+                majBarreSemainesUI();
+            }
+        }
+        sauvegarderEleves();
+    }
+
+    sauvegarderProgPeriodes();
+    let selSeq = document.getElementById('selectSequence');
+    if (selSeq) selSeq.value = 'TOUTES_SEQUENCES';
+    changementMatiereSelection();
+}
+
+function getSuggestionsSequencesEtEvalsPourEleve(eleve) {
+    assurerStructureProgPeriodes();
+    if (!eleve) return { per: 'P1', semIdx: 0, semNum: 1, seqsSemaineCourante: [], seqsSemainePrecedentePourEval: [] };
+
+    let niv = (eleve.niveau || "CP").toUpperCase();
+    if (!NIVEAUX_LISTE.includes(niv)) niv = "CP";
+
+    let cible = determinerPeriodeEtSemainePourEleve(eleve);
+    let per = cible.per;
+    let semIdx = cible.semIdx;
+    let pObj = progPeriodesData.periodes[per];
+    if (!pObj || !pObj.semaines[semIdx]) return { per, semIdx: 0, semNum: 1, seqsSemaineCourante: [], seqsSemainePrecedentePourEval: [] };
+
+    let semCourante = pObj.semaines[semIdx];
+    let seqsCourantes = [];
+    ["francais", "maths"].forEach(pole => {
+        let b = semCourante.niveaux[niv] ? semCourante.niveaux[niv][pole] : null;
+        if (b && Array.isArray(b.sequences)) {
+            b.sequences.forEach(s => {
+                if (s && s.nom && !seqsCourantes.includes(s.nom)) seqsCourantes.push(s.nom);
+            });
+        }
+    });
+
+    let semPrecedente = null;
+    if (semIdx > 0) {
+        semPrecedente = pObj.semaines[semIdx - 1];
+    } else {
+        let idxPer = PERIODES_LISTE.indexOf(per);
+        if (idxPer > 0) {
+            let perPrec = progPeriodesData.periodes[PERIODES_LISTE[idxPer - 1]];
+            if (perPrec && perPrec.semaines.length > 0) {
+                semPrecedente = perPrec.semaines[perPrec.semaines.length - 1];
+            }
+        }
+    }
+
+    let seqsEvalSPlusUn = [];
+    if (semPrecedente && semPrecedente.niveaux[niv]) {
+        ["francais", "maths"].forEach(pole => {
+            let bPrev = semPrecedente.niveaux[niv][pole];
+            if (bPrev && Array.isArray(bPrev.sequences)) {
+                bPrev.sequences.forEach(s => {
+                    if (s && s.nom && !seqsEvalSPlusUn.includes(s.nom)) {
+                        seqsEvalSPlusUn.push(s.nom);
+                    }
+                });
+            }
+        });
+    }
+
+    return {
+        per,
+        semIdx,
+        semNum: semIdx + 1,
+        seqsSemaineCourante: seqsCourantes,
+        seqsSemainePrecedentePourEval: seqsEvalSPlusUn
+    };
+}
 // ==========================================
 // 4. ONGLET 1 : PLAN & SUIVI ÉLÈVES (QUOTA 100 ATELIERS & 2 TABLEAUX FRANÇAIS / MATHS)
 // ==========================================
@@ -2044,407 +2124,521 @@ function filtrerDirectementSequenceEleve(nomSeq) {
 }
 
 function afficherBandeauSuggestionsProgEleve() {
-    let bloc = document.getElementById('blocSuggestionsProgEleve');
-    if (!bloc || !idEleveCourant || !eleves[idEleveCourant]) return;
-    let eleve = eleves[idEleveCourant];
-    let sugg = getSuggestionsSequencesEtEvalsPourEleve(eleve);
-    let nivEleve = (eleve.niveau || "CP").toUpperCase();
+    let bloc = document.getElementById('blocSuggestionsProgEleve');
+    if (!bloc || !idEleveCourant || !eleves[idEleveCourant]) return;
+    let eleve = eleves[idEleveCourant];
+    let sugg = getSuggestionsSequencesEtEvalsPourEleve(eleve);
+    let nivEleve = (eleve.niveau || "CP").toUpperCase();
 
-    let evalsAPasser = baseDonnees.filter(a => {
-        if (!a || !a.estEvaluation || estLeconProf(a)) return false;
-        let nivAct = (a.niveau || "").toUpperCase();
-        if (nivAct && !nivAct.includes(nivEleve) && nivAct !== "TOUS") return false;
-        if (eleve.planHebdo.includes(a.id)) return false;
-        return sugg.seqsSemainePrecedentePourEval.some(sNom => activiteAppartientASequence(a, sNom) && !estActiviteValideePourSequence(eleve, a, sNom));
-    });
+    let pObj = progPeriodesData.periodes[sugg.per];
+    let optionsPerHtml = PERIODES_LISTE.map(p => '<option value="' + p + '" ' + (p === sugg.per ? 'selected' : '') + '>📅 ' + p + '</option>').join('');
+    let optionsSemHtml = (pObj && Array.isArray(pObj.semaines)) ? pObj.semaines.map((s, idx) => {
+        let dTxt = (s.dateDebut && s.dateFin) ? ' (' + s.dateDebut + ' au ' + s.dateFin + ')' : '';
+        return '<option value="' + idx + '" ' + (idx === sugg.semIdx ? 'selected' : '') + '>Semaine ' + (idx + 1) + dTxt + '</option>';
+    }).join('') : '<option value="0">Semaine 1</option>';
 
-    if (sugg.seqsSemaineCourante.length === 0 && evalsAPasser.length === 0) {
-        bloc.style.display = 'none';
-        return;
-    }
+    let evalsAPasser = baseDonnees.filter(a => {
+        if (!a || !a.estEvaluation || estLeconProf(a)) return false;
+        let nivAct = (a.niveau || "").toUpperCase();
+        if (nivAct && !nivAct.includes(nivEleve) && nivAct !== "TOUS") return false;
+        if (eleve.planHebdo.includes(a.id)) return false;
+        return sugg.seqsSemainePrecedentePourEval.some(sNom => activiteAppartientASequence(a, sNom) && !estActiviteValideePourSequence(eleve, a, sNom));
+    });
 
-    bloc.style.display = 'block';
-    let html = '<div style="display:flex; flex-direction:column; gap:8px;">';
+    bloc.style.display = 'block';
+    let html = '<div style="display:flex; flex-direction:column; gap:8px;">';
 
-    if (sugg.seqsSemaineCourante.length > 0) {
-        html += '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
-            '<strong style="color:#7d6608; font-size:13px;">📌 Séquences programmées cette semaine (' + escHTML(sugg.per) + ' - Semaine ' + sugg.semNum + ' — Entraînement) :</strong>' +
-            sugg.seqsSemaineCourante.map(sNom => '<button type="button" class="filter-btn" style="background:#fff; border-color:#f39c12; color:#7d6608; font-size:12px; padding:3px 8px;" onclick="filtrerDirectementSequenceEleve(\'' + escJS(sNom) + '\')" title="Afficher les ateliers d\'entraînement de cette séquence">📑 ' + escHTML(sNom) + ' ➔</button>').join('') +
-        '</div>';
-    }
+    html += '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding-bottom:6px; border-bottom:1px dashed #f5b041;">' +
+        '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+            '<strong style="color:#7d6608; font-size:13px;">🗓️ Semaine de programmation affichée pour préparer ce plan :</strong>' +
+            '<select onchange="changerCibleProgDepuisSuiviEleve(this.value, 0)" style="padding:3px 8px; font-weight:bold; font-size:12.5px; border-radius:6px; border:1px solid #d35400; background:#fff; color:#a04000; cursor:pointer;">' + optionsPerHtml + '</select>' +
+            '<select onchange="changerCibleProgDepuisSuiviEleve(\'' + sugg.per + '\', this.value)" style="padding:3px 8px; font-weight:bold; font-size:12.5px; border-radius:6px; border:1px solid #1b4f72; background:#fff; color:#1b4f72; cursor:pointer;">' + optionsSemHtml + '</select>' +
+        '</div>' +
+        '<button type="button" class="filter-btn" style="font-size:11.5px; padding:2px 8px;" onclick="let sm=document.getElementById(\'selectMatiere\'); if(sm) sm.value=\'TOUTES_MATIERES\'; let ss=document.getElementById(\'selectSequence\'); if(ss) ss.value=\'TOUTES_SEQUENCES\'; changementMatiereSelection();" title="Afficher toutes les matières avec les séquences de cette semaine en premier">✨ Voir tous les ateliers de ' + escHTML(sugg.per) + ' - S' + sugg.semNum + ' en 1er</button>' +
+    '</div>';
 
-    if (evalsAPasser.length > 0) {
-        html += '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-top:6px; border-top:1px dashed #f5b041;">' +
-            '<strong style="color:#c0392b; font-size:13px;">🎯 Évaluation(s) à passer cette semaine (Séquences vues en Semaine ' + Math.max(1, sugg.semNum - 1) + ') :</strong>' +
-            evalsAPasser.map(ev => '<button type="button" class="btn-action" style="background:#e74c3c !important; color:#fff !important; font-size:12px; padding:3px 9px;" onclick="ajouterAuPlan(\'' + ev.id + '\')" title="Ajouter directement cette évaluation au plan de ' + escHTML(eleve.nom) + '">➕🎯 ' + escHTML(ev.ressource) + ' (' + escHTML(ev.sequence) + ')</button>').join('') +
-        '</div>';
-    }
+    if (sugg.seqsSemaineCourante.length > 0) {
+        html += '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+            '<strong style="color:#7d6608; font-size:13px;">📌 Séquences prévues en ' + escHTML(sugg.per) + ' - Semaine ' + sugg.semNum + ' (' + escHTML(nivEleve) + ') :</strong>' +
+            sugg.seqsSemaineCourante.map(sNom => '<button type="button" class="filter-btn" style="background:#fff; border-color:#f39c12; color:#7d6608; font-size:12px; padding:3px 8px; font-weight:bold;" onclick="filtrerDirectementSequenceEleve(\'' + escJS(sNom) + '\')" title="Filtrer directement les ateliers de cette séquence">📑 ' + escHTML(sNom) + ' ➔</button>').join('') +
+        '</div>';
+    } else {
+        html += '<div style="font-size:12px; color:#7f8c8d; font-style:italic;">Aucune séquence n\'est encore épinglée en <strong>' + escHTML(sugg.per) + ' — Semaine ' + sugg.semNum + '</strong> pour le niveau <strong>' + escHTML(nivEleve) + '</strong> dans l\'onglet Programmation.</div>';
+    }
 
-    html += '</div>';
-    bloc.innerHTML = html;
+    if (evalsAPasser.length > 0) {
+        html += '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; padding-top:6px; border-top:1px dashed #f5b041;">' +
+            '<strong style="color:#c0392b; font-size:13px;">🎯 Évaluation(s) à passer cette semaine (Séquences vues en Semaine ' + Math.max(1, sugg.semNum - 1) + ') :</strong>' +
+            evalsAPasser.map(ev => '<button type="button" class="btn-action" style="background:#e74c3c !important; color:#fff !important; font-size:12px; padding:3px 9px;" onclick="ajouterAuPlan(\'' + ev.id + '\')" title="Ajouter directement cette évaluation au plan de ' + escHTML(eleve.nom) + '">➕🎯 ' + escHTML(ev.ressource) + ' (' + escHTML(ev.sequence) + ')</button>').join('') +
+        '</div>';
+    }
+
+    html += '</div>';
+    bloc.innerHTML = html;
 }
 
 function majListeEleves() {
-    const select = document.getElementById('selectEleveProfile'), selectImp = document.getElementById('selectEleveImpression'), selectBilan = document.getElementById('selectEleveBilan');
-    let optHtml = '<option value="">-- Sélectionner un élève --</option>';
-    let optImp = '<option value="TOUS_ELEVES">📚 TOUS les élèves de la classe</option><option value="NIVEAU_CP">📘 Groupe CP</option><option value="NIVEAU_CE1">📘 Groupe CE1</option><option value="NIVEAU_CE2">📘 Groupe CE2</option><option value="NIVEAU_CM1">📘 Groupe CM1</option><option value="NIVEAU_CM2">📘 Groupe CM2</option>';
-    let optBilan = '<option value="">-- Choisir un élève --</option>';
+    const select = document.getElementById('selectEleveProfile'), selectImp = document.getElementById('selectEleveImpression'), selectBilan = document.getElementById('selectEleveBilan');
+    let optHtml = '<option value="">-- Sélectionner un élève --</option>';
+    let optImp = '<option value="TOUS_ELEVES">📚 TOUS les élèves de la classe</option><option value="NIVEAU_CP">📘 Groupe CP</option><option value="NIVEAU_CE1">📘 Groupe CE1</option><option value="NIVEAU_CE2">📘 Groupe CE2</option><option value="NIVEAU_CM1">📘 Groupe CM1</option><option value="NIVEAU_CM2">📘 Groupe CM2</option>';
+    let optBilan = '<option value="">-- Choisir un élève --</option>';
 
-    getElevesTries().forEach(e => {
-        let tagParcours = "";
-        if (estEleveCM(e)) {
-            let p = e.parcours || (e.niveau.toUpperCase() === "CM2" ? "orange" : "jaune");
-            tagParcours = (p === "orange") ? " 🟠" : " 🟡";
-        }
-        let tagJaune = e.fichierJaune ? " 📒" : "";
-        let labelNiv = "[" + (e.niveau || "CP") + "] " + e.nom + tagParcours + tagJaune;
-        optHtml += '<option value="' + e.id + '">' + escHTML(labelNiv) + '</option>';
-        optImp += '<option value="' + e.id + '">' + escHTML(labelNiv) + '</option>';
-        optBilan += '<option value="' + e.id + '">' + escHTML(labelNiv) + '</option>';
-    });
-    if (select) select.innerHTML = optHtml;
-    if (selectImp) selectImp.innerHTML = optImp;
-    if (selectBilan) selectBilan.innerHTML = optBilan;
+    getElevesTries().forEach(e => {
+        let tagParcours = "";
+        if (estEleveCM(e)) {
+            let p = e.parcours || (e.niveau.toUpperCase() === "CM2" ? "orange" : "jaune");
+            tagParcours = (p === "orange") ? " 🟠" : " 🟡";
+        }
+        let tagJaune = e.fichierJaune ? " 📒" : "";
+        let labelNiv = "[" + (e.niveau || "CP") + "] " + e.nom + tagParcours + tagJaune;
+        optHtml += '<option value="' + e.id + '">' + escHTML(labelNiv) + '</option>';
+        optImp += '<option value="' + e.id + '">' + escHTML(labelNiv) + '</option>';
+        optBilan += '<option value="' + e.id + '">' + escHTML(labelNiv) + '</option>';
+    });
+    if (select) select.innerHTML = optHtml;
+    if (selectImp) selectImp.innerHTML = optImp;
+    if (selectBilan) selectBilan.innerHTML = optBilan;
 
-    let btnEdit = document.getElementById('btnEditEleve'), btnSuppr = document.getElementById('btnSupprEleve');
-    if (idEleveCourant && eleves[idEleveCourant]) {
-        if (select) select.value = idEleveCourant;
-        if (btnEdit) btnEdit.style.display = "inline-block";
-        if (btnSuppr) btnSuppr.style.display = "inline-block";
-    } else {
-        if (btnEdit) btnEdit.style.display = "none";
-        if (btnSuppr) btnSuppr.style.display = "none";
-    }
-    if (idEleveCourant && !idEleveImpressionCourant) idEleveImpressionCourant = idEleveCourant;
-    if (idEleveImpressionCourant) {
-        if (selectImp) selectImp.value = idEleveImpressionCourant;
-        if (selectBilan && eleves[idEleveImpressionCourant]) selectBilan.value = idEleveImpressionCourant;
-    }
+    let btnEdit = document.getElementById('btnEditEleve'), btnSuppr = document.getElementById('btnSupprEleve');
+    if (idEleveCourant && eleves[idEleveCourant]) {
+        if (select) select.value = idEleveCourant;
+        if (btnEdit) btnEdit.style.display = "inline-block";
+        if (btnSuppr) btnSuppr.style.display = "inline-block";
+    } else {
+        if (btnEdit) btnEdit.style.display = "none";
+        if (btnSuppr) btnSuppr.style.display = "none";
+    }
+    if (idEleveCourant && !idEleveImpressionCourant) idEleveImpressionCourant = idEleveCourant;
+    if (idEleveImpressionCourant) {
+        if (selectImp) selectImp.value = idEleveImpressionCourant;
+        if (selectBilan && eleves[idEleveImpressionCourant]) selectBilan.value = idEleveImpressionCourant;
+    }
 }
 
 function modifierMaxAteliersEleve() {
-    if (!idEleveCourant) return;
-    let inp = document.getElementById('inputMaxAteliersEleve');
-    if (inp) inp.max = "100";
-    let val = Math.min(100, Math.max(1, parseInt(inp ? inp.value : 100) || 100));
-    if (inp) inp.value = val;
-    eleves[idEleveCourant].maxAteliers = val; sauvegarderEleves();
-    let maxAff = document.getElementById('maxAteliersAffiche'); if (maxAff) maxAff.innerText = val;
+    if (!idEleveCourant) return;
+    let inp = document.getElementById('inputMaxAteliersEleve');
+    if (inp) inp.max = "100";
+    let val = Math.min(100, Math.max(1, parseInt(inp ? inp.value : 100) || 100));
+    if (inp) inp.value = val;
+    eleves[idEleveCourant].maxAteliers = val; sauvegarderEleves();
+    let maxAff = document.getElementById('maxAteliersAffiche'); if (maxAff) maxAff.innerText = val;
 }
 function modifierMaxTablettesEleve() {
-    if (!idEleveCourant) return;
-    let val = Math.min(20, Math.max(0, parseInt(document.getElementById('inputMaxTablettesEleve').value) || 0));
-    eleves[idEleveCourant].maxTablettes = val; sauvegarderEleves();
-    if (idEleveCourant) afficherPlanHebdo();
+    if (!idEleveCourant) return;
+    let val = Math.min(20, Math.max(0, parseInt(document.getElementById('inputMaxTablettesEleve').value) || 0));
+    eleves[idEleveCourant].maxTablettes = val; sauvegarderEleves();
+    if (idEleveCourant) afficherPlanHebdo();
 }
 
 function creerEleve() {
-    const nomInput = document.getElementById('nouvelEleveNom'), nivSelect = document.getElementById('nouvelEleveNiveau'), parcSelect = document.getElementById('nouvelEleveParcours'), cbJauneNew = document.getElementById('nouvelEleveFichierJaune');
-    if (!nomInput) return;
-    const nom = nomInput.value.trim(); if (!nom) { showToast("Indiquez le prénom de l'élève.", "error"); return; }
-    const niveau = nivSelect ? nivSelect.value : "CP";
-    const id = 'eleve_' + Date.now();
-    let nouvEl = {
-        id: id, nom: nom, niveau: niveau,
-        fichierJaune: Boolean(cbJauneNew && cbJauneNew.checked),
-        planHebdo: [], recurrents: [], enAttente: [], historique: [], masquees: [], priorites: [],
-        maxAteliers: 100, maxTablettes: 2, suivi: {}, valides: {}, bilanEvaluations: {}, joursAssignes: {}, sequencesChoisies: {},
-        dateDebutISO: "", dateDebut: "", dateFin: ""
-    };
-    if (estEleveCM(niveau)) nouvEl.parcours = parcSelect ? parcSelect.value : (niveau === "CM2" ? "orange" : "jaune");
-    eleves[id] = nouvEl;
-    assurerStructureSemaines(eleves[id]); sauvegarderEleves();
-    nomInput.value = ''; if (cbJauneNew) cbJauneNew.checked = false;
-    majListeInstantaneeEleve(id); rafraichirDashboard();
-    showToast("Élève " + nom + " (" + niveau + ") ajouté (max 100 ateliers) !", "success");
+    const nomInput = document.getElementById('nouvelEleveNom'), nivSelect = document.getElementById('nouvelEleveNiveau'), parcSelect = document.getElementById('nouvelEleveParcours'), cbJauneNew = document.getElementById('nouvelEleveFichierJaune');
+    if (!nomInput) return;
+    const nom = nomInput.value.trim(); if (!nom) { showToast("Indiquez le prénom de l'élève.", "error"); return; }
+    const niveau = nivSelect ? nivSelect.value : "CP";
+    const id = 'eleve_' + Date.now();
+    let nouvEl = {
+        id: id, nom: nom, niveau: niveau,
+        fichierJaune: Boolean(cbJauneNew && cbJauneNew.checked),
+        planHebdo: [], recurrents: [], enAttente: [], historique: [], masquees: [], priorites: [],
+        maxAteliers: 100, maxTablettes: 2, suivi: {}, valides: {}, bilanEvaluations: {}, joursAssignes: {}, sequencesChoisies: {},
+        dateDebutISO: "", dateDebut: "", dateFin: ""
+    };
+    if (estEleveCM(niveau)) nouvEl.parcours = parcSelect ? parcSelect.value : (niveau === "CM2" ? "orange" : "jaune");
+    eleves[id] = nouvEl;
+    assurerStructureSemaines(eleves[id]); sauvegarderEleves();
+    nomInput.value = ''; if (cbJauneNew) cbJauneNew.checked = false;
+    majListeInstantaneeEleve(id); rafraichirDashboard();
+    showToast("Élève " + nom + " (" + niveau + ") ajouté (max 100 ateliers) !", "success");
 }
 
 function majListeInstantaneeEleve(newId) { majListeEleves(); let sel = document.getElementById('selectEleveProfile'); if (sel) sel.value = newId; chargerEleve(); }
 
 function ouvrirModalEditionEleve() {
-    if (!idEleveCourant || !eleves[idEleveCourant]) return; let e = eleves[idEleveCourant];
-    document.getElementById('editEleveNomInput').value = e.nom;
-    document.getElementById('editEleveNiveauSelect').value = e.niveau || "CP";
-    majVisibiliteParcoursEdition(e.niveau || "CP");
-    let selParc = document.getElementById('editEleveParcoursSelect');
-    if (selParc && estEleveCM(e)) selParc.value = e.parcours || (e.niveau.toUpperCase() === "CM2" ? "orange" : "jaune");
-    let cbEditJaune = document.getElementById('editEleveFichierJauneInput'); if (cbEditJaune) cbEditJaune.checked = Boolean(e.fichierJaune);
-    ouvrirModal('modalEditEleve');
+    if (!idEleveCourant || !eleves[idEleveCourant]) return; let e = eleves[idEleveCourant];
+    document.getElementById('editEleveNomInput').value = e.nom;
+    document.getElementById('editEleveNiveauSelect').value = e.niveau || "CP";
+    majVisibiliteParcoursEdition(e.niveau || "CP");
+    let selParc = document.getElementById('editEleveParcoursSelect');
+    if (selParc && estEleveCM(e)) selParc.value = e.parcours || (e.niveau.toUpperCase() === "CM2" ? "orange" : "jaune");
+    let cbEditJaune = document.getElementById('editEleveFichierJauneInput'); if (cbEditJaune) cbEditJaune.checked = Boolean(e.fichierJaune);
+    ouvrirModal('modalEditEleve');
 }
 
 function validerEditionEleve() {
-    if (!idEleveCourant || !eleves[idEleveCourant]) return;
-    let nouveauNom = document.getElementById('editEleveNomInput').value.trim(), nouveauNiveau = document.getElementById('editEleveNiveauSelect').value;
-    if (!nouveauNom) { showToast("Le prénom ne peut pas être vide.", "error"); return; }
-    let e = eleves[idEleveCourant];
-    e.nom = nouveauNom; e.niveau = nouveauNiveau;
-    if (estEleveCM(nouveauNiveau)) {
-        let selParc = document.getElementById('editEleveParcoursSelect');
-        e.parcours = selParc ? selParc.value : (nouveauNiveau === "CM2" ? "orange" : "jaune");
-    } else { delete e.parcours; }
-    let cbEditJaune = document.getElementById('editEleveFichierJauneInput'); if (cbEditJaune) e.fichierJaune = cbEditJaune.checked;
-    sauvegarderEleves(); fermerModal('modalEditEleve'); majListeEleves(); chargerEleve(); rafraichirDashboard(); showToast("Élève mis à jour !", "success");
+    if (!idEleveCourant || !eleves[idEleveCourant]) return;
+    let nouveauNom = document.getElementById('editEleveNomInput').value.trim(), nouveauNiveau = document.getElementById('editEleveNiveauSelect').value;
+    if (!nouveauNom) { showToast("Le prénom ne peut pas être vide.", "error"); return; }
+    let e = eleves[idEleveCourant];
+    e.nom = nouveauNom; e.niveau = nouveauNiveau;
+    if (estEleveCM(nouveauNiveau)) {
+        let selParc = document.getElementById('editEleveParcoursSelect');
+        e.parcours = selParc ? selParc.value : (nouveauNiveau === "CM2" ? "orange" : "jaune");
+    } else { delete e.parcours; }
+    let cbEditJaune = document.getElementById('editEleveFichierJauneInput'); if (cbEditJaune) e.fichierJaune = cbEditJaune.checked;
+    sauvegarderEleves(); fermerModal('modalEditEleve'); majListeEleves(); chargerEleve(); rafraichirDashboard(); showToast("Élève mis à jour !", "success");
 }
 
 function supprimerEleve() {
-    if (!idEleveCourant) return;
-    if (confirm("Supprimer définitivement cet élève et son historique ?")) {
-        delete eleves[idEleveCourant]; idEleveCourant = null; idEleveImpressionCourant = null;
-        sauvegarderEleves(); majListeEleves(); chargerEleve(); rafraichirDashboard();
-    }
+    if (!idEleveCourant) return;
+    if (confirm("Supprimer définitivement cet élève et son historique ?")) {
+        delete eleves[idEleveCourant]; idEleveCourant = null; idEleveImpressionCourant = null;
+        sauvegarderEleves(); majListeEleves(); chargerEleve(); rafraichirDashboard();
+    }
 }
 
 function postEditGlobal() {
-    trierBaseDonnees();
-    sauvegarderBase();
-    initialiserSelectsFormulaire();
-    initNiveaux();
-    initProgFilters();
-    afficherProgrammation();
-    afficherBase();
+    trierBaseDonnees();
+    sauvegarderBase();
+    initialiserSelectsFormulaire();
+    initNiveaux();
+    initProgFilters();
+    afficherProgrammation();
+    afficherBase();
 }
 
 function majBarreSemainesUI() {
-    if (!idEleveCourant || !eleves[idEleveCourant]) return;
-    let e = eleves[idEleveCourant]; assurerStructureSemaines(e); syncEleveVersSemaineActive(e);
-    const sel = document.getElementById('selectSemaineEleve');
-    if (sel) {
-        let html = '';
-        e.semaines.forEach((s, idx) => {
-            let datesTxt = (s.dateDebut && s.dateFin) ? " (du " + s.dateDebut + " au " + s.dateFin + ")" : "";
-            html += '<option value="' + idx + '">Semaine ' + (idx + 1) + datesTxt + ' — ' + s.planHebdo.length + ' act.' + (idx === 0 ? ' [En cours]' : ' [D\'avance]') + '</option>';
-        });
-        sel.innerHTML = html; sel.value = e.semaineIndex;
-    }
-    const btnSuppr = document.getElementById('btnSupprimerSemaine'); if (btnSuppr) btnSuppr.style.display = e.semaines.length > 1 ? 'inline-block' : 'none';
-    const inputDate = document.getElementById('dateDebutSemaineInput'), spanFin = document.getElementById('dateFinSemaineAffiche');
-    if (inputDate) inputDate.value = e.dateDebutISO || "";
-    if (spanFin) spanFin.innerText = e.dateFin ? "➔ au Vendredi " + e.dateFin : "➔ Vendredi : --/--";
-    const labelTitre = document.getElementById('labelSemaineTitre');
-    if (labelTitre) labelTitre.innerText = "Semaine " + (e.semaineIndex + 1) + ((e.dateDebut && e.dateFin) ? " du " + e.dateDebut + " au " + e.dateFin : "");
+    if (!idEleveCourant || !eleves[idEleveCourant]) return;
+    let e = eleves[idEleveCourant]; assurerStructureSemaines(e); syncEleveVersSemaineActive(e);
+    const sel = document.getElementById('selectSemaineEleve');
+    if (sel) {
+        let html = '';
+        e.semaines.forEach((s, idx) => {
+            let datesTxt = (s.dateDebut && s.dateFin) ? " (du " + s.dateDebut + " au " + s.dateFin + ")" : "";
+            html += '<option value="' + idx + '">Semaine ' + (idx + 1) + datesTxt + ' — ' + s.planHebdo.length + ' act.' + (idx === 0 ? ' [En cours]' : ' [D\'avance]') + '</option>';
+        });
+        sel.innerHTML = html; sel.value = e.semaineIndex;
+    }
+    const btnSuppr = document.getElementById('btnSupprimerSemaine'); if (btnSuppr) btnSuppr.style.display = e.semaines.length > 1 ? 'inline-block' : 'none';
+    const inputDate = document.getElementById('dateDebutSemaineInput'), spanFin = document.getElementById('dateFinSemaineAffiche');
+    if (inputDate) inputDate.value = e.dateDebutISO || "";
+    if (spanFin) spanFin.innerText = e.dateFin ? "➔ au Vendredi " + e.dateFin : "➔ Vendredi : --/--";
+    const labelTitre = document.getElementById('labelSemaineTitre');
+    if (labelTitre) labelTitre.innerText = "Semaine " + (e.semaineIndex + 1) + ((e.dateDebut && e.dateFin) ? " du " + e.dateDebut + " au " + e.dateFin : "");
 }
 
 function appliquerDateDebutSemaine(dateISO) {
-    if (!idEleveCourant || !eleves[idEleveCourant]) return;
-    let e = eleves[idEleveCourant], res = calculerVendrediDepuisISO(dateISO);
-    e.dateDebutISO = dateISO || ""; e.dateDebut = res.debutFR; e.dateFin = res.finFR;
-    dateGlobaleDebutISO = e.dateDebutISO; dateGlobaleDebutFR = e.dateDebut; dateGlobaleFinFR = e.dateFin;
-    sauvegarderEleves(); majBarreSemainesUI();
+    if (!idEleveCourant || !eleves[idEleveCourant]) return;
+    let e = eleves[idEleveCourant], res = calculerVendrediDepuisISO(dateISO);
+    e.dateDebutISO = dateISO || ""; e.dateDebut = res.debutFR; e.dateFin = res.finFR;
+    dateGlobaleDebutISO = e.dateDebutISO; dateGlobaleDebutFR = e.dateDebut; dateGlobaleFinFR = e.dateFin;
+
+    // Si cette date correspond à une semaine dans la Programmation, on aligne automatiquement la suggestion dessus
+    if (dateISO) {
+        assurerStructureProgPeriodes();
+        let semActiveEl = e.semaines ? e.semaines[e.semaineIndex || 0] : null;
+        for (let p of PERIODES_LISTE) {
+            let pObj = progPeriodesData.periodes[p];
+            if (pObj && Array.isArray(pObj.semaines)) {
+                let fIdx = pObj.semaines.findIndex(s => s && s.dateDebutISO === dateISO);
+                if (fIdx > -1) {
+                    progPeriodesData.periodeActiveDash = p;
+                    progPeriodesData.semaineIndexDash = fIdx;
+                    if (semActiveEl) {
+                        semActiveEl.progPeriodeCible = p;
+                        semActiveEl.progSemaineCible = fIdx;
+                    }
+                    sauvegarderProgPeriodes();
+                    break;
+                }
+            }
+        }
+    }
+
+    sauvegarderEleves();
+    majBarreSemainesUI();
+    changementMatiereSelection();
 }
 
 function changerSemaineActive(nouvelIndex) {
-    if (!idEleveCourant || !eleves[idEleveCourant]) return;
-    chargerSemaineDepuisIndex(eleves[idEleveCourant], nouvelIndex); sauvegarderEleves(); majBarreSemainesUI(); afficherPlanHebdo();
-    afficherRessourcesDisponibles(); rafraichirDashboard();
+    if (!idEleveCourant || !eleves[idEleveCourant]) return;
+    chargerSemaineDepuisIndex(eleves[idEleveCourant], nouvelIndex);
+    sauvegarderEleves();
+    majBarreSemainesUI();
+    afficherPlanHebdo();
+    changementMatiereSelection();
+    rafraichirDashboard();
 }
 
 function ajouterSemaineAvance() {
-    if (!idEleveCourant || !eleves[idEleveCourant]) return;
-    let e = eleves[idEleveCourant]; syncEleveVersSemaineActive(e);
-    let derniereSem = e.semaines[e.semaines.length - 1], nouvDebutISO = "", nouvDebutFR = "", nouvFinFR = "";
-    if (derniereSem && derniereSem.dateDebutISO) {
-        let calcPrec = calculerVendrediDepuisISO(derniereSem.dateDebutISO);
-        if (calcPrec.lundiSuivantISO) { nouvDebutISO = calcPrec.lundiSuivantISO; let calcNouv = calculerVendrediDepuisISO(nouvDebutISO); nouvDebutFR = calcNouv.debutFR; nouvFinFR = calcNouv.finFR; }
-    }
-    let planInitial = [...new Set([...(e.recurrents || []), ...(e.enAttente || [])])];
-    let priosInitiales = [...(e.enAttente || [])];
-    e.enAttente = [];
-    e.semaines.push({ id: 'sem_' + Date.now(), dateDebutISO: nouvDebutISO, dateDebut: nouvDebutFR, dateFin: nouvFinFR, planHebdo: planInitial, priorites: priosInitiales, joursAssignes: {}, sequencesChoisies: { ...(e.sequencesChoisies || {}) }, valides: {}, suivi: JSON.parse(JSON.stringify(e.suivi || {})) });
-    chargerSemaineDepuisIndex(e, e.semaines.length - 1); sauvegarderEleves(); majBarreSemainesUI(); afficherPlanHebdo();
-    afficherRessourcesDisponibles(); showToast("Semaine " + e.semaines.length + " créée !", "success");
+    if (!idEleveCourant || !eleves[idEleveCourant]) return;
+    let e = eleves[idEleveCourant]; syncEleveVersSemaineActive(e);
+    let derniereSem = e.semaines[e.semaines.length - 1], nouvDebutISO = "", nouvDebutFR = "", nouvFinFR = "";
+    if (derniereSem && derniereSem.dateDebutISO) {
+        let calcPrec = calculerVendrediDepuisISO(derniereSem.dateDebutISO);
+        if (calcPrec.lundiSuivantISO) { nouvDebutISO = calcPrec.lundiSuivantISO; let calcNouv = calculerVendrediDepuisISO(nouvDebutISO); nouvDebutFR = calcNouv.debutFR; nouvFinFR = calcNouv.finFR; }
+    }
+    let planInitial = [...new Set([...(e.recurrents || []), ...(e.enAttente || [])])];
+    let priosInitiales = [...(e.enAttente || [])];
+    e.enAttente = [];
+
+    // Calcul automatique de la semaine suivante dans la Programmation
+    let ciblePrec = determinerPeriodeEtSemainePourEleve(e);
+    let nextPer = ciblePrec.per;
+    let nextSemIdx = ciblePrec.semIdx + 1;
+    let pObj = progPeriodesData.periodes[nextPer];
+    if (pObj && nextSemIdx >= pObj.semaines.length) {
+        let idxP = PERIODES_LISTE.indexOf(nextPer);
+        if (idxP >= 0 && idxP + 1 < PERIODES_LISTE.length) {
+            nextPer = PERIODES_LISTE[idxP + 1];
+            nextSemIdx = 0;
+        } else {
+            nextSemIdx = pObj.semaines.length - 1;
+        }
+    }
+
+    e.semaines.push({
+        id: 'sem_' + Date.now(),
+        dateDebutISO: nouvDebutISO, dateDebut: nouvDebutFR, dateFin: nouvFinFR,
+        progPeriodeCible: nextPer, progSemaineCible: nextSemIdx,
+        planHebdo: planInitial, priorites: priosInitiales, joursAssignes: {},
+        sequencesChoisies: { ...(e.sequencesChoisies || {}) }, valides: {}, suivi: JSON.parse(JSON.stringify(e.suivi || {}))
+    });
+    chargerSemaineDepuisIndex(e, e.semaines.length - 1);
+    sauvegarderEleves();
+    majBarreSemainesUI();
+    afficherPlanHebdo();
+    changementMatiereSelection();
+    showToast("Semaine " + e.semaines.length + " créée (alignée sur " + nextPer + " - Semaine " + (nextSemIdx + 1) + ") !", "success");
 }
 
 function supprimerSemaineActive() {
-    if (!idEleveCourant || !eleves[idEleveCourant]) return;
-    let e = eleves[idEleveCourant]; if (e.semaines.length <= 1) return;
-    if (confirm("Supprimer la Semaine " + (e.semaineIndex + 1) + " préparée pour " + e.nom + " ?")) {
-        e.semaines.splice(e.semaineIndex, 1);
-        let nouvIdx = Math.max(0, e.semaineIndex - 1), s = e.semaines[nouvIdx];
-        e.semaineIndex = nouvIdx; e.planHebdo = [...(s.planHebdo || [])]; e.priorites = [...(s.priorites || [])]; e.joursAssignes = { ...(s.joursAssignes || {}) }; e.sequencesChoisies = { ...(s.sequencesChoisies || {}) }; e.valides = { ...(s.valides || {}) }; e.suivi = { ...(s.suivi || {}) }; e.dateDebutISO = s.dateDebutISO || ""; e.dateDebut = s.dateDebut || ""; e.dateFin = s.dateFin || "";
-        sauvegarderEleves(); majBarreSemainesUI(); afficherPlanHebdo(); afficherRessourcesDisponibles(); rafraichirDashboard(); showToast("Semaine supprimée.", "success");
-    }
+    if (!idEleveCourant || !eleves[idEleveCourant]) return;
+    let e = eleves[idEleveCourant]; if (e.semaines.length <= 1) return;
+    if (confirm("Supprimer la Semaine " + (e.semaineIndex + 1) + " préparée pour " + e.nom + " ?")) {
+        e.semaines.splice(e.semaineIndex, 1);
+        let nouvIdx = Math.max(0, e.semaineIndex - 1), s = e.semaines[nouvIdx];
+        e.semaineIndex = nouvIdx; e.planHebdo = [...(s.planHebdo || [])]; e.priorites = [...(s.priorites || [])]; e.joursAssignes = { ...(s.joursAssignes || {}) }; e.sequencesChoisies = { ...(s.sequencesChoisies || {}) }; e.valides = { ...(s.valides || {}) }; e.suivi = { ...(s.suivi || {}) }; e.dateDebutISO = s.dateDebutISO || ""; e.dateDebut = s.dateDebut || ""; e.dateFin = s.dateFin || "";
+        sauvegarderEleves(); majBarreSemainesUI(); afficherPlanHebdo(); changementMatiereSelection(); rafraichirDashboard(); showToast("Semaine supprimée.", "success");
+    }
 }
 
 function chargerEleve() {
-    const sel = document.getElementById('selectEleveProfile'); if (!sel) return; idEleveCourant = sel.value;
-    const zoneTravail = document.getElementById('zoneTravail'), message = document.getElementById('messageSelectEleve'), btnEdit = document.getElementById('btnEditEleve'), btnSuppr = document.getElementById('btnSupprEleve');
-    if (!idEleveCourant || !eleves[idEleveCourant]) {
-        if (zoneTravail) zoneTravail.style.display = 'none'; if (message) message.style.display = 'block';
-        if (btnEdit) btnEdit.style.display = 'none'; if (btnSuppr) btnSuppr.style.display = 'none'; return;
-    }
-    if (zoneTravail) zoneTravail.style.display = 'block'; if (message) message.style.display = 'none';
-    if (btnEdit) btnEdit.style.display = 'inline-block'; if (btnSuppr) btnSuppr.style.display = 'inline-block';
-    let e = eleves[idEleveCourant]; assurerStructureSemaines(e);
-    if (!e.maxAteliers || e.maxAteliers === 15) e.maxAteliers = 100;
-    document.querySelectorAll('.nomEleveAffiche').forEach(el => el.innerText = e.nom + " (" + e.niveau + ")");
-    let inputMax = document.getElementById('inputMaxAteliersEleve'), inputMaxTab = document.getElementById('inputMaxTablettesEleve'), maxAff = document.getElementById('maxAteliersAffiche'), cbJaune = document.getElementById('cbFichierJauneEleve');
-    if (inputMax) { inputMax.max = "100"; inputMax.value = e.maxAteliers || 100; }
-    if (inputMaxTab) inputMaxTab.value = e.maxTablettes ?? 2;
-    if (maxAff) maxAff.innerText = e.maxAteliers || 100;
-    if (cbJaune) cbJaune.checked = Boolean(e.fichierJaune);
+    const sel = document.getElementById('selectEleveProfile'); if (!sel) return; idEleveCourant = sel.value;
+    const zoneTravail = document.getElementById('zoneTravail'), message = document.getElementById('messageSelectEleve'), btnEdit = document.getElementById('btnEditEleve'), btnSuppr = document.getElementById('btnSupprEleve');
+    if (!idEleveCourant || !eleves[idEleveCourant]) {
+        if (zoneTravail) zoneTravail.style.display = 'none'; if (message) message.style.display = 'block';
+        if (btnEdit) btnEdit.style.display = 'none'; if (btnSuppr) btnSuppr.style.display = 'none'; return;
+    }
+    if (zoneTravail) zoneTravail.style.display = 'block'; if (message) message.style.display = 'none';
+    if (btnEdit) btnEdit.style.display = 'inline-block'; if (btnSuppr) btnSuppr.style.display = 'inline-block';
+    let e = eleves[idEleveCourant]; assurerStructureSemaines(e);
+    if (!e.maxAteliers || e.maxAteliers === 15) e.maxAteliers = 100;
+    document.querySelectorAll('.nomEleveAffiche').forEach(el => el.innerText = e.nom + " (" + e.niveau + ")");
+    let inputMax = document.getElementById('inputMaxAteliersEleve'), inputMaxTab = document.getElementById('inputMaxTablettesEleve'), maxAff = document.getElementById('maxAteliersAffiche'), cbJaune = document.getElementById('cbFichierJauneEleve');
+    if (inputMax) { inputMax.max = "100"; inputMax.value = e.maxAteliers || 100; }
+    if (inputMaxTab) inputMaxTab.value = e.maxTablettes ?? 2;
+    if (maxAff) maxAff.innerText = e.maxAteliers || 100;
+    if (cbJaune) cbJaune.checked = Boolean(e.fichierJaune);
 
-    let blocParc = document.getElementById('blocParcoursEleveSuivi'), selParc = document.getElementById('selectParcoursEleve');
-    if (blocParc && selParc) {
-        if (estEleveCM(e)) { blocParc.style.display = 'inline-block'; selParc.value = e.parcours || (e.niveau.toUpperCase() === "CM2" ? "orange" : "jaune"); }
-        else { blocParc.style.display = 'none'; }
-    }
-    initialiserSelectsFormulaire(); majBarreSemainesUI(); afficherBandeauSuggestionsProgEleve(); afficherPlanHebdo(); afficherHistorique(); afficherRessourcesDisponibles();
+    let blocParc = document.getElementById('blocParcoursEleveSuivi'), selParc = document.getElementById('selectParcoursEleve');
+    if (blocParc && selParc) {
+        if (estEleveCM(e)) { blocParc.style.display = 'inline-block'; selParc.value = e.parcours || (e.niveau.toUpperCase() === "CM2" ? "orange" : "jaune"); }
+        else { blocParc.style.display = 'none'; }
+    }
+    initialiserSelectsFormulaire(); majBarreSemainesUI(); afficherBandeauSuggestionsProgEleve(); afficherPlanHebdo(); afficherHistorique(); changementMatiereSelection();
 }
 
 function initialiserSelectsFormulaire() {
-    const selMat = document.getElementById('selectMatiere');
-    let matieres = [...new Set([...MATIERES_DEFAUT_LISTE, ...baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean)])].sort((a, b) => nettoyerNomPourTri(a).localeCompare(nettoyerNomPourTri(b), 'fr'));
+    const selMat = document.getElementById('selectMatiere');
+    let matieres = [...new Set([...MATIERES_DEFAUT_LISTE, ...baseDonnees.map(b => (b.matiere || "").trim()).filter(Boolean)])].sort((a, b) => nettoyerNomPourTri(a).localeCompare(nettoyerNomPourTri(b), 'fr'));
 
-    let toutesSeqs = [...sequencesCustom];
-    baseDonnees.forEach(b => extraireListeSequences(b.sequence).forEach(s => toutesSeqs.push(s)));
-    let sequences = [...new Set(toutesSeqs.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+    let toutesSeqs = [...sequencesCustom];
+    baseDonnees.forEach(b => extraireListeSequences(b.sequence).forEach(s => toutesSeqs.push(s)));
+    let sequences = [...new Set(toutesSeqs.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
 
-    let toutesComps = [];
-    baseDonnees.forEach(b => extraireListeCompetences(b.competence).forEach(c => toutesComps.push(c)));
-    let competences = [...new Set(toutesComps)].sort((a, b) => a.localeCompare(b, 'fr'));
+    let toutesComps = [];
+    baseDonnees.forEach(b => extraireListeCompetences(b.competence).forEach(c => toutesComps.push(c)));
+    let competences = [...new Set(toutesComps)].sort((a, b) => a.localeCompare(b, 'fr'));
 
-    let dlMat = document.getElementById('listeMatieresConnues'); if (dlMat) dlMat.innerHTML = matieres.map(m => '<option value="' + escHTML(m) + '">').join('');
-    let dlSeq = document.getElementById('listeSequencesConnues'); if (dlSeq) dlSeq.innerHTML = sequences.map(s => '<option value="' + escHTML(s) + '">').join('');
-    let dlComp = document.getElementById('listeCompetencesConnues'); if (dlComp) dlComp.innerHTML = competences.map(c => '<option value="' + escHTML(c) + '">').join('');
+    let dlMat = document.getElementById('listeMatieresConnues'); if (dlMat) dlMat.innerHTML = matieres.map(m => '<option value="' + escHTML(m) + '">').join('');
+    let dlSeq = document.getElementById('listeSequencesConnues'); if (dlSeq) dlSeq.innerHTML = sequences.map(s => '<option value="' + escHTML(s) + '">').join('');
+    let dlComp = document.getElementById('listeCompetencesConnues'); if (dlComp) dlComp.innerHTML = competences.map(c => '<option value="' + escHTML(c) + '">').join('');
 
-    if (!selMat) return;
-    let valActuelle = selMat.value;
-    let html = '<option value="">-- 1. Choisir une matière (ou Toutes) --</option><option value="TOUTES_MATIERES">📚 Toutes les matières</option>';
-    matieres.forEach(m => { html += '<option value="' + escHTML(m) + '">' + escHTML(m) + '</option>'; });
-    selMat.innerHTML = html; if (valActuelle) selMat.value = valActuelle;
+    if (!selMat) return;
+    let valActuelle = selMat.value;
+    let html = '<option value="">-- 1. Choisir une matière (ou Toutes) --</option><option value="TOUTES_MATIERES">📚 Toutes les matières</option>';
+    matieres.forEach(m => { html += '<option value="' + escHTML(m) + '">' + escHTML(m) + '</option>'; });
+    selMat.innerHTML = html; if (valActuelle) selMat.value = valActuelle;
 }
 
 function changementMatiereSelection() {
-    const selMat = document.getElementById('selectMatiere'), selSeq = document.getElementById('selectSequence');
-    if (!selMat || !selSeq) return;
-    let mat = selMat.value;
-    let toutesSeqs = [];
-    baseDonnees.filter(b => !estLeconProf(b) && (!mat || mat === 'TOUTES_MATIERES' || (b.matiere || "").trim() === mat)).forEach(b => {
-        extraireListeSequences(b.sequence).forEach(s => toutesSeqs.push(s));
-    });
-    let sequences = [...new Set(toutesSeqs.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+    const selMat = document.getElementById('selectMatiere'), selSeq = document.getElementById('selectSequence');
+    if (!selMat || !selSeq) return;
+    let mat = selMat.value;
+    let valSeqAvant = selSeq.value;
 
-    let sugg = (idEleveCourant && eleves[idEleveCourant]) ? getSuggestionsSequencesEtEvalsPourEleve(eleves[idEleveCourant]) : { seqsSemaineCourante: [], seqsSemainePrecedentePourEval: [] };
+    let nivEleve = (idEleveCourant && eleves[idEleveCourant]) ? (eleves[idEleveCourant].niveau || "CP").toUpperCase() : "";
+    let toutesSeqs = [];
+    baseDonnees.filter(b => {
+        if (!b || estLeconProf(b)) return false;
+        if (mat && mat !== 'TOUTES_MATIERES' && (b.matiere || "").trim() !== mat) return false;
+        if (nivEleve) {
+            let nivAct = (b.niveau || "").toUpperCase();
+            if (nivAct && !nivAct.includes(nivEleve) && nivAct !== "TOUS") return false;
+        }
+        return true;
+    }).forEach(b => {
+        extraireListeSequences(b.sequence).forEach(s => toutesSeqs.push(s));
+    });
 
-    let html = '<option value="TOUTES_SEQUENCES">-- Toutes les séquences --</option>';
-    sequences.forEach(s => {
-        let prefix = "";
-        if (sugg.seqsSemaineCourante.includes(s)) prefix = "📌 [Cette semaine] ";
-        else if (sugg.seqsSemainePrecedentePourEval.includes(s)) prefix = "🎯 [Éval S-1] ";
-        html += '<option value="' + escHTML(s) + '">' + escHTML(prefix + s) + '</option>';
-    });
-    selSeq.innerHTML = html; afficherRessourcesDisponibles();
+    let sugg = (idEleveCourant && eleves[idEleveCourant])
+        ? getSuggestionsSequencesEtEvalsPourEleve(eleves[idEleveCourant])
+        : { per: 'P1', semNum: 1, seqsSemaineCourante: [], seqsSemainePrecedentePourEval: [] };
+
+    let setCourante = new Set((sugg.seqsSemaineCourante || []).map(x => x.toLowerCase()));
+    let setEvalPrec = new Set((sugg.seqsSemainePrecedentePourEval || []).map(x => x.toLowerCase()));
+
+    // Tri intelligent : 1. Séquences de la semaine sélectionnée -> 2. Séquences Éval S-1 -> 3. Ordre alphabétique
+    let sequences = [...new Set(toutesSeqs.filter(Boolean))].sort((a, b) => {
+        let aLower = a.toLowerCase(), bLower = b.toLowerCase();
+        let prioA = setCourante.has(aLower) ? 2 : (setEvalPrec.has(aLower) ? 1 : 0);
+        let prioB = setCourante.has(bLower) ? 2 : (setEvalPrec.has(bLower) ? 1 : 0);
+        if (prioA !== prioB) return prioB - prioA;
+        return a.localeCompare(b, 'fr');
+    });
+
+    let html = '<option value="TOUTES_SEQUENCES">-- Toutes les séquences (Séquences ' + escHTML(sugg.per) + '-S' + sugg.semNum + ' en 1er) --</option>';
+    sequences.forEach(s => {
+        let sLower = s.toLowerCase();
+        let prefix = "";
+        if (setCourante.has(sLower)) prefix = "📌 [" + sugg.per + " - S" + sugg.semNum + "] ";
+        else if (setEvalPrec.has(sLower)) prefix = "🎯 [Éval S-1] ";
+        html += '<option value="' + escHTML(s) + '">' + escHTML(prefix + s) + '</option>';
+    });
+    selSeq.innerHTML = html;
+    if (valSeqAvant && sequences.includes(valSeqAvant)) selSeq.value = valSeqAvant;
+    afficherRessourcesDisponibles();
 }
 
 function filtrerEtoilesDispo(nb) {
-    filtreEtoilesDispo = nb;
-    [0, 1, 2, 3].forEach(n => { let btn = document.getElementById('btnEtoile' + n); if (btn) btn.classList.toggle('active', n === nb); });
-    afficherRessourcesDisponibles();
+    filtreEtoilesDispo = nb;
+    [0, 1, 2, 3].forEach(n => { let btn = document.getElementById('btnEtoile' + n); if (btn) btn.classList.toggle('active', n === nb); });
+    afficherRessourcesDisponibles();
 }
 
 function afficherRessourcesDisponibles() {
-    const tbody = document.getElementById('tableRessourcesDispo'); if (!tbody || !idEleveCourant || !eleves[idEleveCourant]) return;
-    const eleve = eleves[idEleveCourant];
-    afficherBandeauSuggestionsProgEleve();
-    const mat = document.getElementById('selectMatiere') ? document.getElementById('selectMatiere').value : "";
-    const seq = document.getElementById('selectSequence') ? document.getElementById('selectSequence').value : "";
-    const per = document.getElementById('selectPeriodeDispo') ? document.getElementById('selectPeriodeDispo').value : "Toutes";
+    const tbody = document.getElementById('tableRessourcesDispo'); if (!tbody || !idEleveCourant || !eleves[idEleveCourant]) return;
+    const eleve = eleves[idEleveCourant];
+    afficherBandeauSuggestionsProgEleve();
+    const mat = document.getElementById('selectMatiere') ? document.getElementById('selectMatiere').value : "";
+    const seq = document.getElementById('selectSequence') ? document.getElementById('selectSequence').value : "";
+    const per = document.getElementById('selectPeriodeDispo') ? document.getElementById('selectPeriodeDispo').value : "Toutes";
 
-    if (!mat) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#7f8c8d;">Choisissez une matière ci-dessus (ou cliquez sur une séquence suggérée ci-dessus).</td></tr>'; return; }
+    if (!mat) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#7f8c8d;">Choisissez une matière ci-dessus (ou cliquez sur une séquence suggérée dans le bandeau jaune).</td></tr>'; return; }
 
-    let nivEleve = (eleve.niveau || "CP").toUpperCase();
-    let liste = baseDonnees.filter(a => {
-        if (!a || estLeconProf(a)) return false;
+    let sugg = getSuggestionsSequencesEtEvalsPourEleve(eleve);
+    let setSeqsSemaine = new Set((sugg.seqsSemaineCourante || []).map(x => x.toLowerCase()));
+    let setSeqsEvalPrec = new Set((sugg.seqsSemainePrecedentePourEval || []).map(x => x.toLowerCase()));
 
-        let nivAct = (a.niveau || "").toUpperCase();
-        if (nivAct && !nivAct.includes(nivEleve) && nivAct !== "TOUS") return false;
-        if (mat !== 'TOUTES_MATIERES' && (a.matiere || "").trim() !== mat) return false;
-        if (seq && seq !== 'TOUTES_SEQUENCES' && !activiteAppartientASequence(a, seq)) return false;
+    let nivEleve = (eleve.niveau || "CP").toUpperCase();
+    let liste = baseDonnees.filter(a => {
+        if (!a || estLeconProf(a)) return false;
 
-        if (per !== 'Toutes') {
-            let periodesAct = (seq && seq !== 'TOUTES_SEQUENCES')
-                ? getPeriodesSequence(a.matiere, seq)
-                : getPeriodesActivite(a);
-            if (!periodesAct.includes(per)) return false;
-        }
+        let nivAct = (a.niveau || "").toUpperCase();
+        if (nivAct && !nivAct.includes(nivEleve) && nivAct !== "TOUS") return false;
+        if (mat !== 'TOUTES_MATIERES' && (a.matiere || "").trim() !== mat) return false;
+        if (seq && seq !== 'TOUTES_SEQUENCES' && !activiteAppartientASequence(a, seq)) return false;
 
-        if (filtreEtoilesDispo > 0 && (parseInt(a.difficulte) || 0) !== filtreEtoilesDispo) return false;
-        if (eleve.planHebdo.includes(a.id) || (eleve.enAttente && eleve.enAttente.includes(a.id))) return false;
-        if (eleve.masquees && eleve.masquees.includes(a.id)) return false;
+        if (per !== 'Toutes') {
+            let periodesAct = (seq && seq !== 'TOUTES_SEQUENCES')
+                ? getPeriodesSequence(a.matiere, seq)
+                : getPeriodesActivite(a);
+            if (!periodesAct.includes(per)) return false;
+        }
 
-        let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
-        if (isRec) return true;
+        if (filtreEtoilesDispo > 0 && (parseInt(a.difficulte) || 0) !== filtreEtoilesDispo) return false;
+        if (eleve.planHebdo.includes(a.id) || (eleve.enAttente && eleve.enAttente.includes(a.id))) return false;
+        if (eleve.masquees && eleve.masquees.includes(a.id)) return false;
 
-        let seqsAct = extraireListeSequences(a.sequence);
-        if (seq && seq !== 'TOUTES_SEQUENCES') {
-            if (estActiviteValideePourSequence(eleve, a, seq)) return false;
-        } else {
-            if (seqsAct.length <= 1) {
-                if (estActiviteValideePourSequence(eleve, a, seqsAct[0] || "")) return false;
-            } else {
-                let toutesSeqsFaites = seqsAct.every(s => estActiviteValideePourSequence(eleve, a, s));
-                if (toutesSeqsFaites) return false;
-            }
-        }
-        return true;
-    });
+        let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
+        if (isRec) return true;
 
-    if (liste.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#7f8c8d;">Aucune activité disponible.</td></tr>'; return; }
+        let seqsAct = extraireListeSequences(a.sequence);
+        if (seq && seq !== 'TOUTES_SEQUENCES') {
+            if (estActiviteValideePourSequence(eleve, a, seq)) return false;
+        } else {
+            if (seqsAct.length <= 1) {
+                if (estActiviteValideePourSequence(eleve, a, seqsAct[0] || "")) return false;
+            } else {
+                let toutesSeqsFaites = seqsAct.every(s => estActiviteValideePourSequence(eleve, a, s));
+                if (toutesSeqsFaites) return false;
+            }
+        }
+        return true;
+    });
 
-    let html = '';
-    liste.forEach(a => {
-        let infos = getInfosActivitePourEleve(a, eleve), rep = getRepereAtelierHtml(a, eleve, 24);
-        let coul = getCouleurMatiereBandeau(a.matiere), perAct = getPeriodesActiviteTexte(a);
-        let seqsAct = extraireListeSequences(a.sequence);
-        let seqRestantes = seqsAct.filter(s => !estActiviteValideePourSequence(eleve, a, s));
-        if (seqRestantes.length === 0) seqRestantes = seqsAct;
+    // Tri automatique : les ateliers des séquences prévues pour la semaine sélectionnée apparaissent tout en haut !
+    liste.sort((a, b) => {
+        let seqsA = extraireListeSequences(a.sequence).map(x => x.toLowerCase());
+        let seqsB = extraireListeSequences(b.sequence).map(x => x.toLowerCase());
+        let prioA = seqsA.some(s => setSeqsSemaine.has(s)) ? 2 : (a.estEvaluation && seqsA.some(s => setSeqsEvalPrec.has(s)) ? 1 : 0);
+        let prioB = seqsB.some(s => setSeqsSemaine.has(s)) ? 2 : (b.estEvaluation && seqsB.some(s => setSeqsEvalPrec.has(s)) ? 1 : 0);
+        if (prioA !== prioB) return prioB - prioA;
+        let matA = nettoyerNomPourTri(a.matiere), matB = nettoyerNomPourTri(b.matiere);
+        if (matA !== matB) return matA.localeCompare(matB, 'fr');
+        return (a.ressource || "").localeCompare(b.ressource || "", 'fr');
+    });
 
-        let seqAfficheHtml = '';
-        if (seq && seq !== 'TOUTES_SEQUENCES') {
-            seqAfficheHtml = '<span style="background:#fef9e7; color:#7d6608; border:1px solid #f5b041; border-radius:4px; padding:1px 5px; font-size:11.5px; font-weight:bold;">📑 ' + escHTML(seq) + '</span><input type="hidden" id="seq_dispo_' + a.id + '" value="' + escHTML(seq) + '">';
-        } else if (seqRestantes.length > 1) {
-            seqAfficheHtml = '<select id="seq_dispo_' + a.id + '" style="width:100%; padding:2px 4px; font-size:11.5px; font-weight:bold; background:#fef9e7; color:#7d6608; border:1px solid #f5b041; border-radius:4px; margin-top:2px;">' +
-                seqRestantes.map(s => '<option value="' + escHTML(s) + '">📑 Séq : ' + escHTML(s) + '</option>').join('') +
-                '</select>';
-        } else if (seqRestantes.length === 1) {
-            seqAfficheHtml = escHTML(seqRestantes[0]) + '<input type="hidden" id="seq_dispo_' + a.id + '" value="' + escHTML(seqRestantes[0]) + '">';
-        } else {
-            seqAfficheHtml = '<span style="color:#e67e22; font-weight:bold;">⚠️ Sans séquence</span><input type="hidden" id="seq_dispo_' + a.id + '" value="">';
-        }
+    if (liste.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#7f8c8d;">Aucune activité disponible.</td></tr>'; return; }
 
-        let badgeGuide = (a.pageProf && a.pageProf.trim()) ? ' <span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ' + escHTML(a.pageProf.trim()) + '</span>' : '';
-        let badgeLien = (a.lienExterne && a.lienExterne.trim()) ? ' <a href="' + escHTML(a.lienExterne.trim()) + '" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 5px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir le lien direct">🔗 Anton ↗</a>' : '';
-        let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
-        html += '<tr>' +
-            '<td><strong>' + escHTML(a.niveau) + '</strong><br><small style="color:#7f8c8d;">' + escHTML(perAct) + '</small></td>' +
-            '<td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:' + coul.bg + '; margin-right:4px;"></span><strong>' + escHTML(a.matiere) + '</strong><br>' + seqAfficheHtml + ' ' + (a.lecon ? '(' + escHTML(a.lecon) + ')' : '') + '</td>' +
-            '<td>' + formaterAffichageCompetences(a.competence) + '</td>' +
-            '<td>' + formaterEtoiles(a.difficulte) + '<strong>' + escHTML(a.ressource) + '</strong> ' + infos.badgeLivre + badgeGuide + badgeLien + ' ' + (a.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : '') + '</td>' +
-            '<td style="text-align:center; background:' + rep.bg + ';">' + rep.html + '</td>' +
-            '<td>' +
-                '<select id="jour_dispo_' + a.id + '" style="width:100%; padding:4px; font-size:12px;">' +
-                    '<option value="">-- Libre --</option>' +
-                    '<option value="Lundi">Lundi</option>' +
-                    '<option value="Mardi">Mardi</option>' +
-                    '<option value="Jeudi">Jeudi</option>' +
-                    '<option value="Vendredi">Vendredi</option>' +
-                '</select>' +
-            '</td>' +
-            '<td>' +
-                '<div style="display:flex; gap:4px; flex-wrap:wrap;">' +
-                    '<button type="button" class="btn-action" onclick="ajouterAuPlan(\'' + a.id + '\')">➕ Plan</button>' +
-                    '<button type="button" class="filter-btn" style="' + (isRec ? 'background:#8e44ad; color:#fff;' : '') + '" title="Épingler comme rituel récurrent chaque semaine pour cet élève" onclick="toggleRecurrentEleve(\'' + a.id + '\')">🔄 Hebdo</button>' +
-                    '<button type="button" class="filter-btn" onclick="mettreEnAttente(\'' + a.id + '\')" title="Mettre en réserve">⏳</button>' +
-                    '<button type="button" class="btn-valid" onclick="validerDirectement(\'' + a.id + '\')" title="Valider pour cette séquence">✅</button>' +
-                    '<button type="button" class="filter-btn" onclick="masquerActivite(\'' + a.id + '\')" title="Masquer">🙈</button>' +
-                '</div>' +
-            '</td>' +
-        '</tr>';
-    });
-    tbody.innerHTML = html;
+    let html = '';
+    liste.forEach(a => {
+        let infos = getInfosActivitePourEleve(a, eleve), rep = getRepereAtelierHtml(a, eleve, 24);
+        let coul = getCouleurMatiereBandeau(a.matiere), perAct = getPeriodesActiviteTexte(a);
+        let seqsAct = extraireListeSequences(a.sequence);
+        let seqRestantes = seqsAct.filter(s => !estActiviteValideePourSequence(eleve, a, s));
+        if (seqRestantes.length === 0) seqRestantes = seqsAct;
+
+        let estDeLaSemaine = seqsAct.some(s => setSeqsSemaine.has(s.toLowerCase()));
+        let badgeSemainePrio = estDeLaSemaine
+            ? ' <span style="background:#fef9e7; color:#b7950b; border:1px solid #f1c40f; border-radius:4px; padding:1px 5px; font-size:10.5px; font-weight:bold;">📌 ' + escHTML(sugg.per) + '-S' + sugg.semNum + '</span>'
+            : '';
+
+        let seqAfficheHtml = '';
+        if (seq && seq !== 'TOUTES_SEQUENCES') {
+            seqAfficheHtml = '<span style="background:#fef9e7; color:#7d6608; border:1px solid #f5b041; border-radius:4px; padding:1px 5px; font-size:11.5px; font-weight:bold;">📑 ' + escHTML(seq) + '</span><input type="hidden" id="seq_dispo_' + a.id + '" value="' + escHTML(seq) + '">';
+        } else if (seqRestantes.length > 1) {
+            seqAfficheHtml = '<select id="seq_dispo_' + a.id + '" style="width:100%; padding:2px 4px; font-size:11.5px; font-weight:bold; background:#fef9e7; color:#7d6608; border:1px solid #f5b041; border-radius:4px; margin-top:2px;">' +
+                seqRestantes.map(s => '<option value="' + escHTML(s) + '" ' + (setSeqsSemaine.has(s.toLowerCase()) ? 'selected' : '') + '>📑 Séq : ' + escHTML(s) + '</option>').join('') +
+                '</select>';
+        } else if (seqRestantes.length === 1) {
+            seqAfficheHtml = escHTML(seqRestantes[0]) + '<input type="hidden" id="seq_dispo_' + a.id + '" value="' + escHTML(seqRestantes[0]) + '">';
+        } else {
+            seqAfficheHtml = '<span style="color:#e67e22; font-weight:bold;">⚠️ Sans séquence</span><input type="hidden" id="seq_dispo_' + a.id + '" value="">';
+        }
+
+        let badgeGuide = (a.pageProf && a.pageProf.trim()) ? ' <span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ' + escHTML(a.pageProf.trim()) + '</span>' : '';
+        let badgeLien = (a.lienExterne && a.lienExterne.trim()) ? ' <a href="' + escHTML(a.lienExterne.trim()) + '" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 5px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir le lien direct">🔗 Anton ↗</a>' : '';
+        let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
+        html += '<tr style="' + (estDeLaSemaine ? 'background:#fffdf5;' : '') + '">' +
+            '<td><strong>' + escHTML(a.niveau) + '</strong><br><small style="color:#7f8c8d;">' + escHTML(perAct) + '</small></td>' +
+            '<td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:' + coul.bg + '; margin-right:4px;"></span><strong>' + escHTML(a.matiere) + '</strong>' + badgeSemainePrio + '<br>' + seqAfficheHtml + ' ' + (a.lecon ? '(' + escHTML(a.lecon) + ')' : '') + '</td>' +
+            '<td>' + formaterAffichageCompetences(a.competence) + '</td>' +
+            '<td>' + formaterEtoiles(a.difficulte) + '<strong>' + escHTML(a.ressource) + '</strong> ' + infos.badgeLivre + badgeGuide + badgeLien + ' ' + (a.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : '') + '</td>' +
+            '<td style="text-align:center; background:' + rep.bg + ';">' + rep.html + '</td>' +
+            '<td>' +
+                '<select id="jour_dispo_' + a.id + '" style="width:100%; padding:4px; font-size:12px;">' +
+                    '<option value="">-- Libre --</option>' +
+                    '<option value="Lundi">Lundi</option>' +
+                    '<option value="Mardi">Mardi</option>' +
+                    '<option value="Jeudi">Jeudi</option>' +
+                    '<option value="Vendredi">Vendredi</option>' +
+                '</select>' +
+            '</td>' +
+            '<td>' +
+                '<div style="display:flex; gap:4px; flex-wrap:wrap;">' +
+                    '<button type="button" class="btn-action" onclick="ajouterAuPlan(\'' + a.id + '\')">➕ Plan</button>' +
+                    '<button type="button" class="filter-btn" style="' + (isRec ? 'background:#8e44ad; color:#fff;' : '') + '" title="Épingler comme rituel récurrent chaque semaine pour cet élève" onclick="toggleRecurrentEleve(\'' + a.id + '\')">🔄 Hebdo</button>' +
+                    '<button type="button" class="filter-btn" onclick="mettreEnAttente(\'' + a.id + '\')" title="Mettre en réserve">⏳</button>' +
+                    '<button type="button" class="btn-valid" onclick="validerDirectement(\'' + a.id + '\')" title="Valider pour cette séquence">✅</button>' +
+                    '<button type="button" class="filter-btn" onclick="masquerActivite(\'' + a.id + '\')" title="Masquer">🙈</button>' +
+                '</div>' +
+            '</td>' +
+        '</tr>';
+    });
+    tbody.innerHTML = html;
 }
-
-function assignerJour(idActivite, jour) {
     if (!idEleveCourant || !eleves[idEleveCourant]) return;
     let eleve = eleves[idEleveCourant]; if (!eleve.joursAssignes) eleve.joursAssignes = {};
     if (jour) eleve.joursAssignes[idActivite] = jour; else delete eleve.joursAssignes[idActivite];
