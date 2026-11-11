@@ -596,13 +596,87 @@ setItemSafe(KEY_ELEVES, JSON.stringify(eleves));
 setItemSafe(KEY_ATELIERS, compacterBasePourLocalStorage(baseDonnees));
 
 // ==========================================
-// 2. STOCKAGE HAUTE CAPACITÉ INDEXEDDB (500 Mo+) & SYNCHRO SANS PERTE
+// ==========================================
+// 2. SYSTÈME DE COMPTE (ID / MOT DE PASSE), STOCKAGE INDEXEDDB & SYNCHRO CLOUD ANTI-ÉCRASEMENT
 // ==========================================
 if (navigator.storage && navigator.storage.persist) {
     navigator.storage.persist().catch(() => {});
 }
 
+const KEY_USER_ACCOUNT = 'monCompteUtilisateur_Finale';
+const URL_FIREBASE_FIXE = "https://gestionclasse-cc401-default-rtdb.europe-west1.firebasedatabase.app";
+
+let compteUtilisateur = JSON.parse(localStorage.getItem(KEY_USER_ACCOUNT)) || { id: "", passHash: "" };
+let verrouSyncInitialeEnCours = true; // Empêche tout écrasement du Cloud au démarrage d'un 2e ordinateur
+let timerFirebaseSave = null;
+let sauvegardeFirebaseEnAttente = false;
+
+function nettoyerIdentifiantCompte(idRaw) {
+    return (idRaw || "").toString().trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9_-]/g, "_");
+}
+
+async function calculerHashMotDePasse(clair) {
+    const msgBuffer = new TextEncoder().encode((clair || "").trim() + "_SelClasse2026");
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function getUrlFirebaseCompte() {
+    let idPropre = nettoyerIdentifiantCompte(compteUtilisateur.id);
+    if (idPropre) {
+        return URL_FIREBASE_FIXE + "/comptes/" + idPropre;
+    }
+    return URL_FIREBASE_FIXE + "/classe_data";
+}
+
+// Compte le nombre total d'activités programmées dans tous les plans des élèves (pour détecter un éventuel plan vide)
+function compterTotalActivitesDansPlansEleves(elevesObj) {
+    if (!elevesObj || typeof elevesObj !== 'object') return 0;
+    let total = 0;
+    Object.values(elevesObj).forEach(el => {
+        if (!el) return;
+        if (Array.isArray(el.planHebdo)) total += el.planHebdo.length;
+        if (Array.isArray(el.semaines)) {
+            el.semaines.forEach(s => {
+                if (s && Array.isArray(s.planHebdo)) total += s.planHebdo.length;
+            });
+        }
+    });
+    return total;
+}
+
+// Supprime systématiquement tout doublon dans les plans, priorités et files d'attente d'un élève
+function dedoublonnerPlanEleve(e) {
+    if (!e) return;
+    const filtrerIdsValidesUniques = (arr) => {
+        if (!Array.isArray(arr)) return [];
+        let vus = new Set();
+        let res = [];
+        arr.forEach(id => {
+            if (id && !vus.has(id) && baseDonnees.some(b => b && b.id === id && !estLeconProf(b))) {
+                vus.add(id);
+                res.push(id);
+            }
+        });
+        return res;
+    };
+    e.planHebdo = filtrerIdsValidesUniques(e.planHebdo);
+    e.priorites = [...new Set(Array.isArray(e.priorites) ? e.priorites : [])];
+    e.recurrents = filtrerIdsValidesUniques(e.recurrents);
+    e.enAttente = filtrerIdsValidesUniques(e.enAttente).filter(id => !e.planHebdo.includes(id));
+
+    if (Array.isArray(e.semaines)) {
+        e.semaines.forEach(s => {
+            if (!s) return;
+            s.planHebdo = filtrerIdsValidesUniques(s.planHebdo);
+            s.priorites = [...new Set(Array.isArray(s.priorites) ? s.priorites : [])];
+        });
+    }
+}
+
 function marquerModificationLocale() {
+    if (verrouSyncInitialeEnCours) return; // Ne touche jamais au timestamp tant que la synchro initiale n'est pas finie
     let nowISO = new Date().toISOString();
     setItemSafe(KEY_LOCAL_UPDATED_AT, nowISO);
     sauvegarderDansIndexedDB();
@@ -610,27 +684,41 @@ function marquerModificationLocale() {
 }
 
 function sauvegarderEleves() {
-    Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
+    Object.values(eleves).forEach(e => {
+        dedoublonnerPlanEleve(e);
+        syncEleveVersSemaineActive(e);
+    });
     setItemSafe(KEY_ELEVES, JSON.stringify(eleves));
-    marquerModificationLocale();
-    declencherAutoSaveFirebase();
+    if (!verrouSyncInitialeEnCours) {
+        marquerModificationLocale();
+        declencherAutoSaveFirebase();
+    }
 }
+
 function sauvegarderBase() {
     setItemSafe(KEY_ATELIERS, compacterBasePourLocalStorage(baseDonnees));
     setItemSafe(KEY_SEQ_CUSTOM, JSON.stringify(sequencesCustom));
-    marquerModificationLocale();
-    declencherAutoSaveFirebase();
+    if (!verrouSyncInitialeEnCours) {
+        marquerModificationLocale();
+        declencherAutoSaveFirebase();
+    }
 }
+
 function sauvegarderProgrammations() {
     setItemSafe(KEY_PROG, JSON.stringify(programmations));
-    marquerModificationLocale();
-    declencherAutoSaveFirebase();
+    if (!verrouSyncInitialeEnCours) {
+        marquerModificationLocale();
+        declencherAutoSaveFirebase();
+    }
 }
+
 function sauvegarderProgPeriodes() {
     if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
     setItemSafe(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData));
-    marquerModificationLocale();
-    declencherAutoSaveFirebase();
+    if (!verrouSyncInitialeEnCours) {
+        marquerModificationLocale();
+        declencherAutoSaveFirebase();
+    }
 }
 
 function ouvrirIndexedDB() {
@@ -662,7 +750,6 @@ async function verifierSecoursIndexedDBAuDemarrage() {
     return new Promise(async (resolve) => {
         try {
             localStorage.removeItem(KEY_SNAPSHOTS_SECOURS);
-
             let db = await ouvrirIndexedDB();
             if (!db) return resolve();
             let tx = db.transaction('etat', 'readonly');
@@ -713,14 +800,15 @@ function enregistrerSnapshotSecoursAuto(forcer = false) {
             nbBase: baseDonnees.length,
             nbLecons: baseDonnees.filter(a => estLeconProf(a)).length,
             nbEleves: Object.keys(eleves).length,
+            nbPlans: compterTotalActivitesDansPlansEleves(eleves),
             payload: construirePayloadComplet()
         };
-        if (snapshotsMemoire.length > 0 && snapshotsMemoire[0].nbBase === snap.nbBase && snapshotsMemoire[0].nbLecons === snap.nbLecons && snapshotsMemoire[0].nbEleves === snap.nbEleves) {
+        if (snapshotsMemoire.length > 0 && snapshotsMemoire[0].nbBase === snap.nbBase && snapshotsMemoire[0].nbPlans === snap.nbPlans && snapshotsMemoire[0].nbEleves === snap.nbEleves) {
             snapshotsMemoire[0] = snap;
         } else {
             snapshotsMemoire.unshift(snap);
         }
-        if (snapshotsMemoire.length > 8) snapshotsMemoire.length = 8;
+        if (snapshotsMemoire.length > 12) snapshotsMemoire.length = 12;
         sauvegarderDansIndexedDB();
         afficherListeSnapshotsSecoursUI();
     } catch (e) {}
@@ -730,15 +818,15 @@ function afficherListeSnapshotsSecoursUI() {
     let cont = document.getElementById('listeSnapshotsAutoContainer');
     if (!cont) return;
     if (!Array.isArray(snapshotsMemoire) || snapshotsMemoire.length === 0) {
-        cont.innerHTML = '<em style="color:#7f8c8d; font-size:12.5px;">Aucune copie automatique enregistrée pour le moment (s\'enregistre automatiquement dès votre prochaine modification).</em>';
+        cont.innerHTML = '<em style="color:#7f8c8d; font-size:12.5px;">Aucune copie automatique enregistrée pour le moment.</em>';
         return;
     }
     cont.innerHTML = snapshotsMemoire.map((s, idx) =>
         '<div style="display:flex; justify-content:space-between; align-items:center; background:#fff; border:1px solid #cbd5e1; padding:6px 10px; border-radius:6px; font-size:12.5px; flex-wrap:wrap; gap:8px;">' +
-            '<span>🕒 <strong>' + escHTML(s.dateFR) + '</strong> — <strong>' + s.nbBase + '</strong> éléments (dont <strong>' + (s.nbLecons || 0) + '</strong> 👩‍🏫 leçons) & <strong>' + s.nbEleves + '</strong> élèves <small style="color:#16a085;">(Stocké sur IndexedDB Haute Capacité)</small></span>' +
+            '<span>🕒 <strong>' + escHTML(s.dateFR) + '</strong> — <strong>' + s.nbBase + '</strong> ateliers/leçons, <strong>' + s.nbEleves + '</strong> élèves (' + (s.nbPlans || 0) + ' act. dans les plans)</span>' +
             '<div style="display:flex; gap:6px;">' +
-                '<button type="button" class="btn-action" style="padding:3px 8px; font-size:11.5px;" onclick="restaurerSnapshotSecours(' + idx + ', true)" title="Récupère uniquement les éléments manquants de cette copie sans rien effacer">➕ Fusionner les manquants</button>' +
-                '<button type="button" class="filter-btn" style="padding:3px 8px; font-size:11.5px;" onclick="restaurerSnapshotSecours(' + idx + ', false)" title="Remplace toute la base par cette copie">↩️ Restaurer cet état</button>' +
+                '<button type="button" class="btn-action" style="padding:3px 8px; font-size:11.5px;" onclick="restaurerSnapshotSecours(' + idx + ', true)">➕ Fusionner manquants</button>' +
+                '<button type="button" class="filter-btn" style="padding:3px 8px; font-size:11.5px;" onclick="restaurerSnapshotSecours(' + idx + ', false)">↩️ Restaurer cet état complet</button>' +
             '</div>' +
         '</div>'
     ).join('');
@@ -751,9 +839,11 @@ function restaurerSnapshotSecours(idx, modeFusion = true) {
         let ajoutes = fusionnerTableauBaseSansPerte(snap.payload.base || []);
         sauvegarderBase();
         rafraichirToutApresImport();
-        showToast("✅ " + ajoutes + " élément(s) manquant(s) récupéré(s) depuis la copie du " + snap.dateFR + " !", "success");
-    } else if (confirm("Restaurer intégralement la copie du " + snap.dateFR + " (" + snap.nbBase + " éléments) ?")) {
-        importerDonneesUniversel(snap.payload, false);
+        showToast("✅ " + ajoutes + " élément(s) récupéré(s) depuis la copie du " + snap.dateFR + " !", "success");
+    } else if (confirm("Restaurer intégralement la copie du " + snap.dateFR + " (y compris tous les plans de travail des élèves de ce moment-là) ?")) {
+        verrouSyncInitialeEnCours = false;
+        importerDonneesUniversel(snap.payload, false, false);
+        sauvegarderVersFirebase(true);
     }
 }
 
@@ -797,7 +887,10 @@ function nettoyerArbrePourFirebase(val) {
 }
 
 function construirePayloadComplet() {
-    Object.values(eleves).forEach(e => syncEleveVersSemaineActive(e));
+    Object.values(eleves).forEach(e => {
+        dedoublonnerPlanEleve(e);
+        syncEleveVersSemaineActive(e);
+    });
     if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
     return {
         base: baseDonnees,
@@ -810,6 +903,7 @@ function construirePayloadComplet() {
         progPeriodesData: progPeriodesData,
         printConfig: printConfig,
         theme: localStorage.getItem(KEY_THEME) || 'pastel',
+        compteId: nettoyerIdentifiantCompte(compteUtilisateur.id) || 'defaut',
         updatedAt: localStorage.getItem(KEY_LOCAL_UPDATED_AT) || new Date().toISOString()
     };
 }
@@ -852,87 +946,13 @@ function compterElementsProgPeriodes(pData) {
 function fusionnerProgPeriodesSansPerte(progCible, progSource) {
     if (!progSource || typeof progSource !== 'object') return progCible;
     if (!progCible || typeof progCible !== 'object') return progSource;
-
-    let res = JSON.parse(JSON.stringify(progCible));
-    if (progSource.periodeActiveDash) res.periodeActiveDash = progSource.periodeActiveDash;
-    if (progSource.semaineIndexDash !== undefined) res.semaineIndexDash = progSource.semaineIndexDash;
-    if (!res.periodes) res.periodes = {};
-
-    if (progSource.periodes && typeof progSource.periodes === 'object') {
-        PERIODES_LISTE.forEach(per => {
-            let srcP = progSource.periodes[per];
-            if (!srcP) return;
-            if (!res.periodes[per]) {
-                res.periodes[per] = JSON.parse(JSON.stringify(srcP));
-                return;
-            }
-            let cibP = res.periodes[per];
-            if (srcP.dateDebutP_ISO) cibP.dateDebutP_ISO = srcP.dateDebutP_ISO;
-            if (srcP.nbSemaines) cibP.nbSemaines = Math.max(cibP.nbSemaines || 7, srcP.nbSemaines);
-
-            let srcSems = Array.isArray(srcP.semaines) ? srcP.semaines : (srcP.semaines && typeof srcP.semaines === 'object' ? Object.values(srcP.semaines) : []);
-            let cibSems = Array.isArray(cibP.semaines) ? cibP.semaines : (cibP.semaines && typeof cibP.semaines === 'object' ? Object.values(cibP.semaines) : []);
-
-            let maxS = Math.max(srcSems.length, cibSems.length);
-            for (let i = 0; i < maxS; i++) {
-                if (!cibSems[i] && srcSems[i]) {
-                    cibSems[i] = JSON.parse(JSON.stringify(srcSems[i]));
-                    continue;
-                }
-                if (!srcSems[i]) continue;
-
-                let sSrc = srcSems[i], sCib = cibSems[i];
-                if (sSrc.dateDebutISO) { sCib.dateDebutISO = sSrc.dateDebutISO; sCib.dateDebut = sSrc.dateDebut || ""; sCib.dateFin = sSrc.dateFin || ""; }
-                if (sSrc.ordrePassages) sCib.ordrePassages = JSON.parse(JSON.stringify(sSrc.ordrePassages));
-                if (!sCib.niveaux) sCib.niveaux = {};
-
-                if (sSrc.niveaux) {
-                    NIVEAUX_LISTE.forEach(niv => {
-                        if (!sSrc.niveaux[niv]) return;
-                        if (!sCib.niveaux[niv]) { sCib.niveaux[niv] = JSON.parse(JSON.stringify(sSrc.niveaux[niv])); return; }
-                        ["francais", "maths"].forEach(pole => {
-                            let bSrc = sSrc.niveaux[niv][pole];
-                            if (!bSrc) return;
-                            if (!sCib.niveaux[niv][pole]) { sCib.niveaux[niv][pole] = JSON.parse(JSON.stringify(bSrc)); return; }
-                            let bCib = sCib.niveaux[niv][pole];
-
-                            let seqsSrc = Array.isArray(bSrc.sequences) ? bSrc.sequences : (bSrc.sequences && typeof bSrc.sequences === 'object' ? Object.values(bSrc.sequences) : []);
-                            let seqsCib = Array.isArray(bCib.sequences) ? bCib.sequences : (bCib.sequences && typeof bCib.sequences === 'object' ? Object.values(bCib.sequences) : []);
-                            seqsSrc.forEach(sq => {
-                                if (!sq || !sq.nom) return;
-                                let ex = seqsCib.find(x => x && x.nom && x.nom.toLowerCase() === sq.nom.toLowerCase());
-                                if (!ex) seqsCib.push({ nom: sq.nom, fait: Boolean(sq.fait) });
-                                else if (sq.fait) ex.fait = true;
-                            });
-                            bCib.sequences = seqsCib;
-
-                            if (!bCib.jours) bCib.jours = {};
-                            if (bSrc.jours) {
-                                JOURS_SEMAINE_PROF.forEach(j => {
-                                    let jSrc = bSrc.jours[j];
-                                    if (jSrc && ((jSrc.texte && jSrc.texte.trim() !== "") || jSrc.lien || jSrc.fait)) {
-                                        bCib.jours[j] = {
-                                            texte: jSrc.texte || (bCib.jours[j] ? bCib.jours[j].texte : "") || "",
-                                            lien: jSrc.lien || (bCib.jours[j] ? bCib.jours[j].lien : "") || "",
-                                            pageProf: jSrc.pageProf || (bCib.jours[j] ? bCib.jours[j].pageProf : "") || "",
-                                            fait: Boolean(jSrc.fait || (bCib.jours[j] && bCib.jours[j].fait))
-                                        };
-                                    }
-                                });
-                            }
-                        });
-                    });
-                }
-            }
-            cibP.semaines = cibSems;
-        });
-    }
-    return res;
+    return progSource;
 }
 
 function importerDonneesUniversel(rawData, modeFusionSansPerte = false, depuisSyncCloud = false) {
     if (!rawData) { showToast("Aucune donnée trouvée.", "error"); return false; }
     let data = parseSiString(rawData);
+    if (data.data && typeof data.data === 'object' && (data.data.base || data.data.eleves)) data = data.data;
     if (data.classe_data && typeof data.classe_data === 'object') data = data.classe_data;
 
     let nouvBase = parseSiString(data.base || data.ateliers || data.baseDonnees || data[KEY_ATELIERS] || (Array.isArray(data) ? data : null));
@@ -974,7 +994,10 @@ function importerDonneesUniversel(rawData, modeFusionSansPerte = false, depuisSy
         } else {
             eleves = nouvEleves;
         }
-        Object.values(eleves).forEach(el => assurerStructureSemaines(el));
+        Object.values(eleves).forEach(el => {
+            assurerStructureSemaines(el);
+            dedoublonnerPlanEleve(el);
+        });
         setItemSafe(KEY_ELEVES, JSON.stringify(eleves));
     }
     if (nouvImages && typeof nouvImages === 'object') {
@@ -1010,11 +1033,7 @@ function importerDonneesUniversel(rawData, modeFusionSansPerte = false, depuisSy
         setItemSafe(KEY_LECONS_PROF, JSON.stringify(planningLeconsProf));
     }
     if (nouvProgHebdo && typeof nouvProgHebdo === 'object') {
-        if (modeFusionSansPerte && progPeriodesData) {
-            progPeriodesData = fusionnerProgPeriodesSansPerte(progPeriodesData, nouvProgHebdo);
-        } else {
-            progPeriodesData = nouvProgHebdo;
-        }
+        progPeriodesData = nouvProgHebdo;
         if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
         setItemSafe(KEY_PROG_HEBDO, JSON.stringify(progPeriodesData));
     }
@@ -1023,12 +1042,12 @@ function importerDonneesUniversel(rawData, modeFusionSansPerte = false, depuisSy
     if (depuisSyncCloud && data.updatedAt) {
         setItemSafe(KEY_LOCAL_UPDATED_AT, data.updatedAt);
         sauvegarderDansIndexedDB();
-    } else {
+    } else if (!verrouSyncInitialeEnCours) {
         marquerModificationLocale();
     }
 
     rafraichirToutApresImport();
-    showToast("✅ Tout est synchronisé (" + baseDonnees.length + " éléments, " + Object.keys(eleves).length + " élèves, programmation & leçons) !", "success");
+    showToast("✅ Synchronisé (" + baseDonnees.length + " éléments, " + Object.keys(eleves).length + " élèves, " + compterTotalActivitesDansPlansEleves(eleves) + " act. dans les plans) !", "success");
     return true;
 }
 
@@ -1054,6 +1073,7 @@ function rafraichirToutApresImport() {
     if (typeof assurerStructureProgPeriodes === 'function') assurerStructureProgPeriodes();
     migrerCouleurFrancaisCPVertClair();
     eliminerDoublonsHistoriques();
+    Object.values(eleves).forEach(e => dedoublonnerPlanEleve(e));
     trierBaseDonnees();
     majListeTypesSelect();
     initialiserSelectsFormulaire();
@@ -1069,6 +1089,7 @@ function rafraichirToutApresImport() {
     afficherListeSnapshotsSecoursUI();
     rafraichirDashboard();
     if (idEleveCourant && eleves[idEleveCourant]) chargerEleve();
+    majBandeauCompteUI();
 }
 
 function restaurerFichierJSON(event) {
@@ -1078,7 +1099,10 @@ function restaurerFichierJSON(event) {
     let lecteur = new FileReader();
     lecteur.onload = function(e) {
         try {
-            importerDonneesUniversel(JSON.parse(e.target.result), false);
+            verrouSyncInitialeEnCours = false;
+            if (importerDonneesUniversel(JSON.parse(e.target.result), false, false)) {
+                sauvegarderVersFirebase(true);
+            }
         } catch (err) {
             showToast("Erreur : ce fichier n'est pas un JSON valide.", "error");
         }
@@ -1108,7 +1132,11 @@ function restaurerDepuisTexteColle() {
     }
     try {
         let parsed = typeof txt === 'string' ? JSON.parse(txt) : txt;
-        if (importerDonneesUniversel(parsed, false)) zone.value = "";
+        verrouSyncInitialeEnCours = false;
+        if (importerDonneesUniversel(parsed, false, false)) {
+            zone.value = "";
+            sauvegarderVersFirebase(true);
+        }
     } catch (err) {
         showToast("Le texte collé n'est pas un JSON valide.", "error");
     }
@@ -1121,7 +1149,7 @@ function exporterSauvegardeJSON() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = "Sauvegarde_GestionClasse_" + new Date().toISOString().slice(0, 10) + ".json";
+    a.download = "Sauvegarde_GestionClasse_" + (nettoyerIdentifiantCompte(compteUtilisateur.id) || "classe") + "_" + new Date().toISOString().slice(0, 10) + ".json";
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(url);
     showToast("💾 Fichier de sauvegarde téléchargé !", "success");
@@ -1134,10 +1162,6 @@ function viderCacheApplication() {
     setTimeout(() => location.reload(true), 800);
 }
 
-let timerFirebaseSave = null;
-let sauvegardeFirebaseEnAttente = false;
-const URL_FIREBASE_FIXE = "https://gestionclasse-cc401-default-rtdb.europe-west1.firebasedatabase.app";
-
 function majBadgeSecuriteUI(texte, couleurBg, couleurTexte) {
     let b = document.getElementById('badgeSecuriteBase');
     if (b) {
@@ -1145,17 +1169,173 @@ function majBadgeSecuriteUI(texte, couleurBg, couleurTexte) {
         b.style.background = couleurBg;
         b.style.color = couleurTexte;
     }
+    let bTop = document.getElementById('badgeStatutSyncCompteTop');
+    if (bTop) {
+        bTop.innerText = texte;
+        bTop.style.background = couleurBg;
+        bTop.style.color = couleurTexte;
+    }
+}
+
+// Injecte automatiquement en haut de l'application la barre de connexion par Identifiant / Mot de passe
+function initialiserBandeauCompteUI() {
+    if (document.getElementById('bandeauCompteCloudTop')) return;
+    let bar = document.createElement('div');
+    bar.id = 'bandeauCompteCloudTop';
+    bar.className = 'no-print';
+    bar.style.cssText = 'background:#1b4f72; color:#fff; padding:6px 14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; font-size:12.5px; border-bottom:2px solid #154360;';
+    document.body.insertBefore(bar, document.body.firstChild);
+
+    let modal = document.createElement('div');
+    modal.id = 'modalCompteCloudAuth';
+    modal.className = 'modal-overlay no-print';
+    modal.style.display = 'none';
+    modal.innerHTML =
+        '<div class="modal-card" style="max-width:480px;">' +
+            '<h3 style="margin-top:0; color:#1b4f72;">🔐 Connexion & Sauvegarde par Compte</h3>' +
+            '<p style="font-size:12.5px; color:#555; line-height:1.4;">Entrez votre <strong>Identifiant</strong> et votre <strong>Mot de passe</strong> sur votre ordinateur de maison et sur celui de l\'école pour synchroniser vos plans de travail en toute sécurité sans jamais les écraser.</p>' +
+            '<div style="display:flex; flex-direction:column; gap:10px; margin:14px 0;">' +
+                '<label style="font-weight:bold; font-size:13px;">👤 Identifiant du compte (ex: emie_st_avit) :' +
+                    '<input type="text" id="inputAuthCompteId" placeholder="Ex: emie_st_avit" style="width:100%; padding:8px; margin-top:4px; font-size:14px; font-weight:bold;">' +
+                '</label>' +
+                '<label style="font-weight:bold; font-size:13px;">🔑 Mot de passe :' +
+                    '<input type="password" id="inputAuthComptePass" placeholder="Votre mot de passe..." style="width:100%; padding:8px; margin-top:4px; font-size:14px;">' +
+                '</label>' +
+            '</div>' +
+            '<div id="msgRetourAuthCompte" style="font-size:12.5px; font-weight:bold; margin-bottom:10px;"></div>' +
+            '<div style="display:flex; justify-content:space-between; gap:8px; flex-wrap:wrap;">' +
+                '<button type="button" class="btn-valid" style="flex:1; padding:8px 12px;" onclick="validerConnexionCompteCloud(\'auto\')">🔄 Connecter / Synchroniser</button>' +
+                '<button type="button" class="btn-action" style="padding:8px 12px;" onclick="validerConnexionCompteCloud(\'pull\')" title="Télécharger de force les plans présents sur le Cloud">⬇️ Charger du Cloud</button>' +
+                '<button type="button" class="filter-btn" style="padding:8px 12px;" onclick="validerConnexionCompteCloud(\'push\')" title="Envoyer de force les plans de cet ordinateur vers le Cloud">⬆️ Envoyer cet ordi</button>' +
+                '<button type="button" class="btn-remove" style="padding:8px 12px;" onclick="fermerModal(\'modalCompteCloudAuth\')">Fermer</button>' +
+            '</div>' +
+        '</div>';
+    document.body.appendChild(modal);
+    majBandeauCompteUI();
+}
+
+function majBandeauCompteUI() {
+    let bar = document.getElementById('bandeauCompteCloudTop');
+    if (!bar) return;
+    let idPropre = nettoyerIdentifiantCompte(compteUtilisateur.id);
+    let nbPlans = compterTotalActivitesDansPlansEleves(eleves);
+    let labelCompte = idPropre
+        ? '🔐 Compte connecté : <strong style="color:#ffe599;">' + escHTML(idPropre) + '</strong>'
+        : '⚠️ <strong>Aucun compte connecté</strong> (Mode global — Cliquez sur « 🔐 Compte & Mot de passe » pour sécuriser vos 2 ordinateurs)';
+
+    bar.innerHTML =
+        '<div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">' +
+            '<span>' + labelCompte + '</span>' +
+            '<span id="badgeStatutSyncCompteTop" style="padding:2px 8px; border-radius:12px; font-size:11.5px; font-weight:bold; background:#e8f8f5; color:#117864;">🛡️ ' + baseDonnees.length + ' élém. • ' + Object.keys(eleves).length + ' élèves (' + nbPlans + ' act. en plan)</span>' +
+        '</div>' +
+        '<div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">' +
+            '<button type="button" class="filter-btn" style="padding:3px 9px; font-size:11.5px; background:#fef9e7; color:#7d6608; border-color:#f39c12; font-weight:bold;" onclick="ouvrirModalConnexionCompte()">🔐 Compte & Mot de passe</button>' +
+            '<button type="button" class="filter-btn" style="padding:3px 9px; font-size:11.5px; background:#fff; color:#1b4f72; font-weight:bold;" onclick="chargerDepuisFirebase(true)" title="Récupérer immédiatement la dernière sauvegarde du Cloud">⬇️ Charger du Cloud</button>' +
+            '<button type="button" class="btn-valid" style="padding:3px 9px; font-size:11.5px;" onclick="sauvegarderVersFirebase(true)" title="Envoyer immédiatement vos plans vers le Cloud">⬆️ Sauvegarder sur le Cloud</button>' +
+        '</div>';
+}
+
+function ouvrirModalConnexionCompte() {
+    initialiserBandeauCompteUI();
+    let inpId = document.getElementById('inputAuthCompteId');
+    let inpPass = document.getElementById('inputAuthComptePass');
+    if (inpId) inpId.value = compteUtilisateur.id || "";
+    if (inpPass) inpPass.value = "";
+    let msg = document.getElementById('msgRetourAuthCompte');
+    if (msg) msg.innerText = "";
+    ouvrirModal('modalCompteCloudAuth');
+}
+
+async function validerConnexionCompteCloud(modeAction = 'auto') {
+    let inpId = document.getElementById('inputAuthCompteId');
+    let inpPass = document.getElementById('inputAuthComptePass');
+    let msg = document.getElementById('msgRetourAuthCompte');
+    let idSaisi = nettoyerIdentifiantCompte(inpId ? inpId.value : "");
+    let passClair = inpPass ? inpPass.value.trim() : "";
+
+    if (!idSaisi) {
+        if (msg) { msg.style.color = "#c0392b"; msg.innerText = "⚠️ Veuillez saisir un identifiant (ex: emie_st_avit)."; }
+        return;
+    }
+    let passHash = passClair ? await calculerHashMotDePasse(passClair) : (compteUtilisateur.passHash || "");
+    if (!passHash) {
+        if (msg) { msg.style.color = "#c0392b"; msg.innerText = "⚠️ Veuillez saisir votre mot de passe."; }
+        return;
+    }
+
+    if (msg) { msg.style.color = "#d35400"; msg.innerText = "⏳ Connexion au compte « " + idSaisi + " » en cours..."; }
+
+    try {
+        let urlCompte = URL_FIREBASE_FIXE + "/comptes/" + idSaisi + ".json";
+        let res = await fetch(urlCompte, { cache: "no-store" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        let cloudNode = await res.json();
+
+        // Vérification du mot de passe si le compte existe déjà sur Firebase
+        if (cloudNode && cloudNode.auth && cloudNode.auth.passHash) {
+            if (cloudNode.auth.passHash !== passHash) {
+                if (msg) { msg.style.color = "#c0392b"; msg.innerText = "❌ Mot de passe incorrect pour le compte « " + idSaisi + " »."; }
+                showToast("❌ Mot de passe incorrect.", "error");
+                return;
+            }
+        }
+
+        compteUtilisateur = { id: idSaisi, passHash: passHash };
+        setItemSafe(KEY_USER_ACCOUNT, JSON.stringify(compteUtilisateur));
+        majBandeauCompteUI();
+
+        let cloudData = (cloudNode && cloudNode.data) ? cloudNode.data : null;
+
+        if (!cloudData || modeAction === 'push') {
+            verrouSyncInitialeEnCours = false;
+            marquerModificationLocale();
+            await sauvegarderVersFirebase(true);
+            if (msg) { msg.style.color = "#27ae60"; msg.innerText = "✅ Compte « " + idSaisi + " » créé et données de cet ordinateur sauvegardées !"; }
+            setTimeout(() => fermerModal('modalCompteCloudAuth'), 900);
+        } else if (modeAction === 'pull') {
+            verrouSyncInitialeEnCours = false;
+            importerDonneesUniversel(cloudData, false, true);
+            if (msg) { msg.style.color = "#27ae60"; msg.innerText = "✅ Données du compte « " + idSaisi + " » chargées sur cet ordinateur !"; }
+            setTimeout(() => fermerModal('modalCompteCloudAuth'), 900);
+        } else {
+            await chargerDepuisFirebase(false);
+            if (msg) { msg.style.color = "#27ae60"; msg.innerText = "✅ Compte « " + idSaisi + " » connecté et synchronisé !"; }
+            setTimeout(() => fermerModal('modalCompteCloudAuth'), 900);
+        }
+    } catch (e) {
+        if (msg) { msg.style.color = "#c0392b"; msg.innerText = "⚠️ Erreur réseau : " + e.message; }
+    }
 }
 
 async function sauvegarderVersFirebase(forcerManuellement = false, keepaliveMode = false) {
+    // BLOCAGE ABSOLU : un ordinateur qui vient de s'allumer n'a pas le droit d'écrire sur Firebase tant qu'il n'a pas lu le Cloud
+    if (verrouSyncInitialeEnCours && !forcerManuellement) return;
     if (!forcerManuellement && baseDonnees.length === 0 && Object.keys(eleves).length === 0) return;
+
     sauvegardeFirebaseEnAttente = false;
     majBadgeSecuriteUI("⏳ Synchro Cloud en cours...", "#fef9e7", "#7d6608");
 
     const rawPayload = construirePayloadComplet();
     const safePayload = nettoyerArbrePourFirebase(rawPayload);
+    let idPropre = nettoyerIdentifiantCompte(compteUtilisateur.id);
 
     try {
+        // Si un compte (Identifiant + Mot de passe) est configuré, on sauvegarde dans son espace dédié sécurisé
+        if (idPropre && compteUtilisateur.passHash) {
+            let compteNode = {
+                auth: { id: idPropre, passHash: compteUtilisateur.passHash, updatedAt: rawPayload.updatedAt },
+                data: safePayload
+            };
+            let resC = await fetch(URL_FIREBASE_FIXE + "/comptes/" + idPropre + ".json", {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(compteNode),
+                keepalive: keepaliveMode
+            });
+            if (!resC.ok) throw new Error("HTTP " + resC.status);
+        }
+
+        // On met aussi à jour le noeud principal par sécurité
         let res = await fetch(URL_FIREBASE_FIXE + "/classe_data.json", {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -1163,21 +1343,23 @@ async function sauvegarderVersFirebase(forcerManuellement = false, keepaliveMode
             keepalive: keepaliveMode
         });
         if (!res.ok) throw new Error("HTTP " + res.status);
+
         let heure = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        let nbPlans = compterTotalActivitesDansPlansEleves(eleves);
         let statut = document.getElementById('statutFirebase');
         if (statut) {
-            statut.innerText = "🔥 Synchro Cloud OK à " + heure + " (" + baseDonnees.length + " éléments, " + Object.keys(eleves).length + " élèves)";
+            statut.innerText = "🔥 Synchro Cloud OK à " + heure + (idPropre ? " [Compte : " + idPropre + "]" : "") + " (" + nbPlans + " act. dans les plans)";
             statut.style.color = "#27ae60";
         }
-        majBadgeSecuriteUI("🛡️ Sauvegardé (Haute Capacité + Cloud " + heure + ")", "#e8f8f5", "#117864");
-        if (forcerManuellement) showToast("⬆️ Données envoyées et sécurisées sur Firebase !", "success");
+        majBadgeSecuriteUI("🛡️ Sauvegardé (" + heure + " • " + nbPlans + " act. plans)", "#e8f8f5", "#117864");
+        if (forcerManuellement) showToast("⬆️ Données envoyées et sécurisées sur votre compte Cloud !", "success");
     } catch (e) {
         let statut = document.getElementById('statutFirebase');
         if (statut) {
             statut.innerText = "⚠️ Sauvegardé sur l'appareil (Cloud hors-ligne : " + e.message + ")";
             statut.style.color = "#e67e22";
         }
-        majBadgeSecuriteUI("🛡️ Sauvegardé sur l'appareil (IndexedDB 500 Mo+)", "#fef9e7", "#d35400");
+        majBadgeSecuriteUI("🛡️ Sauvegardé sur l'appareil (IndexedDB)", "#fef9e7", "#d35400");
         if (forcerManuellement) showToast("Erreur Firebase : " + e.message, "error");
     }
 }
@@ -1189,9 +1371,28 @@ async function chargerDepuisFirebase(forcerManuellement = false) {
         statut.style.color = "#f39c12";
     }
     try {
-        let res = await fetch(URL_FIREBASE_FIXE + "/classe_data.json", { cache: "no-store" });
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        let data = await res.json();
+        let idPropre = nettoyerIdentifiantCompte(compteUtilisateur.id);
+        let data = null;
+
+        // 1. Si l'utilisateur est connecté à son compte, on lit en priorité son espace dédié
+        if (idPropre && compteUtilisateur.passHash) {
+            let resC = await fetch(URL_FIREBASE_FIXE + "/comptes/" + idPropre + ".json", { cache: "no-store" });
+            if (resC.ok) {
+                let nodeC = await resC.json();
+                if (nodeC && nodeC.auth && nodeC.auth.passHash && nodeC.auth.passHash !== compteUtilisateur.passHash) {
+                    showToast("❌ Mot de passe du compte « " + idPropre + " » invalide.", "error");
+                    verrouSyncInitialeEnCours = false;
+                    return;
+                }
+                if (nodeC && nodeC.data) data = nodeC.data;
+            }
+        }
+
+        // 2. Si le compte dédié n'avait pas encore de données, on regarde le noeud général
+        if (!data) {
+            let res = await fetch(URL_FIREBASE_FIXE + "/classe_data.json", { cache: "no-store" });
+            if (res.ok) data = await res.json();
+        }
 
         let nbBaseCloud = (data && Array.isArray(data.base)) ? data.base.length : 0;
         let nbElevesCloud = (data && data.eleves) ? Object.keys(data.eleves).length : 0;
@@ -1203,23 +1404,40 @@ async function chargerDepuisFirebase(forcerManuellement = false) {
             let rawLocalTs = localStorage.getItem(KEY_LOCAL_UPDATED_AT);
             let tsLocal = (rawLocalTs && !isNaN(Date.parse(rawLocalTs))) ? Date.parse(rawLocalTs) : 0;
 
+            let nbPlansCloud = compterTotalActivitesDansPlansEleves(data.eleves);
+            let nbPlansLocal = compterTotalActivitesDansPlansEleves(eleves);
+
             let heureCloud = tsCloud > 0 ? new Date(tsCloud).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : "";
             let heureLocal = tsLocal > 0 ? new Date(tsLocal).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : "";
 
-            if (localEstVide || forcerManuellement || tsCloud > tsLocal) {
+            // PROTECTION ANTI-ÉCRASEMENT DES PLANS DE TRAVAIL :
+            // Si le Cloud est plus récent OU si le Cloud contient des plans de travail alors que cet ordinateur n'en a pas (ou beaucoup moins)
+            let cloudAPlusDePlans = (nbPlansCloud > nbPlansLocal && verrouSyncInitialeEnCours);
+
+            if (localEstVide || forcerManuellement || tsCloud > tsLocal || cloudAPlusDePlans) {
                 importerDonneesUniversel(data, false, true);
+                verrouSyncInitialeEnCours = false;
                 if (statut) {
-                    statut.innerText = "🔥 Version Cloud plus récente chargée (" + heureCloud + ")";
+                    statut.innerText = "🔥 Version Cloud chargée (" + heureCloud + " • " + nbPlansCloud + " act. dans les plans)";
                     statut.style.color = "#27ae60";
                 }
                 majBadgeSecuriteUI("🛡️ À jour avec le Cloud (" + heureCloud + ")", "#e8f8f5", "#117864");
             } else if (tsLocal > tsCloud) {
+                verrouSyncInitialeEnCours = false;
+                // Sécurité supplémentaire : si l'ordi local a moins d'activités en plan que le Cloud, on demande confirmation avant d'écraser le Cloud !
+                if (nbPlansCloud > nbPlansLocal) {
+                    if (confirm("⚠️ Protection Anti-Perte :\n\nLe Cloud contient " + nbPlansCloud + " activités dans les plans des élèves (sauvegardés le " + heureCloud + "), alors que cet ordinateur n'en contient que " + nbPlansLocal + ".\n\nVoulez-vous CHARGER les plans du Cloud (recommandé : cliquez sur OK) ?")) {
+                        importerDonneesUniversel(data, false, true);
+                        return;
+                    }
+                }
                 await sauvegarderVersFirebase(false);
                 if (statut) {
                     statut.innerText = "🔥 Version locale plus récente (" + heureLocal + ") envoyée vers le Cloud";
                     statut.style.color = "#27ae60";
                 }
             } else {
+                verrouSyncInitialeEnCours = false;
                 if (statut) {
                     statut.innerText = "🔥 Synchronisé — Dernière sauvegarde à jour (" + (heureLocal || "OK") + ")";
                     statut.style.color = "#27ae60";
@@ -1227,10 +1445,12 @@ async function chargerDepuisFirebase(forcerManuellement = false) {
                 majBadgeSecuriteUI("🛡️ Synchronisé (" + (heureLocal || "OK") + ")", "#e8f8f5", "#117864");
             }
         } else {
+            verrouSyncInitialeEnCours = false;
             if (statut) { statut.innerText = "ℹ️ Cloud prêt. Envoi de vos données locales..."; statut.style.color = "#2980b9"; }
             if (baseDonnees.length > 0 || Object.keys(eleves).length > 0) sauvegarderVersFirebase(false);
         }
     } catch (e) {
+        verrouSyncInitialeEnCours = false;
         if (statut) { statut.innerText = "⚠️ Mode hors-ligne (vos données locales sont protégées) : " + e.message; statut.style.color = "#e67e22"; }
     }
 }
@@ -1241,6 +1461,13 @@ async function inspecterToutesBranchesFirebase() {
         if (!res.ok) throw new Error("HTTP " + res.status);
         let rootData = await res.json();
         if (!rootData) { showToast("La base Firebase est vide.", "error"); return; }
+        verrouSyncInitialeEnCours = false;
+        if (rootData.comptes && typeof rootData.comptes === 'object') {
+            let cIds = Object.keys(rootData.comptes);
+            for (let cid of cIds) {
+                if (rootData.comptes[cid] && rootData.comptes[cid].data && importerDonneesUniversel(rootData.comptes[cid].data, true)) return;
+            }
+        }
         if (importerDonneesUniversel(rootData, true)) return;
         for (let cle of Object.keys(rootData)) {
             if (rootData[cle] && typeof rootData[cle] === 'object' && importerDonneesUniversel(rootData[cle], true)) return;
@@ -1250,13 +1477,14 @@ async function inspecterToutesBranchesFirebase() {
 }
 
 function declencherAutoSaveFirebase() {
+    if (verrouSyncInitialeEnCours) return;
     sauvegardeFirebaseEnAttente = true;
     clearTimeout(timerFirebaseSave);
     timerFirebaseSave = setTimeout(() => sauvegarderVersFirebase(false, false), 300);
 }
 
 window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && sauvegardeFirebaseEnAttente) {
+    if (document.visibilityState === 'hidden' && sauvegardeFirebaseEnAttente && !verrouSyncInitialeEnCours) {
         clearTimeout(timerFirebaseSave);
         sauvegarderVersFirebase(false, true);
     } else if (document.visibilityState === 'visible' && !sauvegardeFirebaseEnAttente) {
@@ -1271,7 +1499,7 @@ window.addEventListener('focus', () => {
 });
 
 window.addEventListener('beforeunload', () => {
-    if (sauvegardeFirebaseEnAttente) {
+    if (sauvegardeFirebaseEnAttente && !verrouSyncInitialeEnCours) {
         clearTimeout(timerFirebaseSave);
         sauvegarderVersFirebase(false, true);
     }
@@ -1279,8 +1507,10 @@ window.addEventListener('beforeunload', () => {
 
 let connexionInitialeFirebaseFaite = false;
 async function tenterConnexionAutoFirebase() {
+    initialiserBandeauCompteUI();
     if (connexionInitialeFirebaseFaite) return;
     connexionInitialeFirebaseFaite = true;
+    verrouSyncInitialeEnCours = true;
     await verifierSecoursIndexedDBAuDemarrage();
     await chargerDepuisFirebase(false);
 }
@@ -3072,49 +3302,65 @@ function masquerActivite(idActivite) { if (!idEleveCourant) return; eleves[idEle
 function demasquerActivite(idActivite) { if (!idEleveCourant) return; eleves[idEleveCourant].masquees = eleves[idEleveCourant].masquees.filter(id => id !== idActivite); sauvegarderEleves(); afficherRessourcesDisponibles(); afficherHistorique(); }
 
 function ajouterAuPlan(idActivite) {
-    const eleve = eleves[idEleveCourant], max = eleve.maxAteliers || 100;
-    let seqInput = document.getElementById('seq_dispo_' + idActivite);
-    let seqChoisie = seqInput ? seqInput.value : "";
-    if (!eleve.sequencesChoisies) eleve.sequencesChoisies = {};
-    if (seqChoisie) eleve.sequencesChoisies[idActivite] = seqChoisie;
+    const eleve = eleves[idEleveCourant], max = eleve.maxAteliers || 100;
+    if (!eleve) return;
+    dedoublonnerPlanEleve(eleve);
 
-    if (eleve.planHebdo.length >= max) {
-        if (!eleve.enAttente) eleve.enAttente = [];
-        if (!eleve.enAttente.includes(idActivite)) eleve.enAttente.push(idActivite);
-        sauvegarderEleves(); afficherRessourcesDisponibles(); afficherPlanHebdo();
-        showToast("⚠️ Quota (" + max + ") atteint : placé en file d'attente !", "error");
-        return;
-    }
-    const actAjoutee = baseDonnees.find(b => b.id === idActivite);
-    if (actAjoutee && estActiviteTablette(actAjoutee)) {
-        let maxTab = eleve.maxTablettes ?? 2, nbTabActuels = eleve.planHebdo.map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length;
-        if (nbTabActuels >= maxTab) { showToast("🚫 Quota tablettes (" + maxTab + ") atteint.", "error"); return; }
-    }
-    let selectJourElem = document.getElementById('jour_dispo_' + idActivite), jourChoisi = selectJourElem ? selectJourElem.value : "";
-    eleve.planHebdo.push(idActivite); if (!eleve.joursAssignes) eleve.joursAssignes = {}; if (jourChoisi) eleve.joursAssignes[idActivite] = jourChoisi;
-    sauvegarderEleves(); majBarreSemainesUI(); afficherRessourcesDisponibles(); afficherPlanHebdo(); rafraichirDashboard();
-    showToast(jourChoisi ? "Ajouté (" + jourChoisi + ")" : "Ajouté au plan !");
+    // Protection absolue contre les doublons dans le plan de la semaine
+    if (eleve.planHebdo.includes(idActivite)) {
+        showToast("ℹ️ Cette activité est déjà présente dans le plan de " + eleve.nom + ".", "error");
+        return;
+    }
+
+    let seqInput = document.getElementById('seq_dispo_' + idActivite);
+    let seqChoisie = seqInput ? seqInput.value : "";
+    if (!eleve.sequencesChoisies) eleve.sequencesChoisies = {};
+    if (seqChoisie) eleve.sequencesChoisies[idActivite] = seqChoisie;
+
+    if (eleve.planHebdo.length >= max) {
+        if (!eleve.enAttente) eleve.enAttente = [];
+        if (!eleve.enAttente.includes(idActivite)) eleve.enAttente.push(idActivite);
+        sauvegarderEleves(); afficherRessourcesDisponibles(); afficherPlanHebdo();
+        showToast("⚠️ Quota (" + max + ") atteint : placé en file d'attente !", "error");
+        return;
+    }
+    const actAjoutee = baseDonnees.find(b => b.id === idActivite);
+    if (actAjoutee && estActiviteTablette(actAjoutee)) {
+        let maxTab = eleve.maxTablettes ?? 2, nbTabActuels = eleve.planHebdo.map(id => baseDonnees.find(b => b.id === id)).filter(b => b && estActiviteTablette(b)).length;
+        if (nbTabActuels >= maxTab) { showToast("🚫 Quota tablettes (" + maxTab + ") atteint.", "error"); return; }
+    }
+    let selectJourElem = document.getElementById('jour_dispo_' + idActivite), jourChoisi = selectJourElem ? selectJourElem.value : "";
+    eleve.planHebdo.push(idActivite);
+    eleve.enAttente = (eleve.enAttente || []).filter(id => id !== idActivite);
+    if (!eleve.joursAssignes) eleve.joursAssignes = {};
+    if (jourChoisi) eleve.joursAssignes[idActivite] = jourChoisi;
+    sauvegarderEleves(); majBarreSemainesUI(); afficherRessourcesDisponibles(); afficherPlanHebdo(); rafraichirDashboard();
+    showToast(jourChoisi ? "Ajouté (" + jourChoisi + ")" : "Ajouté au plan !");
 }
 
 function mettreEnAttente(idActivite) {
-    if (!idEleveCourant) return;
-    let eleve = eleves[idEleveCourant]; if (!eleve.enAttente) eleve.enAttente = [];
-    let seqInput = document.getElementById('seq_dispo_' + idActivite);
-    if (seqInput && seqInput.value) {
-        if (!eleve.sequencesChoisies) eleve.sequencesChoisies = {};
-        eleve.sequencesChoisies[idActivite] = seqInput.value;
-    }
-    if (!eleve.enAttente.includes(idActivite)) eleve.enAttente.push(idActivite);
-    sauvegarderEleves(); afficherRessourcesDisponibles(); afficherPlanHebdo();
-    showToast("⏳ Placé en attente pour la semaine suivante.");
+    if (!idEleveCourant) return;
+    let eleve = eleves[idEleveCourant]; if (!eleve.enAttente) eleve.enAttente = [];
+    let seqInput = document.getElementById('seq_dispo_' + idActivite);
+    if (seqInput && seqInput.value) {
+        if (!eleve.sequencesChoisies) eleve.sequencesChoisies = {};
+        eleve.sequencesChoisies[idActivite] = seqInput.value;
+    }
+    if (!eleve.planHebdo.includes(idActivite) && !eleve.enAttente.includes(idActivite)) {
+        eleve.enAttente.push(idActivite);
+    }
+    sauvegarderEleves(); afficherRessourcesDisponibles(); afficherPlanHebdo();
+    showToast("⏳ Placé en attente pour la semaine suivante.");
 }
 
 function annulerAttente(idActivite, basculerDansPlan = false) {
-    if (!idEleveCourant) return;
-    let eleve = eleves[idEleveCourant];
-    eleve.enAttente = (eleve.enAttente || []).filter(id => id !== idActivite);
-    if (basculerDansPlan) eleve.planHebdo.push(idActivite);
-    sauvegarderEleves(); afficherPlanHebdo(); afficherRessourcesDisponibles();
+    if (!idEleveCourant) return;
+    let eleve = eleves[idEleveCourant];
+    eleve.enAttente = (eleve.enAttente || []).filter(id => id !== idActivite);
+    if (basculerDansPlan && !eleve.planHebdo.includes(idActivite)) {
+        eleve.planHebdo.push(idActivite);
+    }
+    sauvegarderEleves(); afficherPlanHebdo(); afficherRessourcesDisponibles();
 }
 
 function retirerDuPlan(idActivite) {
@@ -5771,75 +6017,94 @@ genererDatalistSuggestionsLecons = function(pole, niveauGroupe, seqsPrioritaires
 };
 
 trouverInfosDepuisBaseLecon = function(pole, niveauGroupe, texteSaisi) {
-    if (!texteSaisi || !texteSaisi.trim()) return { lien: "", pageProf: "", sequence: "" };
-    let txtNorm = texteSaisi.trim().toLowerCase();
-    let nivCibles = niveauGroupe === "CM1-CM2" ? ["CM1", "CM2"] : (niveauGroupe ? [niveauGroupe] : ["CP", "CE1", "CE2", "CM1", "CM2"]);
+    if (!texteSaisi || !texteSaisi.trim()) return { lien: "", pageProf: "", sequence: "", matiere: "" };
+    let txtNorm = texteSaisi.trim().toLowerCase();
+    let nivCibles = niveauGroupe === "CM1-CM2" ? ["CM1", "CM2"] : (niveauGroupe ? [niveauGroupe] : ["CP", "CE1", "CE2", "CM1", "CM2"]);
 
-    let candidats = baseDonnees.filter(a => {
-        if (!a || !estActiviteDuPole(a, pole)) return false;
-        let nivAct = (a.niveau || "").toUpperCase();
-        if (nivAct && !nivCibles.some(n => nivAct.includes(n)) && nivAct !== "TOUS") return false;
+    let candidats = baseDonnees.filter(a => {
+        if (!a || !estActiviteDuPole(a, pole)) return false;
+        let nivAct = (a.niveau || "").toUpperCase();
+        if (nivAct && !nivCibles.some(n => nivAct.includes(n)) && nivAct !== "TOUS") return false;
 
-        let prefix = a.lecon ? (a.lecon.trim() + " - ").toLowerCase() : "";
-        let res = (a.ressource || "").trim().toLowerCase();
-        let labelComplet = (prefix && !res.startsWith(prefix)) ? (prefix + res) : res;
-        let codeSeul = (a.lecon || "").trim().toLowerCase();
+        let prefix = a.lecon ? (a.lecon.trim() + " - ").toLowerCase() : "";
+        let res = (a.ressource || "").trim().toLowerCase();
+        let labelComplet = (prefix && !res.startsWith(prefix)) ? (prefix + res) : res;
+        let codeSeul = (a.lecon || "").trim().toLowerCase();
 
-        return txtNorm === labelComplet || txtNorm === res || (codeSeul !== "" && txtNorm === codeSeul);
-    });
+        return txtNorm === labelComplet || txtNorm === res || (codeSeul !== "" && txtNorm === codeSeul);
+    });
 
-    let matchPrio = candidats.find(a => estLeconProf(a) && (a.lienExterne || a.pageProf)) || candidats.find(a => estLeconProf(a)) || candidats[0];
-    return {
-        lien: (matchPrio && matchPrio.lienExterne) ? matchPrio.lienExterne.trim() : "",
-        pageProf: (matchPrio && matchPrio.pageProf) ? matchPrio.pageProf.trim() : "",
-        sequence: (matchPrio && matchPrio.sequence) ? extraireListeSequences(matchPrio.sequence)[0] || "" : ""
-    };
+    let matchPrio = candidats.find(a => estLeconProf(a) && (a.lienExterne || a.pageProf)) || candidats.find(a => estLeconProf(a)) || candidats[0];
+    return {
+        lien: (matchPrio && matchPrio.lienExterne) ? matchPrio.lienExterne.trim() : "",
+        pageProf: (matchPrio && matchPrio.pageProf) ? matchPrio.pageProf.trim() : "",
+        sequence: (matchPrio && matchPrio.sequence) ? extraireListeSequences(matchPrio.sequence)[0] || "" : "",
+        matiere: (matchPrio && matchPrio.matiere) ? matchPrio.matiere.trim() : ""
+    };
 };
+
+// Détermine la sous-matière précise d'une leçon (ex: "grammaire", "orthographe", "vocabulaire", "numeration", "mesure"...)
+function extraireSousDomaineLecon(pole, niv, texteLecon) {
+    if (!texteLecon || !texteLecon.trim()) return "";
+    let infos = trouverInfosDepuisBaseLecon(pole, niv, texteLecon);
+    if (infos.matiere) {
+        return infos.matiere.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+    }
+    let t = texteLecon.trim().toLowerCase();
+    if (/^g\d|^gram/.test(t)) return "grammaire";
+    if (/^o\d|^orth/.test(t)) return "orthographe";
+    if (/^c\d|^conj/.test(t)) return "conjugaison";
+    if (/^v\d|^l\d|^voc|^lex/.test(t)) return "lexique";
+    if (/^n\d|^num/.test(t)) return "numeration";
+    if (/^m\d|^mes/.test(t)) return "mesure";
+    if (/^ge\d|^geom/.test(t)) return "geometrie";
+    if (/^ca\d|^calc/.test(t)) return "calcul";
+    return t;
+}
 
 majSlotLeconProf = function(pole, jour, slotIdx, champ, valeur) {
-    assurerStructureProgPeriodes();
-    let per = progPeriodesData.periodeActiveDash;
-    let sIdx = progPeriodesData.semaineIndexDash;
-    let sem = progPeriodesData.periodes[per].semaines[sIdx];
-    if (!sem) return;
+    assurerStructureProgPeriodes();
+    let per = progPeriodesData.periodeActiveDash;
+    let sIdx = progPeriodesData.semaineIndexDash;
+    let sem = progPeriodesData.periodes[per].semaines[sIdx];
+    if (!sem) return;
 
-    let nivActuel = sem.ordrePassages[pole][jour][slotIdx] || GROUPES_NIVEAUX_PROF[slotIdx];
+    let nivActuel = sem.ordrePassages[pole][jour][slotIdx] || GROUPES_NIVEAUX_PROF[slotIdx];
 
-    if (champ === 'niveau') {
-        sem.ordrePassages[pole][jour][slotIdx] = valeur;
-        sauvegarderProgPeriodes();
-        rafraichirDashboard();
-        return;
-    }
+    if (champ === 'niveau') {
+        sem.ordrePassages[pole][jour][slotIdx] = valeur;
+        sauvegarderProgPeriodes();
+        rafraichirDashboard();
+        return;
+    }
 
-    let nivCible = nivActuel === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivActuel) ? nivActuel : "CP");
-    let cellOrig = sem.niveaux[nivCible][pole].jours[jour];
-    let texteRef = (champ === 'texte') ? (valeur || cellOrig.texte) : cellOrig.texte;
-    let niveauxPartages = getNiveauxPartageantLecon(pole, nivActuel, texteRef);
+    let nivCible = nivActuel === "CM1-CM2" ? "CM1" : (NIVEAUX_LISTE.includes(nivActuel) ? nivActuel : "CP");
+    let cellOrig = sem.niveaux[nivCible][pole].jours[jour];
+    let texteRef = (champ === 'texte') ? (valeur || cellOrig.texte) : cellOrig.texte;
+    let niveauxPartages = getNiveauxPartageantLecon(pole, nivActuel, texteRef);
 
-    niveauxPartages.forEach(nPart => {
-        let c = sem.niveaux[nPart][pole].jours[jour];
-        c[champ] = valeur;
-        if (champ === 'texte') {
-            if (!valeur || !valeur.trim()) {
-                c.lien = "";
-                c.pageProf = "";
-            } else {
-                let infos = trouverInfosDepuisBaseLecon(pole, nPart, valeur);
-                c.lien = infos.lien || "";
-                c.pageProf = infos.pageProf || "";
-                if (infos.sequence && !sem.niveaux[nPart][pole].sequences.some(s => s.nom.toLowerCase() === infos.sequence.toLowerCase())) {
-                    sem.niveaux[nPart][pole].sequences.push({ nom: infos.sequence, fait: false });
-                }
-            }
-        }
-    });
+    niveauxPartages.forEach(nPart => {
+        let c = sem.niveaux[nPart][pole].jours[jour];
+        c[champ] = valeur;
+        if (champ === 'texte') {
+            if (!valeur || !valeur.trim()) {
+                c.lien = "";
+                c.pageProf = "";
+            } else {
+                let infos = trouverInfosDepuisBaseLecon(pole, nPart, valeur);
+                c.lien = infos.lien || "";
+                c.pageProf = infos.pageProf || "";
+                if (infos.sequence && !sem.niveaux[nPart][pole].sequences.some(s => s.nom.toLowerCase() === infos.sequence.toLowerCase())) {
+                    sem.niveaux[nPart][pole].sequences.push({ nom: infos.sequence, fait: false });
+                }
+            }
+        }
+    });
 
-    sauvegarderProgPeriodes();
-    rafraichirDashboard();
+    sauvegarderProgPeriodes();
+    rafraichirDashboard();
 };
 
-// Pile d'annulation (Undo) pour annuler en 1 clic n'importe quel clic par inadvertance (Fait, Lendemain ou Semaine +1)
 let pileUndoLeconsProf = [];
 
 function sauvegarderEtatAvantModifLecon(descriptionAction) {
@@ -5889,7 +6154,8 @@ function basculerFaitLeconDashboard(pole, jour, slotIdx, nouvelEtatFait) {
     showToast(nouvelEtatFait ? "✅ Leçon marquée comme faite !" : "↩️ Leçon remise « À faire ».", "success");
 }
 
-function decalerChaineChronologiqueJours(pObj, startSemIdx, startJourIdx, niv, pole, itemAInserer) {
+// Décalage intelligent : ne décale QUE les leçons de la MÊME sous-matière (ex: Grammaire décale Grammaire, sans jamais toucher à Orthographe ou Vocabulaire)
+function decalerUniquementMemeMatiere(pObj, startSemIdx, startJourIdx, niv, pole, itemAInserer, domaineCible, modeJourUnique) {
     let carry = {
         texte: itemAInserer.texte || "",
         lien: itemAInserer.lien || "",
@@ -5898,87 +6164,76 @@ function decalerChaineChronologiqueJours(pObj, startSemIdx, startJourIdx, niv, p
     };
     let s = startSemIdx;
     let j = startJourIdx;
+    const jourFixeNom = JOURS_SEMAINE_PROF[startJourIdx];
 
     while (carry && carry.texte && carry.texte.trim() !== "") {
         if (s >= pObj.semaines.length) {
             pObj.semaines.push(creerSemaineProgVide(pObj.semaines.length, ""));
             pObj.nbSemaines = pObj.semaines.length;
         }
-        let jourNom = JOURS_SEMAINE_PROF[j];
-        let cellCible = pObj.semaines[s].niveaux[niv][pole].jours[jourNom];
 
-        // Si le créneau sur lequel on arrive a déjà été fait, on le saute sans y toucher
-        if (cellCible && cellCible.fait && cellCible.texte && cellCible.texte.trim() !== "") {
+        let jourNom = modeJourUnique ? jourFixeNom : JOURS_SEMAINE_PROF[j];
+        let cellCible = pObj.semaines[s].niveaux[niv][pole].jours[jourNom];
+        let texteExistant = (cellCible && cellCible.texte) ? cellCible.texte.trim() : "";
+
+        // 1. Si le créneau cible est VIDE : on pose la leçon ici et on s'arrête immédiatement (rien d'autre ne bouge !)
+        if (texteExistant === "") {
+            pObj.semaines[s].niveaux[niv][pole].jours[jourNom] = {
+                texte: carry.texte,
+                lien: carry.lien || "",
+                pageProf: carry.pageProf || "",
+                fait: false
+            };
+            let infos = trouverInfosDepuisBaseLecon(pole, niv, carry.texte);
+            if (infos.sequence && !pObj.semaines[s].niveaux[niv][pole].sequences.some(sq => sq.nom.toLowerCase() === infos.sequence.toLowerCase())) {
+                pObj.semaines[s].niveaux[niv][pole].sequences.push({ nom: infos.sequence, fait: false });
+            }
+            break;
+        }
+
+        // 2. Si le créneau cible est occupé par une leçon déjà FAITE ou d'une AUTRE sous-matière (ex: Orthographe alors qu'on décale Grammaire) :
+        // ON NE LA TOUCHE PAS ! On passe au créneau suivant pour chercher le prochain créneau vide ou de la même matière.
+        let domaineExistant = extraireSousDomaineLecon(pole, niv, texteExistant);
+        let estMemeMatiere = (domaineCible !== "" && domaineExistant === domaineCible);
+
+        if (cellCible.fait || !estMemeMatiere) {
+            if (modeJourUnique) {
+                s++;
+            } else {
+                j++;
+                if (j >= JOURS_SEMAINE_PROF.length) { j = 0; s++; }
+            }
+            continue;
+        }
+
+        // 3. Si le créneau cible contient une leçon de la MÊME sous-matière (ex: la leçon suivante de Grammaire) :
+        // elle prend la place et décale uniquement la suite de cette même matière
+        let ancien = {
+            texte: cellCible.texte,
+            lien: cellCible.lien || "",
+            pageProf: cellCible.pageProf || "",
+            fait: false
+        };
+
+        pObj.semaines[s].niveaux[niv][pole].jours[jourNom] = {
+            texte: carry.texte,
+            lien: carry.lien || "",
+            pageProf: carry.pageProf || "",
+            fait: false
+        };
+
+        let infos = trouverInfosDepuisBaseLecon(pole, niv, carry.texte);
+        if (infos.sequence && !pObj.semaines[s].niveaux[niv][pole].sequences.some(sq => sq.nom.toLowerCase() === infos.sequence.toLowerCase())) {
+            pObj.semaines[s].niveaux[niv][pole].sequences.push({ nom: infos.sequence, fait: false });
+        }
+
+        carry = ancien;
+        if (modeJourUnique) {
+            s++;
+        } else {
             j++;
             if (j >= JOURS_SEMAINE_PROF.length) { j = 0; s++; }
-            continue;
         }
-
-        let ancien = (cellCible && cellCible.texte && cellCible.texte.trim() !== "")
-            ? { texte: cellCible.texte, lien: cellCible.lien || "", pageProf: cellCible.pageProf || "", fait: false }
-            : null;
-
-        pObj.semaines[s].niveaux[niv][pole].jours[jourNom] = {
-            texte: carry.texte,
-            lien: carry.lien || "",
-            pageProf: carry.pageProf || "",
-            fait: false
-        };
-
-        // S'assurer que la séquence correspondante suit dans la semaine s si besoin
-        let infos = trouverInfosDepuisBaseLecon(pole, niv, carry.texte);
-        if (infos.sequence && !pObj.semaines[s].niveaux[niv][pole].sequences.some(sq => sq.nom.toLowerCase() === infos.sequence.toLowerCase())) {
-            pObj.semaines[s].niveaux[niv][pole].sequences.push({ nom: infos.sequence, fait: false });
-        }
-
-        carry = ancien;
-        j++;
-        if (j >= JOURS_SEMAINE_PROF.length) {
-            j = 0;
-            s++;
-        }
-    }
-}
-
-function decalerChaineSemaineSuivanteMemeJour(pObj, startSemIdx, jourNom, niv, pole, itemAInserer) {
-    let carry = {
-        texte: itemAInserer.texte || "",
-        lien: itemAInserer.lien || "",
-        pageProf: itemAInserer.pageProf || "",
-        fait: false
-    };
-    let s = startSemIdx;
-
-    while (carry && carry.texte && carry.texte.trim() !== "") {
-        if (s >= pObj.semaines.length) {
-            pObj.semaines.push(creerSemaineProgVide(pObj.semaines.length, ""));
-            pObj.nbSemaines = pObj.semaines.length;
-        }
-        let cellCible = pObj.semaines[s].niveaux[niv][pole].jours[jourNom];
-
-        if (cellCible && cellCible.fait && cellCible.texte && cellCible.texte.trim() !== "") {
-            s++;
-            continue;
-        }
-
-        let ancien = (cellCible && cellCible.texte && cellCible.texte.trim() !== "")
-            ? { texte: cellCible.texte, lien: cellCible.lien || "", pageProf: cellCible.pageProf || "", fait: false }
-            : null;
-
-        pObj.semaines[s].niveaux[niv][pole].jours[jourNom] = {
-            texte: carry.texte,
-            lien: carry.lien || "",
-            pageProf: carry.pageProf || "",
-            fait: false
-        };
-
-        let infos = trouverInfosDepuisBaseLecon(pole, niv, carry.texte);
-        if (infos.sequence && !pObj.semaines[s].niveaux[niv][pole].sequences.some(sq => sq.nom.toLowerCase() === infos.sequence.toLowerCase())) {
-            pObj.semaines[s].niveaux[niv][pole].sequences.push({ nom: infos.sequence, fait: false });
-        }
-
-        carry = ancien;
-        s++;
     }
 }
 
@@ -5998,12 +6253,16 @@ function reporterLeconSlotDashboard(pole, jour, slotIdx, modeDecalage) {
     if (!cellOrig || !cellOrig.texte || cellOrig.texte.trim() === "") return;
 
     let titreLecon = cellOrig.texte;
+    let domaineLecon = extraireSousDomaineLecon(pole, nivDataKey, titreLecon);
+    let infosLecon = trouverInfosDepuisBaseLecon(pole, nivDataKey, titreLecon);
+    let nomMatiereAffiche = infosLecon.matiere || domaineLecon || pole;
+
     let niveauxPartages = getNiveauxPartageantLecon(pole, nivSlot, titreLecon);
     let idxJour = JOURS_SEMAINE_PROF.indexOf(jour);
 
     let labelAction = (modeDecalage === 'lendemain')
-        ? ("Report lendemain : " + titreLecon + " (" + nivSlot + " - " + jour + ")")
-        : ("Report Semaine +1 : " + titreLecon + " (" + nivSlot + " - " + jour + ")");
+        ? ("Report (" + nomMatiereAffiche + ") : " + titreLecon + " (" + nivSlot + " - " + jour + ")")
+        : ("Report S+1 (" + nomMatiereAffiche + ") : " + titreLecon + " (" + nivSlot + " - " + jour + ")");
     sauvegarderEtatAvantModifLecon(labelAction);
 
     niveauxPartages.forEach(nPart => {
@@ -6025,9 +6284,9 @@ function reporterLeconSlotDashboard(pole, jour, slotIdx, modeDecalage) {
                 nextJ = 0;
                 nextS = sIdx + 1;
             }
-            decalerChaineChronologiqueJours(pObj, nextS, nextJ, nPart, pole, itemADecaler);
+            decalerUniquementMemeMatiere(pObj, nextS, nextJ, nPart, pole, itemADecaler, domaineLecon, false);
         } else {
-            decalerChaineSemaineSuivanteMemeJour(pObj, sIdx + 1, jour, nPart, pole, itemADecaler);
+            decalerUniquementMemeMatiere(pObj, sIdx + 1, idxJour, nPart, pole, itemADecaler, domaineLecon, true);
         }
     });
 
@@ -6036,10 +6295,9 @@ function reporterLeconSlotDashboard(pole, jour, slotIdx, modeDecalage) {
     rafraichirDashboard();
 
     if (modeDecalage === 'lendemain') {
-        let destJour = (idxJour + 1 < JOURS_SEMAINE_PROF.length) ? JOURS_SEMAINE_PROF[idxJour + 1] : "Lundi (Semaine " + (sIdx + 2) + ")";
-        showToast("➡️ Leçon reportée à " + destJour + " (toutes les leçons suivantes ont été décalées) !", "success");
+        showToast("➡️ Leçon reportée (seules les leçons de « " + nomMatiereAffiche + " » ont été décalées, les autres matières n'ont pas bougé) !", "success");
     } else {
-        showToast("⏭️ Leçon reportée à " + jour + " de la Semaine " + (sIdx + 2) + " (avec décalage de la suite) !", "success");
+        showToast("⏭️ Leçon reportée à " + jour + " S+1 (seule la matière « " + nomMatiereAffiche + " » a été décalée) !", "success");
     }
 }
 
