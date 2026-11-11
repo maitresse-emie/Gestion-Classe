@@ -491,104 +491,199 @@ function calculerVendrediDepuisISO(dateISO) {
     return { debutFR: fmtFR(dtDebut), finFR: fmtFR(dtFin), finISO: fmtISO(dtFin), lundiSuivantISO: fmtISO(dtLundiSuiv) };
 }
 
-function assurerStructureSemaines(e) {
-    if (!e) return;
-    if (!e.maxAteliers) e.maxAteliers = 100;
-    if (e.maxTablettes === undefined) e.maxTablettes = 2;
-    if (!e.niveau) e.niveau = "CP";
-    if (estEleveCM(e)) {
-        if (e.parcours !== "jaune" && e.parcours !== "orange") {
-            e.parcours = (e.niveau.toUpperCase() === "CM2") ? "orange" : "jaune";
-        }
-    } else {
-        delete e.parcours;
-    }
-    if (e.fichierJaune === undefined) e.fichierJaune = false;
-    if (!e.suivi) e.suivi = {};
-    if (!e.valides) e.valides = {};
-    if (!e.planHebdo || !Array.isArray(e.planHebdo)) e.planHebdo = [];
-    if (!e.recurrents || !Array.isArray(e.recurrents)) e.recurrents = [];
-    if (!e.enAttente || !Array.isArray(e.enAttente)) e.enAttente = [];
-    if (!e.historique || !Array.isArray(e.historique)) e.historique = [];
-    if (!e.masquees || !Array.isArray(e.masquees)) e.masquees = [];
-    if (!e.priorites) e.priorites = [];
-    if (!e.bilanEvaluations) e.bilanEvaluations = {};
-    if (!e.joursAssignes) e.joursAssignes = {};
-    if (!e.sequencesChoisies) e.sequencesChoisies = {};
-    if (!e.dateDebutISO) e.dateDebutISO = "";
-    if (!e.dateDebut) e.dateDebut = "";
-    if (!e.dateFin) e.dateFin = "";
+function obtenirListeSemainesPeriodeProg(per) {
+    let pKey = (per && PERIODES_LISTE.includes(per)) ? per : ((progPeriodesData && progPeriodesData.periodeActiveDash) ? progPeriodesData.periodeActiveDash : 'P1');
+    let pObj = (progPeriodesData && progPeriodesData.periodes && progPeriodesData.periodes[pKey]) ? progPeriodesData.periodes[pKey] : null;
+    let nb = (pObj && pObj.nbSemaines) ? Math.max(1, parseInt(pObj.nbSemaines) || 7) : 7;
+    let semsProg = (pObj && Array.isArray(pObj.semaines)) ? pObj.semaines : [];
+    return { pKey, nb, semsProg };
+}
 
-    e.recurrents.forEach(idRec => {
-        if (baseDonnees.some(b => b.id === idRec && !estLeconProf(b)) && !e.planHebdo.includes(idRec)) {
-            e.planHebdo.push(idRec);
-        }
-    });
+function assurerStructureSemaines(e, periodeCibleForcee = null) {
+    if (!e) return;
+    if (!e.maxAteliers) e.maxAteliers = 100;
+    if (e.maxTablettes === undefined) e.maxTablettes = 2;
+    if (!e.niveau) e.niveau = "CP";
+    if (estEleveCM(e)) {
+        if (e.parcours !== "jaune" && e.parcours !== "orange") {
+            e.parcours = (e.niveau.toUpperCase() === "CM2") ? "orange" : "jaune";
+        }
+    } else {
+        delete e.parcours;
+    }
+    if (e.fichierJaune === undefined) e.fichierJaune = false;
+    if (!e.suivi) e.suivi = {};
+    if (!e.valides) e.valides = {};
+    if (!e.planHebdo || !Array.isArray(e.planHebdo)) e.planHebdo = [];
+    if (!e.recurrents || !Array.isArray(e.recurrents)) e.recurrents = [];
+    if (!e.enAttente || !Array.isArray(e.enAttente)) e.enAttente = [];
+    if (!e.historique || !Array.isArray(e.historique)) e.historique = [];
+    if (!e.masquees || !Array.isArray(e.masquees)) e.masquees = [];
+    if (!e.priorites) e.priorites = [];
+    if (!e.bilanEvaluations) e.bilanEvaluations = {};
+    if (!e.joursAssignes) e.joursAssignes = {};
+    if (!e.sequencesChoisies) e.sequencesChoisies = {};
+    if (!e.dateDebutISO) e.dateDebutISO = "";
+    if (!e.dateDebut) e.dateDebut = "";
+    if (!e.dateFin) e.dateFin = "";
 
-  if (e.semaines && typeof e.semaines === 'object' && !Array.isArray(e.semaines)) {
-        e.semaines = Object.values(e.semaines);
-    }
-    if (!e.semaines || !Array.isArray(e.semaines) || e.semaines.length === 0) {
-        e.semaines = [{
-            id: 'sem_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-            dateDebutISO: e.dateDebutISO || "", dateDebut: e.dateDebut || "", dateFin: e.dateFin || "",
-            planHebdo: [...e.planHebdo], priorites: [...e.priorites], joursAssignes: { ...e.joursAssignes },
-            sequencesChoisies: { ...e.sequencesChoisies },
-            valides: { ...e.valides }, suivi: JSON.parse(JSON.stringify(e.suivi || {}))
-        }];
-        e.semaineIndex = 0;
-    }
-    e.semaines = e.semaines.filter(Boolean);
-    e.semaines.forEach(s => {
-        if (!s.planHebdo || !Array.isArray(s.planHebdo)) s.planHebdo = [];
-        if (!s.priorites || !Array.isArray(s.priorites)) s.priorites = [];
-        if (!s.joursAssignes || typeof s.joursAssignes !== 'object') s.joursAssignes = {};
-        if (!s.sequencesChoisies || typeof s.sequencesChoisies !== 'object') s.sequencesChoisies = {};
-        if (!s.valides || typeof s.valides !== 'object') s.valides = {};
-        if (!s.suivi || typeof s.suivi !== 'object') s.suivi = {};
-    });
-    if (e.semaineIndex === undefined || isNaN(parseInt(e.semaineIndex)) || e.semaineIndex < 0 || e.semaineIndex >= e.semaines.length) {
-        e.semaineIndex = 0;
-    }
+    let perActiveGlobal = (progPeriodesData && progPeriodesData.periodeActiveDash) ? progPeriodesData.periodeActiveDash : 'P1';
+    if (periodeCibleForcee && PERIODES_LISTE.includes(periodeCibleForcee)) {
+        e.periodePlanActive = periodeCibleForcee;
+    } else if (!e.periodePlanActive || !PERIODES_LISTE.includes(e.periodePlanActive)) {
+        e.periodePlanActive = perActiveGlobal;
+    }
+
+    if (!e.plansParPeriode || typeof e.plansParPeriode !== 'object') {
+        e.plansParPeriode = {};
+    }
+
+    // Migration automatique et sans perte des anciennes semaines déjà préparées
+    if (e.semaines && typeof e.semaines === 'object' && !Array.isArray(e.semaines)) {
+        e.semaines = Object.values(e.semaines);
+    }
+    if (Array.isArray(e.semaines) && e.semaines.length > 0 && Object.keys(e.plansParPeriode).length === 0) {
+        let semIdxDashDefaut = (progPeriodesData && !isNaN(parseInt(progPeriodesData.semaineIndexDash))) ? parseInt(progPeriodesData.semaineIndexDash) : 0;
+        e.semaines.filter(Boolean).forEach((oldS, idxOld) => {
+            let pDest = (oldS.progPeriodeCible && PERIODES_LISTE.includes(oldS.progPeriodeCible)) ? oldS.progPeriodeCible : e.periodePlanActive;
+            let sIdxDest = (oldS.progSemaineCible !== undefined && !isNaN(parseInt(oldS.progSemaineCible)))
+                ? parseInt(oldS.progSemaineCible)
+                : (e.semaines.length === 1 ? semIdxDashDefaut : idxOld);
+            if (!e.plansParPeriode[pDest]) e.plansParPeriode[pDest] = [];
+            e.plansParPeriode[pDest][sIdxDest] = oldS;
+        });
+    }
+
+    // Construction complète de toutes les semaines de chaque période (S1 à Sn dès le départ)
+    PERIODES_LISTE.forEach(p => {
+        let infoProg = obtenirListeSemainesPeriodeProg(p);
+        if (!Array.isArray(e.plansParPeriode[p])) {
+            e.plansParPeriode[p] = [];
+        }
+        let arrP = e.plansParPeriode[p];
+        let nbCible = Math.max(infoProg.nb, arrP.length, 1);
+
+        for (let i = 0; i < nbCible; i++) {
+            let sProg = infoProg.semsProg[i] || null;
+            if (!arrP[i] || typeof arrP[i] !== 'object') {
+                arrP[i] = {
+                    id: 'sem_' + p + '_' + (i + 1) + '_' + Math.random().toString(36).substr(2, 4),
+                    numeroFixe: i + 1,
+                    progPeriodeCible: p,
+                    progSemaineCible: i,
+                    dateDebutISO: (sProg && sProg.dateDebutISO) ? sProg.dateDebutISO : "",
+                    dateDebut: (sProg && sProg.dateDebut) ? sProg.dateDebut : "",
+                    dateFin: (sProg && sProg.dateFin) ? sProg.dateFin : "",
+                    planHebdo: [],
+                    priorites: [],
+                    joursAssignes: {},
+                    sequencesChoisies: {},
+                    valides: {},
+                    suivi: {},
+                    cloturee: false
+                };
+            } else {
+                let s = arrP[i];
+                s.numeroFixe = i + 1;
+                s.progPeriodeCible = p;
+                s.progSemaineCible = i;
+                if (!s.dateDebutISO && sProg && sProg.dateDebutISO) {
+                    s.dateDebutISO = sProg.dateDebutISO;
+                    s.dateDebut = sProg.dateDebut || "";
+                    s.dateFin = sProg.dateFin || "";
+                }
+                if (!s.planHebdo || !Array.isArray(s.planHebdo)) s.planHebdo = [];
+                if (!s.priorites || !Array.isArray(s.priorites)) s.priorites = [];
+                if (!s.joursAssignes || typeof s.joursAssignes !== 'object') s.joursAssignes = {};
+                if (!s.sequencesChoisies || typeof s.sequencesChoisies !== 'object') s.sequencesChoisies = {};
+                if (!s.valides || typeof s.valides !== 'object') s.valides = {};
+                if (!s.suivi || typeof s.suivi !== 'object') s.suivi = {};
+            }
+        }
+    });
+
+    // Pointe e.semaines sur l'intégralité des semaines de la période active
+    e.semaines = e.plansParPeriode[e.periodePlanActive];
+
+    let semIdxDash = (progPeriodesData && !isNaN(parseInt(progPeriodesData.semaineIndexDash))) ? parseInt(progPeriodesData.semaineIndexDash) : 0;
+    if (e.semaineIndex === undefined || isNaN(parseInt(e.semaineIndex)) || e.semaineIndex < 0 || e.semaineIndex >= e.semaines.length) {
+        e.semaineIndex = Math.min(semIdxDash, e.semaines.length - 1);
+    }
+
+    let semCourante = e.semaines[e.semaineIndex];
+    if (semCourante) {
+        e.recurrents.forEach(idRec => {
+            if (baseDonnees.some(b => b.id === idRec && !estLeconProf(b)) && !semCourante.planHebdo.includes(idRec)) {
+                semCourante.planHebdo.push(idRec);
+            }
+        });
+        e.planHebdo = [...semCourante.planHebdo];
+        e.priorites = [...semCourante.priorites];
+        e.joursAssignes = { ...semCourante.joursAssignes };
+        e.sequencesChoisies = { ...semCourante.sequencesChoisies };
+        e.valides = { ...semCourante.valides };
+        e.suivi = JSON.parse(JSON.stringify(semCourante.suivi || {}));
+        e.dateDebutISO = semCourante.dateDebutISO || "";
+        e.dateDebut = semCourante.dateDebut || "";
+        e.dateFin = semCourante.dateFin || "";
+    }
 }
 
 function syncEleveVersSemaineActive(e) {
-    if (!e) return;
-    assurerStructureSemaines(e);
-    let idx = e.semaineIndex || 0;
-    if (!e.semaines[idx]) idx = 0;
-    e.semaines[idx].planHebdo = [...(e.planHebdo || [])];
-    e.semaines[idx].priorites = [...(e.priorites || [])];
-    e.semaines[idx].joursAssignes = { ...(e.joursAssignes || {}) };
-    e.semaines[idx].sequencesChoisies = { ...(e.sequencesChoisies || {}) };
-    e.semaines[idx].valides = { ...(e.valides || {}) };
-    e.semaines[idx].suivi = JSON.parse(JSON.stringify(e.suivi || {}));
-    e.semaines[idx].dateDebutISO = e.dateDebutISO || "";
-    e.semaines[idx].dateDebut = e.dateDebut || "";
-    e.semaines[idx].dateFin = e.dateFin || "";
+    if (!e) return;
+    if (!e.plansParPeriode || !e.semaines) assurerStructureSemaines(e);
+    let per = e.periodePlanActive || ((progPeriodesData && progPeriodesData.periodeActiveDash) ? progPeriodesData.periodeActiveDash : 'P1');
+    if (e.plansParPeriode && e.plansParPeriode[per]) {
+        e.semaines = e.plansParPeriode[per];
+    }
+    let idx = parseInt(e.semaineIndex) || 0;
+    if (!e.semaines[idx]) idx = 0;
+    let s = e.semaines[idx];
+    if (!s) return;
+
+    s.numeroFixe = idx + 1;
+    s.progPeriodeCible = per;
+    s.progSemaineCible = idx;
+    s.planHebdo = [...new Set(e.planHebdo || [])];
+    s.priorites = [...new Set(e.priorites || [])];
+    s.joursAssignes = { ...(e.joursAssignes || {}) };
+    s.sequencesChoisies = { ...(e.sequencesChoisies || {}) };
+    s.valides = { ...(e.valides || {}) };
+    s.suivi = JSON.parse(JSON.stringify(e.suivi || {}));
+    s.dateDebutISO = e.dateDebutISO || s.dateDebutISO || "";
+    s.dateDebut = e.dateDebut || s.dateDebut || "";
+    s.dateFin = e.dateFin || s.dateFin || "";
 }
 
-function chargerSemaineDepuisIndex(e, nouvelIndex) {
-    if (!e) return;
-    syncEleveVersSemaineActive(e);
-    let idx = parseInt(nouvelIndex);
-    if (isNaN(idx) || idx < 0 || idx >= e.semaines.length) idx = 0;
-    e.semaineIndex = idx;
-    let s = e.semaines[idx];
-    e.planHebdo = [...(s.planHebdo || [])];
-    (e.recurrents || []).forEach(idRec => {
-        if (baseDonnees.some(b => b.id === idRec && !estLeconProf(b)) && !e.planHebdo.includes(idRec)) {
-            e.planHebdo.push(idRec);
-        }
-    });
-    e.priorites = [...(s.priorites || [])];
-    e.joursAssignes = { ...(s.joursAssignes || {}) };
-    e.sequencesChoisies = { ...(s.sequencesChoisies || {}) };
-    e.valides = { ...(s.valides || {}) };
-    e.suivi = { ...(s.suivi || {}) };
-    e.dateDebutISO = s.dateDebutISO || "";
-    e.dateDebut = s.dateDebut || "";
-    e.dateFin = s.dateFin || "";
+function chargerSemaineDepuisIndex(e, nouvelIndex, nouvellePeriode = null) {
+    if (!e) return;
+    syncEleveVersSemaineActive(e);
+    if (nouvellePeriode && PERIODES_LISTE.includes(nouvellePeriode)) {
+        e.periodePlanActive = nouvellePeriode;
+    }
+    assurerStructureSemaines(e, e.periodePlanActive);
+    e.semaines = e.plansParPeriode[e.periodePlanActive];
+
+    let idx = parseInt(nouvelIndex);
+    if (isNaN(idx) || idx < 0 || idx >= e.semaines.length) idx = 0;
+    e.semaineIndex = idx;
+
+    let s = e.semaines[idx];
+    e.planHebdo = [...(s.planHebdo || [])];
+    (e.recurrents || []).forEach(idRec => {
+        if (baseDonnees.some(b => b.id === idRec && !estLeconProf(b)) && !e.planHebdo.includes(idRec)) {
+            e.planHebdo.push(idRec);
+        }
+    });
+    s.planHebdo = [...e.planHebdo];
+    e.priorites = [...(s.priorites || [])];
+    e.joursAssignes = { ...(s.joursAssignes || {}) };
+    e.sequencesChoisies = { ...(s.sequencesChoisies || {}) };
+    e.valides = { ...(s.valides || {}) };
+    e.suivi = JSON.parse(JSON.stringify(s.suivi || {}));
+    e.dateDebutISO = s.dateDebutISO || "";
+    e.dateDebut = s.dateDebut || "";
+    e.dateFin = s.dateFin || "";
 }
 
 Object.values(eleves).forEach(e => assurerStructureSemaines(e));
@@ -2125,45 +2220,39 @@ function determinerPeriodeEtSemainePourEleve(eleve) {
     let semIdxDefaut = progPeriodesData.semaineIndexDash || 0;
     if (!eleve) return { per: perDefaut, semIdx: semIdxDefaut };
 
-    let semActiveEl = (eleve.semaines && eleve.semaines[eleve.semaineIndex || 0]) ? eleve.semaines[eleve.semaineIndex || 0] : null;
-
-    // 1. Si vous avez choisi manuellement une période/semaine cible sur cette semaine de l'élève
-    if (semActiveEl && semActiveEl.progPeriodeCible && PERIODES_LISTE.includes(semActiveEl.progPeriodeCible)) {
-        let pObj = progPeriodesData.periodes[semActiveEl.progPeriodeCible];
-        let sIdx = parseInt(semActiveEl.progSemaineCible);
-        if (pObj && !isNaN(sIdx) && sIdx >= 0 && sIdx < pObj.semaines.length) {
-            return { per: semActiveEl.progPeriodeCible, semIdx: sIdx };
-        }
+    let per = (eleve.periodePlanActive && PERIODES_LISTE.includes(eleve.periodePlanActive)) ? eleve.periodePlanActive : perDefaut;
+    let pObj = progPeriodesData.periodes[per];
+    let sIdx = parseInt(eleve.semaineIndex);
+    if (isNaN(sIdx) || sIdx < 0) sIdx = semIdxDefaut;
+    if (pObj && Array.isArray(pObj.semaines) && sIdx >= pObj.semaines.length) {
+        sIdx = pObj.semaines.length - 1;
     }
-
-    // 2. Si la semaine de l'élève a une date de début (Lundi), on cherche la semaine correspondante dans la Programmation
-    let dateElISO = (semActiveEl && semActiveEl.dateDebutISO) ? semActiveEl.dateDebutISO : (eleve.dateDebutISO || "");
-    if (dateElISO) {
-        for (let p of PERIODES_LISTE) {
-            let pObj = progPeriodesData.periodes[p];
-            if (pObj && Array.isArray(pObj.semaines)) {
-                let foundIdx = pObj.semaines.findIndex(s => s && s.dateDebutISO === dateElISO);
-                if (foundIdx > -1) {
-                    return { per: p, semIdx: foundIdx };
-                }
-            }
-        }
-    }
-
-    // 3. Sinon, on suit le numéro de la semaine sélectionnée chez l'élève (Semaine 1 -> S1, Semaine 2 -> S2...) dans la période active
-    let pObjCourant = progPeriodesData.periodes[perDefaut];
-    if (pObjCourant && Array.isArray(pObjCourant.semaines)) {
-        let idxEl = parseInt(eleve.semaineIndex) || 0;
-        let idxCible = (eleve.semaines && eleve.semaines.length > 1) ? idxEl : semIdxDefaut;
-        if (idxCible >= 0 && idxCible < pObjCourant.semaines.length) {
-            return { per: perDefaut, semIdx: idxCible };
-        }
-    }
-
-    return { per: perDefaut, semIdx: semIdxDefaut };
+    return { per: per, semIdx: sIdx };
 }
 
 function changerCibleProgDepuisSuiviEleve(nouvPer, nouvSemIdx) {
+    assurerStructureProgPeriodes();
+    let per = PERIODES_LISTE.includes(nouvPer) ? nouvPer : (progPeriodesData.periodeActiveDash || 'P1');
+    let pObj = progPeriodesData.periodes[per];
+    let sIdx = parseInt(nouvSemIdx) || 0;
+    if (pObj && (sIdx < 0 || sIdx >= pObj.semaines.length)) sIdx = 0;
+
+    progPeriodesData.periodeActiveDash = per;
+    progPeriodesData.semaineIndexDash = sIdx;
+
+    if (idEleveCourant && eleves[idEleveCourant]) {
+        let e = eleves[idEleveCourant];
+        chargerSemaineDepuisIndex(e, sIdx, per);
+        sauvegarderEleves();
+        majBarreSemainesUI();
+        afficherPlanHebdo();
+    }
+
+    sauvegarderProgPeriodes();
+    let selSeq = document.getElementById('selectSequence');
+    if (selSeq) selSeq.value = 'TOUTES_SEQUENCES';
+    changementMatiereSelection();
+}
     assurerStructureProgPeriodes();
     let per = PERIODES_LISTE.includes(nouvPer) ? nouvPer : (progPeriodesData.periodeActiveDash || 'P1');
     let pObj = progPeriodesData.periodes[per];
@@ -2527,24 +2616,77 @@ function postEditGlobal() {
     afficherBase();
 }
 
+function changerPeriodePlanEleve(nouvPer) {
+    if (!idEleveCourant || !eleves[idEleveCourant]) return;
+    let e = eleves[idEleveCourant];
+    let semIdxDefaut = (progPeriodesData && progPeriodesData.periodeActiveDash === nouvPer) ? (progPeriodesData.semaineIndexDash || 0) : 0;
+    chargerSemaineDepuisIndex(e, semIdxDefaut, nouvPer);
+    sauvegarderEleves();
+    majBarreSemainesUI();
+    afficherPlanHebdo();
+    changementMatiereSelection();
+}
+
 function majBarreSemainesUI() {
     if (!idEleveCourant || !eleves[idEleveCourant]) return;
-    let e = eleves[idEleveCourant]; assurerStructureSemaines(e); syncEleveVersSemaineActive(e);
+    let e = eleves[idEleveCourant];
+    assurerStructureSemaines(e);
+    syncEleveVersSemaineActive(e);
+
+    let perEl = e.periodePlanActive || progPeriodesData.periodeActiveDash || 'P1';
+    let perDash = progPeriodesData.periodeActiveDash || 'P1';
+    let semIdxDash = progPeriodesData.semaineIndexDash || 0;
+
     const sel = document.getElementById('selectSemaineEleve');
     if (sel) {
+        let selPer = document.getElementById('selectPeriodePlanEleve');
+        if (!selPer) {
+            selPer = document.createElement('select');
+            selPer.id = 'selectPeriodePlanEleve';
+            selPer.style.cssText = 'font-weight:bold; padding:6px 10px; border-radius:6px; border:1px solid #d35400; background:#fef9e7; color:#a04000; margin-right:6px; cursor:pointer;';
+            selPer.onchange = function() { changerPeriodePlanEleve(this.value); };
+            sel.parentNode.insertBefore(selPer, sel);
+        }
+        selPer.innerHTML = PERIODES_LISTE.map(p => '<option value="' + p + '" ' + (p === perEl ? 'selected' : '') + '>📅 ' + p + '</option>').join('');
+
         let html = '';
         e.semaines.forEach((s, idx) => {
             let datesTxt = (s.dateDebut && s.dateFin) ? " (du " + s.dateDebut + " au " + s.dateFin + ")" : "";
-            html += '<option value="' + idx + '">Semaine ' + (idx + 1) + datesTxt + ' — ' + s.planHebdo.length + ' act.' + (idx === 0 ? ' [En cours]' : ' [D\'avance]') + '</option>';
+            let statutTag = "";
+            if (perEl === perDash && idx === semIdxDash) statutTag = " 📌 [Semaine en cours]";
+            else if (s.cloturee || (perEl === perDash && idx < semIdxDash)) statutTag = " [✅ Passée]";
+            else statutTag = " [⏳ À venir]";
+            html += '<option value="' + idx + '">' + perEl + ' - Semaine ' + (idx + 1) + datesTxt + ' — ' + (s.planHebdo ? s.planHebdo.length : 0) + ' act.' + statutTag + '</option>';
         });
-        sel.innerHTML = html; sel.value = e.semaineIndex;
+        sel.innerHTML = html;
+        sel.value = e.semaineIndex;
     }
-    const btnSuppr = document.getElementById('btnSupprimerSemaine'); if (btnSuppr) btnSuppr.style.display = e.semaines.length > 1 ? 'inline-block' : 'none';
+
+    const btnSuppr = document.getElementById('btnSupprimerSemaine');
+    if (btnSuppr) {
+        btnSuppr.style.display = 'inline-block';
+        btnSuppr.innerText = '🧹 Vider cette semaine';
+        btnSuppr.title = 'Vider uniquement les activités de cette semaine (sans supprimer le numéro de la semaine)';
+
+        // Ajoute automatiquement le bouton de clôture groupée de TOUTE la classe juste à côté s'il n'existe pas encore
+        if (!document.getElementById('btnCloturerTouteLaClasseSuivi')) {
+            let btnGlobal = document.createElement('button');
+            btnGlobal.type = 'button';
+            btnGlobal.id = 'btnCloturerTouteLaClasseSuivi';
+            btnGlobal.className = 'btn-valid';
+            btnGlobal.style.cssText = 'background:#8e44ad !important; color:#fff !important; font-weight:bold; margin-left:6px;';
+            btnGlobal.innerHTML = '🏁 Clôturer la semaine de TOUTE la classe';
+            btnGlobal.title = 'Clôturer cette semaine pour tous les élèves de la classe d\'un seul coup et passer à la semaine suivante';
+            btnGlobal.onclick = function() { cloturerSemaineClasseGlobale(); };
+            btnSuppr.parentNode.appendChild(btnGlobal);
+        }
+    }
+
     const inputDate = document.getElementById('dateDebutSemaineInput'), spanFin = document.getElementById('dateFinSemaineAffiche');
     if (inputDate) inputDate.value = e.dateDebutISO || "";
     if (spanFin) spanFin.innerText = e.dateFin ? "➔ au Vendredi " + e.dateFin : "➔ Vendredi : --/--";
     const labelTitre = document.getElementById('labelSemaineTitre');
-    if (labelTitre) labelTitre.innerText = "Semaine " + (e.semaineIndex + 1) + ((e.dateDebut && e.dateFin) ? " du " + e.dateDebut + " au " + e.dateFin : "");
+    if (labelTitre) labelTitre.innerText = perEl + " — Semaine " + (e.semaineIndex + 1) + ((e.dateDebut && e.dateFin) ? " du " + e.dateDebut + " au " + e.dateFin : "");
 }
 
 function appliquerDateDebutSemaine(dateISO) {
@@ -2553,22 +2695,14 @@ function appliquerDateDebutSemaine(dateISO) {
     e.dateDebutISO = dateISO || ""; e.dateDebut = res.debutFR; e.dateFin = res.finFR;
     dateGlobaleDebutISO = e.dateDebutISO; dateGlobaleDebutFR = e.dateDebut; dateGlobaleFinFR = e.dateFin;
 
-    // Si cette date correspond à une semaine dans la Programmation, on aligne automatiquement la suggestion dessus
     if (dateISO) {
         assurerStructureProgPeriodes();
-        let semActiveEl = e.semaines ? e.semaines[e.semaineIndex || 0] : null;
         for (let p of PERIODES_LISTE) {
             let pObj = progPeriodesData.periodes[p];
             if (pObj && Array.isArray(pObj.semaines)) {
                 let fIdx = pObj.semaines.findIndex(s => s && s.dateDebutISO === dateISO);
                 if (fIdx > -1) {
-                    progPeriodesData.periodeActiveDash = p;
-                    progPeriodesData.semaineIndexDash = fIdx;
-                    if (semActiveEl) {
-                        semActiveEl.progPeriodeCible = p;
-                        semActiveEl.progSemaineCible = fIdx;
-                    }
-                    sauvegarderProgPeriodes();
+                    chargerSemaineDepuisIndex(e, fIdx, p);
                     break;
                 }
             }
@@ -2582,7 +2716,8 @@ function appliquerDateDebutSemaine(dateISO) {
 
 function changerSemaineActive(nouvelIndex) {
     if (!idEleveCourant || !eleves[idEleveCourant]) return;
-    chargerSemaineDepuisIndex(eleves[idEleveCourant], nouvelIndex);
+    let e = eleves[idEleveCourant];
+    chargerSemaineDepuisIndex(e, nouvelIndex, e.periodePlanActive);
     sauvegarderEleves();
     majBarreSemainesUI();
     afficherPlanHebdo();
@@ -2592,54 +2727,55 @@ function changerSemaineActive(nouvelIndex) {
 
 function ajouterSemaineAvance() {
     if (!idEleveCourant || !eleves[idEleveCourant]) return;
-    let e = eleves[idEleveCourant]; syncEleveVersSemaineActive(e);
-    let derniereSem = e.semaines[e.semaines.length - 1], nouvDebutISO = "", nouvDebutFR = "", nouvFinFR = "";
-    if (derniereSem && derniereSem.dateDebutISO) {
-        let calcPrec = calculerVendrediDepuisISO(derniereSem.dateDebutISO);
-        if (calcPrec.lundiSuivantISO) { nouvDebutISO = calcPrec.lundiSuivantISO; let calcNouv = calculerVendrediDepuisISO(nouvDebutISO); nouvDebutFR = calcNouv.debutFR; nouvFinFR = calcNouv.finFR; }
-    }
-    let planInitial = [...new Set([...(e.recurrents || []), ...(e.enAttente || [])])];
-    let priosInitiales = [...(e.enAttente || [])];
-    e.enAttente = [];
+    let e = eleves[idEleveCourant];
+    syncEleveVersSemaineActive(e);
+    let per = e.periodePlanActive || progPeriodesData.periodeActiveDash || 'P1';
+    let nextIdx = (parseInt(e.semaineIndex) || 0) + 1;
 
-    // Calcul automatique de la semaine suivante dans la Programmation
-    let ciblePrec = determinerPeriodeEtSemainePourEleve(e);
-    let nextPer = ciblePrec.per;
-    let nextSemIdx = ciblePrec.semIdx + 1;
-    let pObj = progPeriodesData.periodes[nextPer];
-    if (pObj && nextSemIdx >= pObj.semaines.length) {
-        let idxP = PERIODES_LISTE.indexOf(nextPer);
-        if (idxP >= 0 && idxP + 1 < PERIODES_LISTE.length) {
-            nextPer = PERIODES_LISTE[idxP + 1];
-            nextSemIdx = 0;
-        } else {
-            nextSemIdx = pObj.semaines.length - 1;
-        }
+    // Si la semaine suivante existe déjà dans la période, on bascule directement dessus !
+    if (nextIdx < e.semaines.length) {
+        chargerSemaineDepuisIndex(e, nextIdx, per);
+        sauvegarderEleves();
+        majBarreSemainesUI();
+        afficherPlanHebdo();
+        changementMatiereSelection();
+        showToast("👉 Basculé sur " + per + " — Semaine " + (nextIdx + 1) + " !", "success");
+        return;
     }
 
-    e.semaines.push({
-        id: 'sem_' + Date.now(),
-        dateDebutISO: nouvDebutISO, dateDebut: nouvDebutFR, dateFin: nouvFinFR,
-        progPeriodeCible: nextPer, progSemaineCible: nextSemIdx,
-        planHebdo: planInitial, priorites: priosInitiales, joursAssignes: {},
-        sequencesChoisies: { ...(e.sequencesChoisies || {}) }, valides: {}, suivi: JSON.parse(JSON.stringify(e.suivi || {}))
-    });
-    chargerSemaineDepuisIndex(e, e.semaines.length - 1);
+    // Si on était sur la toute dernière semaine de la période, on ajoute une semaine supplémentaire à la période
+    let pObj = progPeriodesData.periodes[per];
+    if (pObj) {
+        pObj.semaines.push(creerSemaineProgVide(pObj.semaines.length, ""));
+        pObj.nbSemaines = pObj.semaines.length;
+        recalculerDatesPeriode(per);
+        sauvegarderProgPeriodes();
+    }
+    assurerStructureSemaines(e, per);
+    chargerSemaineDepuisIndex(e, e.semaines.length - 1, per);
     sauvegarderEleves();
     majBarreSemainesUI();
     afficherPlanHebdo();
     changementMatiereSelection();
-    showToast("Semaine " + e.semaines.length + " créée (alignée sur " + nextPer + " - Semaine " + (nextSemIdx + 1) + ") !", "success");
+    showToast("➕ Semaine " + e.semaines.length + " ajoutée à la période " + per + " !", "success");
 }
 
 function supprimerSemaineActive() {
     if (!idEleveCourant || !eleves[idEleveCourant]) return;
-    let e = eleves[idEleveCourant]; if (e.semaines.length <= 1) return;
-    if (confirm("Supprimer la Semaine " + (e.semaineIndex + 1) + " préparée pour " + e.nom + " ?")) {
-        e.semaines.splice(e.semaineIndex, 1);
-        let nouvIdx = Math.max(0, e.semaineIndex - 1), s = e.semaines[nouvIdx];
-        e.semaineIndex = nouvIdx; e.planHebdo = [...(s.planHebdo || [])]; e.priorites = [...(s.priorites || [])]; e.joursAssignes = { ...(s.joursAssignes || {}) }; e.sequencesChoisies = { ...(s.sequencesChoisies || {}) }; e.valides = { ...(s.valides || {}) }; e.suivi = { ...(s.suivi || {}) }; e.dateDebutISO = s.dateDebutISO || ""; e.dateDebut = s.dateDebut || ""; e.dateFin = s.dateFin || "";
-        sauvegarderEleves(); majBarreSemainesUI(); afficherPlanHebdo(); changementMatiereSelection(); rafraichirDashboard(); showToast("Semaine supprimée.", "success");
+    let e = eleves[idEleveCourant];
+    let numSem = (parseInt(e.semaineIndex) || 0) + 1;
+    if (confirm("Vider les activités programmées sur la Semaine " + numSem + " (" + (e.periodePlanActive || 'P1') + ") de " + e.nom + " ?\n\n(La Semaine " + numSem + " restera dans la liste avec son numéro intact).")) {
+        e.planHebdo = [...(e.recurrents || [])];
+        e.priorites = [];
+        e.joursAssignes = {};
+        e.valides = {};
+        syncEleveVersSemaineActive(e);
+        sauvegarderEleves();
+        majBarreSemainesUI();
+        afficherPlanHebdo();
+        changementMatiereSelection();
+        rafraichirDashboard();
+        showToast("🧹 Semaine " + numSem + " vidée (numéro de semaine conservé).", "success");
     }
 }
 
@@ -3145,53 +3281,150 @@ function validerAssignationMultiple() {
 }
 
 function cloreSemainePourUnEleve(eleve) {
-    assurerStructureSemaines(eleve); syncEleveVersSemaineActive(eleve);
-    let aTransferer = [...new Set([...(eleve.recurrents || []), ...(eleve.enAttente || [])])];
-    (eleve.planHebdo || []).forEach(idAct => {
-        let estVal = eleve.valides && eleve.valides[idAct];
-        if (!estVal || (eleve.suivi && eleve.suivi[idAct] && (eleve.suivi[idAct].statut === 'a_revoir' || eleve.suivi[idAct].statut === 'a_refaire'))) {
-            if (!aTransferer.includes(idAct)) aTransferer.push(idAct);
-        }
-    });
-    eleve.enAttente = [];
-    if (eleve.semaines.length > 1) {
-        eleve.semaines.splice(eleve.semaineIndex, 1);
-        let nextIdx = Math.min(eleve.semaineIndex, eleve.semaines.length - 1), s = eleve.semaines[nextIdx];
-        eleve.semaineIndex = nextIdx; if (!s.priorites) s.priorites = [];
-        aTransferer.forEach(idAct => {
-            if (!s.planHebdo.includes(idAct)) s.planHebdo.unshift(idAct);
-            if (!(eleve.recurrents && eleve.recurrents.includes(idAct)) && !s.priorites.includes(idAct)) s.priorites.push(idAct);
-        });
-        (eleve.recurrents || []).forEach(idRec => {
-            if (s.valides && s.valides[idRec]) delete s.valides[idRec];
-        });
-        eleve.planHebdo = [...s.planHebdo]; eleve.priorites = [...s.priorites]; eleve.joursAssignes = { ...(s.joursAssignes || {}) }; eleve.sequencesChoisies = { ...(eleve.sequencesChoisies || {}), ...(s.sequencesChoisies || {}) }; eleve.valides = { ...(s.valides || {}) }; eleve.suivi = { ...(eleve.suivi || {}), ...(s.suivi || {}) }; eleve.dateDebutISO = s.dateDebutISO || ""; eleve.dateDebut = s.dateDebut || ""; eleve.dateFin = s.dateFin || "";
-    } else {
-        let nextISO = "", nextDeb = "", nextFin = "";
-        if (eleve.dateDebutISO) { let c = calculerVendrediDepuisISO(eleve.dateDebutISO); if (c.lundiSuivantISO) { nextISO = c.lundiSuivantISO; let c2 = calculerVendrediDepuisISO(nextISO); nextDeb = c2.debutFR; nextFin = c2.finFR; } }
-        let priosReport = aTransferer.filter(idAct => !(eleve.recurrents && eleve.recurrents.includes(idAct)));
-        eleve.planHebdo = [...aTransferer]; eleve.valides = {}; eleve.priorites = priosReport; eleve.joursAssignes = {}; eleve.dateDebutISO = nextISO; eleve.dateDebut = nextDeb; eleve.dateFin = nextFin;
-        eleve.semaines[0] = { id: 'sem_' + Date.now(), dateDebutISO: nextISO, dateDebut: nextDeb, dateFin: nextFin, planHebdo: [...eleve.planHebdo], priorites: [...eleve.priorites], joursAssignes: {}, sequencesChoisies: { ...(eleve.sequencesChoisies || {}) }, valides: {}, suivi: JSON.parse(JSON.stringify(eleve.suivi || {})) };
-    }
-    dashboardArchives = dashboardArchives.filter(cle => !cle.startsWith(eleve.id + '_'));
+    assurerStructureSemaines(eleve);
+    syncEleveVersSemaineActive(eleve);
+
+    let perActuelle = eleve.periodePlanActive || progPeriodesData.periodeActiveDash || 'P1';
+    let idxActuel = parseInt(eleve.semaineIndex) || 0;
+    let semCourante = eleve.semaines[idxActuel];
+    if (semCourante) semCourante.cloturee = true;
+
+    // Liste des ateliers non terminés (ou à revoir/refaire) + rituels récurrents + file d'attente à transférer sur la Semaine N+1
+    let aTransferer = [...new Set([...(eleve.recurrents || []), ...(eleve.enAttente || [])])];
+    let priosReport = [...(eleve.enAttente || [])];
+
+    (eleve.planHebdo || []).forEach(idAct => {
+        let estVal = eleve.valides && eleve.valides[idAct];
+        let aRevoir = eleve.suivi && eleve.suivi[idAct] && (eleve.suivi[idAct].statut === 'a_revoir' || eleve.suivi[idAct].statut === 'a_refaire');
+        if (!estVal || aRevoir) {
+            if (!aTransferer.includes(idAct)) aTransferer.push(idAct);
+            if (!(eleve.recurrents && eleve.recurrents.includes(idAct)) && !priosReport.includes(idAct)) {
+                priosReport.push(idAct);
+            }
+        }
+    });
+    eleve.enAttente = [];
+
+    // Détermination de la Semaine suivante (Semaine N+1 de la même période, ou Semaine 1 de la période suivante en fin de période)
+    let nextPer = perActuelle;
+    let nextIdx = idxActuel + 1;
+    let arrSemaines = eleve.plansParPeriode[perActuelle] || eleve.semaines;
+
+    if (nextIdx >= arrSemaines.length) {
+        let pPos = PERIODES_LISTE.indexOf(perActuelle);
+        if (pPos >= 0 && pPos + 1 < PERIODES_LISTE.length) {
+            nextPer = PERIODES_LISTE[pPos + 1];
+            nextIdx = 0;
+        } else {
+            arrSemaines.push({
+                id: 'sem_' + perActuelle + '_' + (arrSemaines.length + 1),
+                numeroFixe: arrSemaines.length + 1,
+                progPeriodeCible: perActuelle,
+                progSemaineCible: arrSemaines.length,
+                dateDebutISO: "", dateDebut: "", dateFin: "",
+                planHebdo: [], priorites: [], joursAssignes: {}, sequencesChoisies: {}, valides: {}, suivi: {}, cloturee: false
+            });
+        }
+    }
+
+    assurerStructureSemaines(eleve, nextPer);
+    let semSuivante = eleve.plansParPeriode[nextPer][nextIdx];
+    if (semSuivante) {
+        // On conserve les activités que vous aviez déjà préparées d'avance sur la Semaine N+1 et on ajoute en haut les reports de la Semaine N
+        aTransferer.forEach(idAct => {
+            if (!semSuivante.planHebdo.includes(idAct)) {
+                semSuivante.planHebdo.unshift(idAct);
+            }
+        });
+        priosReport.forEach(idP => {
+            if (!semSuivante.priorites.includes(idP)) {
+                semSuivante.priorites.push(idP);
+            }
+        });
+        (eleve.recurrents || []).forEach(idRec => {
+            if (semSuivante.valides && semSuivante.valides[idRec]) delete semSuivante.valides[idRec];
+        });
+        semSuivante.sequencesChoisies = { ...(eleve.sequencesChoisies || {}), ...(semSuivante.sequencesChoisies || {}) };
+        semSuivante.suivi = { ...(eleve.suivi || {}), ...(semSuivante.suivi || {}) };
+    }
+
+    // On positionne l'élève sur sa nouvelle Semaine N+1 (sans jamais supprimer la Semaine N !)
+    chargerSemaineDepuisIndex(eleve, nextIdx, nextPer);
+    dashboardArchives = dashboardArchives.filter(cle => !cle.startsWith(eleve.id + '_'));
 }
 
 function commencerNouvelleSemaine() {
-    if (!idEleveCourant) return; let eleve = eleves[idEleveCourant];
-    if (confirm("Clôturer la Semaine " + (eleve.semaineIndex + 1) + " de " + eleve.nom + ", reporter les non validés et réinitialiser ses rituels hebdomadaires ?")) {
-        cloreSemainePourUnEleve(eleve);
-        setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
-        sauvegarderEleves(); chargerEleve(); rafraichirDashboard(); showToast("✅ Semaine suivante activée !", "success");
-    }
+    if (!idEleveCourant) return;
+    let eleve = eleves[idEleveCourant];
+    let numActuel = (parseInt(eleve.semaineIndex) || 0) + 1;
+    let perActuelle = eleve.periodePlanActive || 'P1';
+    if (confirm("Clôturer la " + perActuelle + " — Semaine " + numActuel + " de " + eleve.nom + " et passer à la Semaine " + (numActuel + 1) + " ?\n\n• La Semaine " + numActuel + " sera conservée dans l'historique des semaines\n• Les ateliers non validés et les rituels glisseront dans la Semaine " + (numActuel + 1) + ".")) {
+        cloreSemainePourUnEleve(eleve);
+        setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
+        sauvegarderEleves();
+        chargerEleve();
+        rafraichirDashboard();
+        showToast("✅ Passage en " + eleve.periodePlanActive + " — Semaine " + (eleve.semaineIndex + 1) + " effectué !", "success");
+    }
 }
 
 function cloturerSemaineClasseGlobale() {
-    if (confirm("🏁 Clôturer la semaine en cours pour les Plans de travail de TOUTE la classe ?")) {
-        Object.values(eleves).forEach(e => cloreSemainePourUnEleve(e));
-        setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
-        sauvegarderEleves(); if (idEleveCourant) chargerEleve(); rafraichirDashboard();
-        showToast("🏁 Semaine clôturée pour toute la classe !", "success");
-    }
+    assurerStructureProgPeriodes();
+
+    // On prend comme référence la semaine affichée chez l'élève courant (ou à défaut celle du Tableau de bord)
+    let perCible = (idEleveCourant && eleves[idEleveCourant] && eleves[idEleveCourant].periodePlanActive)
+        ? eleves[idEleveCourant].periodePlanActive
+        : (progPeriodesData.periodeActiveDash || 'P1');
+    let idxCible = (idEleveCourant && eleves[idEleveCourant] && eleves[idEleveCourant].semaineIndex !== undefined)
+        ? parseInt(eleves[idEleveCourant].semaineIndex)
+        : (progPeriodesData.semaineIndexDash || 0);
+
+    let numSem = idxCible + 1;
+    let nbElevesTotal = Object.keys(eleves).length;
+    if (nbElevesTotal === 0) {
+        showToast("Aucun élève enregistré dans la classe.", "error");
+        return;
+    }
+
+    let msgConfirm = "🏁 CLÔTURE DE FIN DE SEMAINE POUR TOUTE LA CLASSE (" + nbElevesTotal + " élèves)\n\n" +
+        "Voulez-vous clôturer la " + perCible + " — Semaine " + numSem + " pour TOUS les élèves d'un seul coup ?\n\n" +
+        "✅ Pour chaque élève :\n" +
+        "• Les ateliers non terminés (ou marqués à revoir/refaire) seront automatiquement transférés en priorité sur la Semaine " + (numSem + 1) + "\n" +
+        "• Les rituels hebdomadaires (🔄) seront réinitialisés pour la Semaine " + (numSem + 1) + "\n" +
+        "• La Semaine " + numSem + " restera intacte dans l'historique avec son numéro\n" +
+        "• Tous les élèves (et le Tableau de bord) basculeront automatiquement sur la Semaine " + (numSem + 1) + ".";
+
+    if (!confirm(msgConfirm)) return;
+
+    let nextPer = perCible;
+    let nextIdx = idxCible + 1;
+
+    // 1. On clôture la semaine cible pour chaque élève de la classe
+    Object.values(eleves).forEach(e => {
+        assurerStructureSemaines(e, perCible);
+        chargerSemaineDepuisIndex(e, idxCible, perCible);
+        cloreSemainePourUnEleve(e);
+        nextPer = e.periodePlanActive;
+        nextIdx = e.semaineIndex;
+    });
+
+    // 2. On demande si on souhaite aussi reporter les leçons prof non cochées de cette semaine
+    if (confirm("👩‍🏫 Voulez-vous également reporter sur la Semaine " + (nextIdx + 1) + " les leçons explicites non cochées du Tableau de bord ?\n\n(Cliquez sur OK pour oui, ou Annuler pour clôturer uniquement les plans des élèves).")) {
+        reporterEtDecalerSemaine(perCible, idxCible, null, null);
+    }
+
+    // 3. On aligne le Tableau de bord sur la nouvelle semaine active
+    progPeriodesData.periodeActiveDash = nextPer;
+    progPeriodesData.semaineIndexDash = nextIdx;
+    dashboardArchives = [];
+    setItemSafe(KEY_ARCHIVES_TODO, JSON.stringify(dashboardArchives));
+
+    sauvegarderProgPeriodes();
+    sauvegarderEleves();
+    if (idEleveCourant && eleves[idEleveCourant]) chargerEleve();
+    rafraichirDashboard();
+
+    showToast("🏁 Semaine " + numSem + " clôturée pour les " + nbElevesTotal + " élèves ! Toute la classe est maintenant en " + nextPer + " — Semaine " + (nextIdx + 1) + ".", "success");
 }
 
 function basculerPriorite(idActivite) {
@@ -3928,57 +4161,29 @@ function obtenirContexteSemaineElevePourDashboard(e, perDash, semIdxDash) {
     assurerStructureSemaines(e);
     syncEleveVersSemaineActive(e);
 
-    let pObj = progPeriodesData.periodes[perDash];
-    let semProg = (pObj && pObj.semaines && pObj.semaines[semIdxDash]) ? pObj.semaines[semIdxDash] : null;
-    let dateCibleISO = (semProg && semProg.dateDebutISO) ? semProg.dateDebutISO : "";
+    let arrPeriode = (e.plansParPeriode && e.plansParPeriode[perDash]) ? e.plansParPeriode[perDash] : null;
+    let semObj = (arrPeriode && arrPeriode[semIdxDash]) ? arrPeriode[semIdxDash] : null;
 
-    // 1. Recherche par période et numéro de semaine explicitement associés
-    let idx = e.semaines.findIndex(s => s && s.progPeriodeCible === perDash && parseInt(s.progSemaineCible) === semIdxDash);
-
-    // 2. Sinon recherche par date de Lundi identique
-    if (idx === -1 && dateCibleISO) {
-        idx = e.semaines.findIndex(s => s && s.dateDebutISO === dateCibleISO);
-    }
-
-    // 3. Sinon, si l'élève n'a qu'une seule semaine en cours (et qu'elle n'est pas taguée sur une autre semaine future)
-    if (idx === -1 && e.semaines.length === 1) {
-        let s0 = e.semaines[0];
-        let tagueAilleurs = (s0.progPeriodeCible && (s0.progPeriodeCible !== perDash || parseInt(s0.progSemaineCible) !== semIdxDash));
-        if (!tagueAilleurs) idx = 0;
-    }
-
-    // 4. Sinon correspondance par position (Semaine 1 -> index 0, Semaine 2 -> index 1...)
-    if (idx === -1 && semIdxDash < e.semaines.length) {
-        let sCand = e.semaines[semIdxDash];
-        let tagueAilleurs = (sCand && sCand.progPeriodeCible && (sCand.progPeriodeCible !== perDash || parseInt(sCand.progSemaineCible) !== semIdxDash));
-        if (!tagueAilleurs) idx = semIdxDash;
-    }
-
-    // 5. Repli par défaut sur la semaine en cours (index 0) et jamais sur une semaine d'avance non concernée
-    if (idx === -1 && e.semaines.length > 0) {
-        let s0 = e.semaines[0];
-        let tagueAilleurs = (s0.progPeriodeCible && (s0.progPeriodeCible !== perDash || parseInt(s0.progSemaineCible) !== semIdxDash));
-        if (!tagueAilleurs) idx = 0;
-    }
-
-    if (idx !== -1 && e.semaines[idx]) {
-        let semObj = e.semaines[idx];
+    if (semObj) {
+        let planAvecRec = [...new Set([...(semObj.planHebdo || []), ...(e.recurrents || []).filter(idR => baseDonnees.some(b => b && b.id === idR && !estLeconProf(b)))])];
         return {
             semObj: semObj,
-            idxDansEleve: idx,
-            planHebdo: semObj.planHebdo || [],
+            idxDansEleve: semIdxDash,
+            periodeDansEleve: perDash,
+            planHebdo: planAvecRec,
             priorites: semObj.priorites || [],
             valides: semObj.valides || {},
             suivi: semObj.suivi || {},
             joursAssignes: semObj.joursAssignes || {},
             sequencesChoisies: semObj.sequencesChoisies || {},
-            aucunPlanPourCetteSemaine: false
+            aucunPlanPourCetteSemaine: (planAvecRec.length === 0)
         };
     }
 
     return {
         semObj: null,
-        idxDansEleve: -1,
+        idxDansEleve: semIdxDash,
+        periodeDansEleve: perDash,
         planHebdo: [],
         priorites: [],
         valides: {},
@@ -3989,24 +4194,11 @@ function obtenirContexteSemaineElevePourDashboard(e, perDash, semIdxDash) {
     };
 }
 
-// Aligne automatiquement la semaine active de chaque élève lorsqu'on change de semaine sur le Tableau de bord
 function synchroniserSemaineActiveElevesSurDashboard(perDash, semIdxDash) {
-    let pObj = progPeriodesData.periodes[perDash];
-    let semProg = (pObj && pObj.semaines && pObj.semaines[semIdxDash]) ? pObj.semaines[semIdxDash] : null;
-    let dateCibleISO = (semProg && semProg.dateDebutISO) ? semProg.dateDebutISO : "";
-
     Object.values(eleves).forEach(e => {
         assurerStructureSemaines(e);
-        syncEleveVersSemaineActive(e);
-        let idx = e.semaines.findIndex(s => s && s.progPeriodeCible === perDash && parseInt(s.progSemaineCible) === semIdxDash);
-        if (idx === -1 && dateCibleISO) {
-            idx = e.semaines.findIndex(s => s && s.dateDebutISO === dateCibleISO);
-        }
-        if (idx === -1 && e.semaines.length === 1 && !e.semaines[0].progPeriodeCible) {
-            idx = 0;
-        }
-        if (idx !== -1 && idx !== e.semaineIndex) {
-            chargerSemaineDepuisIndex(e, idx);
+        if (e.periodePlanActive !== perDash || parseInt(e.semaineIndex) !== semIdxDash) {
+            chargerSemaineDepuisIndex(e, semIdxDash, perDash);
         }
     });
 }
@@ -4209,11 +4401,6 @@ function cloreEtDecalerDepuisDashboard() {
     if (!confirm("🏁 Clôturer la Semaine " + (idx + 1) + " (" + per + ") et passer tout le Tableau de bord à la semaine suivante ?\n\n• Les leçons et séquences non cochées glisseront sur la Semaine " + (idx + 2) + "\n• Les ateliers non validés des élèves seront reportés sur leur plan de la Semaine " + (idx + 2) + "\n• Tout le Tableau de bord (leçons, ateliers dirigés, tablettes, bacs, fiches) passera sur la Semaine " + (idx + 2) + ".")) return;
     executerClotureUnifieeSemaine(per, idx);
 }
-
-// On relie aussi le bouton "Clôturer la semaine de toute la classe" à cette même clôture unifiée
-cloturerSemaineClasseGlobale = function() {
-    cloreEtDecalerDepuisDashboard();
-};
 
 function recalerAvanceDepuisDashboard() {
     assurerStructureProgPeriodes();
