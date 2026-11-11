@@ -2253,39 +2253,6 @@ function changerCibleProgDepuisSuiviEleve(nouvPer, nouvSemIdx) {
     if (selSeq) selSeq.value = 'TOUTES_SEQUENCES';
     changementMatiereSelection();
 }
-    assurerStructureProgPeriodes();
-    let per = PERIODES_LISTE.includes(nouvPer) ? nouvPer : (progPeriodesData.periodeActiveDash || 'P1');
-    let pObj = progPeriodesData.periodes[per];
-    let sIdx = parseInt(nouvSemIdx) || 0;
-    if (pObj && (sIdx < 0 || sIdx >= pObj.semaines.length)) sIdx = 0;
-
-    // On synchronise aussi la période/semaine active pour que toute l'application suive votre sélection
-    progPeriodesData.periodeActiveDash = per;
-    progPeriodesData.semaineIndexDash = sIdx;
-
-    if (idEleveCourant && eleves[idEleveCourant]) {
-        let e = eleves[idEleveCourant];
-        assurerStructureSemaines(e);
-        let semActiveEl = e.semaines[e.semaineIndex || 0];
-        if (semActiveEl) {
-            semActiveEl.progPeriodeCible = per;
-            semActiveEl.progSemaineCible = sIdx;
-            let semProg = pObj && pObj.semaines[sIdx] ? pObj.semaines[sIdx] : null;
-            if (!e.dateDebutISO && semProg && semProg.dateDebutISO) {
-                e.dateDebutISO = semProg.dateDebutISO;
-                e.dateDebut = semProg.dateDebut || "";
-                e.dateFin = semProg.dateFin || "";
-                majBarreSemainesUI();
-            }
-        }
-        sauvegarderEleves();
-    }
-
-    sauvegarderProgPeriodes();
-    let selSeq = document.getElementById('selectSequence');
-    if (selSeq) selSeq.value = 'TOUTES_SEQUENCES';
-    changementMatiereSelection();
-}
 
 function getSuggestionsSequencesEtEvalsPourEleve(eleve) {
     assurerStructureProgPeriodes();
