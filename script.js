@@ -170,7 +170,28 @@ function estLeconProf(act) {
     let t = (act.typeRes || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     return t === "lecon" || t === "lecon explicite";
 }
+function genererBadgeLienAct(a, styleCustom = "") {
+    if (!a || !a.lienExterne || !a.lienExterne.trim()) return "";
+    let url = a.lienExterne.trim();
+    let t = (a.typeRes || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
+    let label = "🔗 Lien ↗";
+    let title = "Ouvrir le lien direct";
+
+    if (estLeconProf(a)) {
+        label = "📽️ PDF/PPT ↗";
+        title = "Ouvrir le diaporama ou document de la leçon";
+    } else if (t === "anton" || t.includes("anton")) {
+        label = "🔗 Anton ↗";
+        title = "Ouvrir sur Anton";
+    } else if (t === "fiche" || t === "fiches" || (t.includes("fiche") && !t.includes("fichier jaune")) || t.includes("photocop")) {
+        label = "📄 Fiche ↗";
+        title = "Ouvrir la fiche pour l'imprimer rapidement";
+    }
+
+    let st = styleCustom || "background:#f5eef8; color:#6c3483; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;";
+    return ' <a href="' + escHTML(url) + '" target="_blank" rel="noopener noreferrer" style="' + st + '" title="' + escHTML(title) + '">' + label + '</a>';
+}
 function getEmojiMatiere(matiere, sequence = "") {
     let matRaw = (matiere || "").trim();
     if (matRaw.startsWith("🧑‍🎓")) return "🧑‍🎓";
@@ -3076,7 +3097,7 @@ function afficherRessourcesDisponibles() {
         }
 
         let badgeGuide = (a.pageProf && a.pageProf.trim()) ? ' <span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ' + escHTML(a.pageProf.trim()) + '</span>' : '';
-        let badgeLien = (a.lienExterne && a.lienExterne.trim()) ? ' <a href="' + escHTML(a.lienExterne.trim()) + '" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 5px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir le lien direct">🔗 Anton ↗</a>' : '';
+        let badgeLien = genererBadgeLienAct(a);
         let isRec = eleve.recurrents && eleve.recurrents.includes(a.id);
         html += '<tr style="' + (estDeLaSemaine ? 'background:#fffdf5;' : '') + '">' +
             '<td><strong>' + escHTML(a.niveau) + '</strong><br><small style="color:#7f8c8d;">' + escHTML(perAct) + '</small></td>' +
@@ -3738,8 +3759,8 @@ function genererLignesTableauPlanSuiviHtml(listeItems, eleve) {
         let badge = a.estEvaluation ? '<span class="badge-eval">🎯 Éval</span>' : '';
         let badgeRecHtml = isRec ? ' <span class="badge-recurrent" title="Revient automatiquement chaque semaine">🔄 Hebdo</span>' : '';
         let badgeGuide = (a.pageProf && a.pageProf.trim()) ? ' <span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ' + escHTML(a.pageProf.trim()) + '</span>' : '';
-        let badgeLien = (a.lienExterne && a.lienExterne.trim()) ? ' <a href="' + escHTML(a.lienExterne.trim()) + '" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 5px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir sur Anton">🔗 Anton ↗</a>' : '';
-        let estValide = eleve.valides && eleve.valides[a.id];
+        let badgeLien = genererBadgeLienAct(a);
+        let estValide = eleve.valides && eleve.valides[a.id];
         let rowClass = a.estEvaluation ? 'row-eval' : (estValide ? 'row-valide' : '');
         let statutSuivi = (eleve.suivi && eleve.suivi[a.id]) ? eleve.suivi[a.id].statut : "";
         let isPrio = (eleve.priorites && eleve.priorites.includes(a.id));
@@ -4652,7 +4673,10 @@ function ouvrirEleveDepuisDashboard(idEl) {
 function definirLienRapideDepuisDash(idAct) {
     let a = baseDonnees.find(b => b.id === idAct);
     if (!a) return;
-    let label = estLeconProf(a) ? "PDF / PowerPoint à projeter" : "Anton / activité en ligne";
+    let t = (a.typeRes || "").trim().toLowerCase();
+    let label = estLeconProf(a)
+        ? "PDF / PowerPoint à projeter"
+        : (t.includes("anton") ? "Anton" : (t.includes("fiche") ? "PDF de la fiche à imprimer" : "lien direct (application / document)"));
     let url = prompt('Collez ici le lien direct (' + label + ') pour "' + a.ressource + '" :', a.lienExterne || "");
     if (url !== null) {
         a.lienExterne = url.trim();
@@ -4858,7 +4882,7 @@ function rafraichirDashboard() {
         '<div class="card-panel" style="border-left:5px solid #8e44ad;"><h3 style="color:#6c3483; margin-bottom:10px;">📱 Préparation Tablettes — Anton / Scratch (S' + (semIdx + 1) + ')</h3>' + (tabKeys.length > 0 ? '<table class="table-classique"><thead><tr><th>Support</th><th>Activité & Lien direct</th><th>Élèves à épingler</th><th>Action</th></tr></thead><tbody>' + tabKeys.map(k => {
             let item = tachesTablettesMap[k];
             let btnLien = (item.act.lienExterne && item.act.lienExterne.trim() !== "")
-                ? '<a href="' + escHTML(item.act.lienExterne.trim()) + '" target="_blank" rel="noopener noreferrer" class="btn-action" style="display:inline-block; text-decoration:none; padding:3px 8px; font-size:11.5px; margin-top:4px; background:#8e44ad !important; color:#fff !important;">🔗 Ouvrir ' + escHTML(item.act.typeRes || 'Anton') + ' ↗</a> <button type="button" class="filter-btn" style="padding:2px 5px; font-size:10px; margin-top:4px;" onclick="definirLienRapideDepuisDash(\'' + item.act.id + '\')" title="Modifier le lien">✏️</button>'
+                ? '<a href="' + escHTML(item.act.lienExterne.trim()) + '" target="_blank" rel="noopener noreferrer" class="btn-action" style="display:inline-block; text-decoration:none; padding:3px 8px; font-size:11.5px; margin-top:4px; background:#8e44ad !important; color:#fff !important;">🔗 ' + ((item.act.typeRes || '').toLowerCase().includes('anton') ? 'Ouvrir Anton ↗' : 'Ouvrir le lien ↗') + '</a> <button type="button" class="filter-btn" style="padding:2px 5px; font-size:10px; margin-top:4px;" onclick="definirLienRapideDepuisDash(\'' + item.act.id + '\')" title="Modifier le lien">✏️</button>'                
                 : '<button type="button" class="filter-btn" style="padding:2px 6px; font-size:10.5px; margin-top:3px;" onclick="definirLienRapideDepuisDash(\'' + item.act.id + '\')" title="Ajouter le lien direct Anton">➕🔗 Ajouter lien</button>';
             return '<tr style="' + (item.estArchTab ? 'opacity:0.5;' : '') + '">' +
                 '<td><strong>' + escHTML(item.act.typeRes) + '</strong><br><small style="color:#666;">' + escHTML(item.act.matiere) + '</small></td>' +
@@ -4894,7 +4918,7 @@ function rafraichirDashboard() {
             }).join(' ');
 
             let btnLienFiche = (item.act.lienExterne && item.act.lienExterne.trim() !== "")
-                ? '<br><a href="' + escHTML(item.act.lienExterne.trim()) + '" target="_blank" rel="noopener noreferrer" class="btn-action" style="display:inline-block; text-decoration:none; padding:2px 7px; font-size:11px; margin-top:3px; background:#2980b9 !important; color:#fff !important;">📄 Ouvrir PDF ↗</a>'
+                ? '<br><a href="' + escHTML(item.act.lienExterne.trim()) + '" target="_blank" rel="noopener noreferrer" class="btn-action" style="display:inline-block; text-decoration:none; padding:2px 7px; font-size:11px; margin-top:3px; background:#2980b9 !important; color:#fff !important;">📄 🔗 Lien fiche ↗</a>'
                 : '';
 
             return '<tr style="' + (tousArch ? 'opacity:0.5;' : '') + '">' +
@@ -6185,10 +6209,7 @@ function afficherBase() {
         }
         let badgeGuideProf = (a.pageProf && a.pageProf.trim()) ? '<span class="badge-guide-prof" title="Page du manuel / guide enseignant">👩‍🏫 ' + escHTML(a.pageProf.trim()) + '</span> ' : '';
         let detailsLivres = badgePages + (a.varianteJaune ? '<span style="background:#ffe599; color:#7c2d12; padding:1px 5px; border-radius:4px; font-size:11px;">📒 ' + escHTML(a.varianteJaune) + '</span> ' : '') + badgeGuideProf;
-        let labelBtnLien = isLecon ? "📽️ PDF/PPT ↗" : "🔗 Anton ↗";
-        let badgeLien = (a.lienExterne && a.lienExterne.trim())
-            ? '<a href="' + escHTML(a.lienExterne.trim()) + '" target="_blank" rel="noopener noreferrer" style="background:#f5eef8; color:#6c3483; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:bold; text-decoration:none; border:1px solid #d7bde2;" title="Ouvrir le lien">' + labelBtnLien + '</a> '
-            : '';
+        let badgeLien = genererBadgeLienAct(a) + ' ';
         let badgeRoleHtml = isLecon
             ? ' <span class="badge-lecon-prof" title="Leçon explicite : visible uniquement dans votre Programmation et votre Tableau de bord enseignante">👩‍🏫 Leçon Prof</span>'
             : (a.estEvaluation ? ' <span class="badge-eval">🎯 Éval</span>' : '');
@@ -7267,265 +7288,450 @@ function afficherProgrammation() {
 }
 
 // ==========================================
-// 8B. ÉTIQUETTES 3x8 (66x33,8mm — AVEC SYMBOLE MATIÈRE TOUJOURS AFFICHÉ AU DÉBUT), MATRICE & BILANS
+// 8B. ÉTIQUETTES 3x8 (66x33,8mm — AVEC PLACEMENT SUR PLANCHE ENTAMÉE & CASES SAUTÉES)
 // ==========================================
 let panierEtiquettesIds = [];
+let casesSauteesEtiquettes = new Set(); // Mémorise les numéros de cases (0, 1, 2...) déjà décollées sur la feuille A4
+let indexDragEtiquette = null;
+
+function initialiserStyleInteractifEtiquettes() {
+    if (document.getElementById('styleInteractifPlancheEtiquettes')) return;
+    let st = document.createElement('style');
+    st.id = 'styleInteractifPlancheEtiquettes';
+    st.innerHTML =
+        '@media print {' +
+        '  .etiquette-slot-vide { background: transparent !important; border: none !important; box-shadow: none !important; }' +
+        '  .etiquette-slot-vide *, .etiq-overlay-actions { display: none !important; }' +
+        '}' +
+        '@media screen {' +
+        '  .etiquette-item { position: relative; transition: transform 0.1s, box-shadow 0.1s; }' +
+        '  .etiquette-item:hover .etiq-overlay-actions { opacity: 1 !important; }' +
+        '  .etiquette-slot-vide { box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; user-select: none; padding: 4px; text-align: center; border-radius: 4px; transition: all 0.15s; }' +
+        '  .etiquette-slot-vide:hover { filter: brightness(0.95); }' +
+        '  .etiquette-drag-over { outline: 2.5px dashed #8e44ad !important; transform: scale(0.98); }' +
+        '}';
+    document.head.appendChild(st);
+}
 
 function initialiserBarreFiltresEtiquettesAvancee() {
-    let selMat = document.getElementById('selectMatiereEtiquettes');
-    let selType = document.getElementById('selectTypeEtiquettes');
-    if (!selMat || !selType) return;
+    initialiserStyleInteractifEtiquettes();
+    let selMat = document.getElementById('selectMatiereEtiquettes');
+    let selType = document.getElementById('selectTypeEtiquettes');
+    if (!selMat || !selType) return;
 
-    if (!document.getElementById('selectSequenceEtiquettes')) {
-        let selSeq = document.createElement('select');
-        selSeq.id = 'selectSequenceEtiquettes';
-        selSeq.onchange = function() { afficherResultatsRechercheEtiquettes(); };
-        selMat.parentNode.insertBefore(selSeq, selType);
-    }
+    if (!document.getElementById('selectSequenceEtiquettes')) {
+        let selSeq = document.createElement('select');
+        selSeq.id = 'selectSequenceEtiquettes';
+        selSeq.onchange = function() { afficherResultatsRechercheEtiquettes(); };
+        selMat.parentNode.insertBefore(selSeq, selType);
+    }
 
-    if (!document.getElementById('inputRechercheEtiquettes')) {
-        let inpSearch = document.createElement('input');
-        inpSearch.type = 'text';
-        inpSearch.id = 'inputRechercheEtiquettes';
-        inpSearch.placeholder = '🔍 Rechercher (ex: Cartes à pinces, Fractions, G4)...';
-        inpSearch.style.minWidth = '240px';
-        inpSearch.oninput = function() { afficherResultatsRechercheEtiquettes(); };
-        selType.parentNode.insertBefore(inpSearch, selType.nextSibling);
-    }
+    if (!document.getElementById('inputRechercheEtiquettes')) {
+        let inpSearch = document.createElement('input');
+        inpSearch.type = 'text';
+        inpSearch.id = 'inputRechercheEtiquettes';
+        inpSearch.placeholder = '🔍 Rechercher (ex: Cartes à pinces, Fractions, G4)...';
+        inpSearch.style.minWidth = '240px';
+        inpSearch.oninput = function() { afficherResultatsRechercheEtiquettes(); };
+        selType.parentNode.insertBefore(inpSearch, selType.nextSibling);
+    }
 }
 
 function getAteliersFiltresEtiquettes() {
-    const niv = document.getElementById('selectNiveauEtiquettes') ? document.getElementById('selectNiveauEtiquettes').value : 'Tous';
-    const mat = document.getElementById('selectMatiereEtiquettes') ? document.getElementById('selectMatiereEtiquettes').value : 'Toutes';
-    const seq = document.getElementById('selectSequenceEtiquettes') ? document.getElementById('selectSequenceEtiquettes').value : 'Toutes';
-    const typeF = document.getElementById('selectTypeEtiquettes') ? document.getElementById('selectTypeEtiquettes').value : 'Tous';
-    const q = (document.getElementById('inputRechercheEtiquettes') ? document.getElementById('inputRechercheEtiquettes').value : '').toLowerCase().trim();
+    const niv = document.getElementById('selectNiveauEtiquettes') ? document.getElementById('selectNiveauEtiquettes').value : 'Tous';
+    const mat = document.getElementById('selectMatiereEtiquettes') ? document.getElementById('selectMatiereEtiquettes').value : 'Toutes';
+    const seq = document.getElementById('selectSequenceEtiquettes') ? document.getElementById('selectSequenceEtiquettes').value : 'Toutes';
+    const typeF = document.getElementById('selectTypeEtiquettes') ? document.getElementById('selectTypeEtiquettes').value : 'Tous';
+    const q = (document.getElementById('inputRechercheEtiquettes') ? document.getElementById('inputRechercheEtiquettes').value : '').toLowerCase().trim();
 
-    return baseDonnees.filter(a => {
-        if (!a || estLeconProf(a)) return false;
-        if (niv !== 'Tous' && !(a.niveau || "").toUpperCase().includes(niv)) return false;
-        if (mat !== 'Toutes' && (a.matiere || "").trim() !== mat) return false;
-        if (seq !== 'Toutes' && !activiteAppartientASequence(a, seq)) return false;
-        if (typeF !== 'Tous' && (a.typeRes || "").trim() !== typeF) return false;
-        if (q) {
-            let txt = ((a.ressource || '') + ' ' + (a.sequence || '') + ' ' + (a.matiere || '') + ' ' + (a.lecon || '') + ' ' + (a.competence || '') + ' ' + (a.symbole || '')).toLowerCase();
-            if (!txt.includes(q)) return false;
-        }
-        return true;
-    });
+    return baseDonnees.filter(a => {
+        if (!a || estLeconProf(a)) return false;
+        if (niv !== 'Tous' && !(a.niveau || "").toUpperCase().includes(niv)) return false;
+        if (mat !== 'Toutes' && (a.matiere || "").trim() !== mat) return false;
+        if (seq !== 'Toutes' && !activiteAppartientASequence(a, seq)) return false;
+        if (typeF !== 'Tous' && (a.typeRes || "").trim() !== typeF) return false;
+        if (q) {
+            let txt = ((a.ressource || '') + ' ' + (a.sequence || '') + ' ' + (a.matiere || '') + ' ' + (a.lecon || '') + ' ' + (a.competence || '') + ' ' + (a.symbole || '')).toLowerCase();
+            if (!txt.includes(q)) return false;
+        }
+        return true;
+    });
 }
 
 function afficherChoixEtiquettes() {
-    initialiserBarreFiltresEtiquettesAvancee();
+    initialiserBarreFiltresEtiquettesAvancee();
 
-    const selMat = document.getElementById('selectMatiereEtiquettes');
-    const niv = document.getElementById('selectNiveauEtiquettes') ? document.getElementById('selectNiveauEtiquettes').value : 'Tous';
+    const selMat = document.getElementById('selectMatiereEtiquettes');
+    const niv = document.getElementById('selectNiveauEtiquettes') ? document.getElementById('selectNiveauEtiquettes').value : 'Tous';
 
-    if (selMat) {
-        let curMat = selMat.value || 'Toutes';
-        let matsDispo = ['Toutes', ...new Set(baseDonnees.filter(b => b && !estLeconProf(b) && (niv === 'Tous' || (b.niveau || '').toUpperCase().includes(niv))).map(b => (b.matiere || "").trim()).filter(Boolean))];
-        selMat.innerHTML = matsDispo.map(m => '<option value="' + escHTML(m) + '">' + (m === 'Toutes' ? 'Toutes les matières' : escHTML(m)) + '</option>').join('');
-        if (matsDispo.includes(curMat)) selMat.value = curMat;
-    }
+    if (selMat) {
+        let curMat = selMat.value || 'Toutes';
+        let matsDispo = ['Toutes', ...new Set(baseDonnees.filter(b => b && !estLeconProf(b) && (niv === 'Tous' || (b.niveau || '').toUpperCase().includes(niv))).map(b => (b.matiere || "").trim()).filter(Boolean))];
+        selMat.innerHTML = matsDispo.map(m => '<option value="' + escHTML(m) + '">' + (m === 'Toutes' ? 'Toutes les matières' : escHTML(m)) + '</option>').join('');
+        if (matsDispo.includes(curMat)) selMat.value = curMat;
+    }
 
-    const mat = selMat ? selMat.value : 'Toutes';
-    const selSeq = document.getElementById('selectSequenceEtiquettes');
-    if (selSeq) {
-        let curSeq = selSeq.value || 'Toutes';
-        let toutesSeqs = [];
-        baseDonnees.filter(b => b && !estLeconProf(b) && (niv === 'Tous' || (b.niveau || '').toUpperCase().includes(niv)) && (mat === 'Toutes' || (b.matiere || '').trim() === mat)).forEach(b => {
-            extraireListeSequences(b.sequence).forEach(s => toutesSeqs.push(s));
-        });
-        let seqsUnique = ['Toutes', ...new Set(toutesSeqs.filter(Boolean))].sort((a, b) => a === 'Toutes' ? -1 : (b === 'Toutes' ? 1 : a.localeCompare(b, 'fr')));
-        selSeq.innerHTML = seqsUnique.map(s => '<option value="' + escHTML(s) + '">' + (s === 'Toutes' ? '📑 Toutes les séquences' : '📑 Séq : ' + escHTML(s)) + '</option>').join('');
-        if (seqsUnique.includes(curSeq)) selSeq.value = curSeq;
-    }
+    const mat = selMat ? selMat.value : 'Toutes';
+    const selSeq = document.getElementById('selectSequenceEtiquettes');
+    if (selSeq) {
+        let curSeq = selSeq.value || 'Toutes';
+        let toutesSeqs = [];
+        baseDonnees.filter(b => b && !estLeconProf(b) && (niv === 'Tous' || (b.niveau || '').toUpperCase().includes(niv)) && (mat === 'Toutes' || (b.matiere || '').trim() === mat)).forEach(b => {
+            extraireListeSequences(b.sequence).forEach(s => toutesSeqs.push(s));
+        });
+        let seqsUnique = ['Toutes', ...new Set(toutesSeqs.filter(Boolean))].sort((a, b) => a === 'Toutes' ? -1 : (b === 'Toutes' ? 1 : a.localeCompare(b, 'fr')));
+        selSeq.innerHTML = seqsUnique.map(s => '<option value="' + escHTML(s) + '">' + (s === 'Toutes' ? '📑 Toutes les séquences' : '📑 Séq : ' + escHTML(s)) + '</option>').join('');
+        if (seqsUnique.includes(curSeq)) selSeq.value = curSeq;
+    }
 
-    afficherResultatsRechercheEtiquettes();
+    afficherResultatsRechercheEtiquettes();
 }
 
 function toggleEtiquetteDansPanier(idAct) {
-    let idx = panierEtiquettesIds.indexOf(idAct);
-    if (idx > -1) {
-        panierEtiquettesIds.splice(idx, 1);
-    } else {
-        panierEtiquettesIds.push(idAct);
-    }
-    afficherResultatsRechercheEtiquettes();
-    genererApercuEtiquettes();
+    let idx = panierEtiquettesIds.indexOf(idAct);
+    if (idx > -1) {
+        panierEtiquettesIds.splice(idx, 1);
+    } else {
+        panierEtiquettesIds.push(idAct);
+    }
+    afficherResultatsRechercheEtiquettes();
+    genererApercuEtiquettes();
 }
 
 function retirerEtiquetteDuPanierIndex(idxPanier) {
-    if (idxPanier >= 0 && idxPanier < panierEtiquettesIds.length) {
-        panierEtiquettesIds.splice(idxPanier, 1);
-        afficherResultatsRechercheEtiquettes();
-        genererApercuEtiquettes();
-    }
+    if (idxPanier >= 0 && idxPanier < panierEtiquettesIds.length) {
+        panierEtiquettesIds.splice(idxPanier, 1);
+        afficherResultatsRechercheEtiquettes();
+        genererApercuEtiquettes();
+    }
 }
 
 function dupliquerEtiquetteDansPanier(idAct) {
-    panierEtiquettesIds.push(idAct);
-    afficherResultatsRechercheEtiquettes();
-    genererApercuEtiquettes();
+    panierEtiquettesIds.push(idAct);
+    afficherResultatsRechercheEtiquettes();
+    genererApercuEtiquettes();
 }
 
 function viderPanierEtiquettes() {
-    panierEtiquettesIds = [];
-    afficherResultatsRechercheEtiquettes();
-    genererApercuEtiquettes();
+    panierEtiquettesIds = [];
+    afficherResultatsRechercheEtiquettes();
+    genererApercuEtiquettes();
 }
 
 function cocherToutesEtiquettes(etat) {
-    let listeFiltree = getAteliersFiltresEtiquettes();
-    if (etat) {
-        listeFiltree.forEach(a => {
-            if (!panierEtiquettesIds.includes(a.id)) panierEtiquettesIds.push(a.id);
-        });
-        showToast("✅ " + listeFiltree.length + " étiquette(s) du filtre ajoutée(s) à la planche !", "success");
-    } else {
-        let idsFiltres = new Set(listeFiltree.map(a => a.id));
-        panierEtiquettesIds = panierEtiquettesIds.filter(id => !idsFiltres.has(id));
-        showToast("Étiquettes du filtre retirées de la planche.", "success");
-    }
-    afficherResultatsRechercheEtiquettes();
-    genererApercuEtiquettes();
+    let listeFiltree = getAteliersFiltresEtiquettes();
+    if (etat) {
+        listeFiltree.forEach(a => {
+            if (!panierEtiquettesIds.includes(a.id)) panierEtiquettesIds.push(a.id);
+        });
+        showToast("✅ " + listeFiltree.length + " étiquette(s) du filtre ajoutée(s) à la planche !", "success");
+    } else {
+        let idsFiltres = new Set(listeFiltree.map(a => a.id));
+        panierEtiquettesIds = panierEtiquettesIds.filter(id => !idsFiltres.has(id));
+        showToast("Étiquettes du filtre retirées de la planche.", "success");
+    }
+    afficherResultatsRechercheEtiquettes();
+    genererApercuEtiquettes();
+}
+
+// Active ou désactive un emplacement de la feuille A4 (ex: étiquette déjà décollée lors d'une impression précédente)
+function toggleCaseSauteeEtiquette(slotIdx) {
+    if (casesSauteesEtiquettes.has(slotIdx)) {
+        casesSauteesEtiquettes.delete(slotIdx);
+    } else {
+        casesSauteesEtiquettes.add(slotIdx);
+    }
+    afficherResultatsRechercheEtiquettes();
+    genererApercuEtiquettes();
+}
+
+// Permet d'indiquer en 1 clic : "Les X premières étiquettes de ma feuille ont déjà été utilisées, commencer à la case N° Y"
+function definirPremiereCaseLibreEtiquettes(numCaseUnBased) {
+    let n = Math.max(1, Math.min(200, parseInt(numCaseUnBased) || 1));
+    casesSauteesEtiquettes.clear();
+    for (let i = 0; i < n - 1; i++) {
+        casesSauteesEtiquettes.add(i);
+    }
+    afficherResultatsRechercheEtiquettes();
+    genererApercuEtiquettes();
+    if (n > 1) {
+        showToast("⏭️ Cases 1 à " + (n - 1) + " marquées comme déjà utilisées : l'impression démarrera à la case N° " + n + " !", "success");
+    } else {
+        showToast("🔄 Toutes les cases sont à nouveau disponibles dès la case N° 1.", "success");
+    }
+}
+
+function libererToutesCasesEtiquettes() {
+    casesSauteesEtiquettes.clear();
+    afficherResultatsRechercheEtiquettes();
+    genererApercuEtiquettes();
+    showToast("🔄 Tous les emplacements de la planche ont été libérés.", "success");
+}
+
+// Permet de glisser-déposer une étiquette d'une case à n'importe quelle autre case sur la planche A4
+function demarrerDragEtiquette(ev, slotIdx) {
+    indexDragEtiquette = slotIdx;
+    if (ev.dataTransfer) ev.dataTransfer.effectAllowed = 'move';
+}
+
+function survolerDropEtiquette(ev, el) {
+    ev.preventDefault();
+    if (el) el.classList.add('etiquette-drag-over');
+}
+
+function quitterDropEtiquette(el) {
+    if (el) el.classList.remove('etiquette-drag-over');
+}
+
+function deposerEtiquetteSurCase(ev, targetSlotIdx) {
+    ev.preventDefault();
+    document.querySelectorAll('.etiquette-drag-over').forEach(el => el.classList.remove('etiquette-drag-over'));
+    if (indexDragEtiquette === null || indexDragEtiquette === targetSlotIdx) return;
+
+    // Reconstitue la grille actuelle pour échanger exactement les 2 emplacements
+    let mapping = construireGrillePlacementEtiquettes();
+    let itemSrc = mapping.slots[indexDragEtiquette];
+    let itemDest = mapping.slots[targetSlotIdx];
+
+    if (!itemSrc || itemSrc.type !== 'etiquette') {
+        indexDragEtiquette = null;
+        return;
+    }
+
+    if (itemDest && itemDest.type === 'etiquette') {
+        // Échange la position des deux étiquettes dans le panier
+        let temp = panierEtiquettesIds[itemSrc.panierIdx];
+        panierEtiquettesIds[itemSrc.panierIdx] = panierEtiquettesIds[itemDest.panierIdx];
+        panierEtiquettesIds[itemDest.panierIdx] = temp;
+    } else {
+        // Déplace l'étiquette vers une case vide plus loin en sautant la case d'origine
+        casesSauteesEtiquettes.add(indexDragEtiquette);
+        if (casesSauteesEtiquettes.has(targetSlotIdx)) {
+            casesSauteesEtiquettes.delete(targetSlotIdx);
+        }
+    }
+
+    indexDragEtiquette = null;
+    afficherResultatsRechercheEtiquettes();
+    genererApercuEtiquettes();
+}
+
+// Construit la répartition exacte case par case (sur des planches de 24 étiquettes par défaut)
+function construireGrillePlacementEtiquettes() {
+    let nbCols = parseInt(document.getElementById('etiqColsInput')?.value) || 3;
+    let nbParPage = nbCols * 8; // 24 étiquettes par page A4 (format 3x8)
+    let maxSaute = casesSauteesEtiquettes.size > 0 ? Math.max(...Array.from(casesSauteesEtiquettes)) : -1;
+
+    let slots = [];
+    let pIdx = 0;
+    let sIdx = 0;
+
+    while (pIdx < panierEtiquettesIds.length || sIdx <= maxSaute || sIdx < nbParPage || (sIdx % nbParPage !== 0)) {
+        if (casesSauteesEtiquettes.has(sIdx)) {
+            slots.push({ slotIdx: sIdx, type: 'saute' });
+        } else if (pIdx < panierEtiquettesIds.length) {
+            slots.push({ slotIdx: sIdx, type: 'etiquette', idAct: panierEtiquettesIds[pIdx], panierIdx: pIdx });
+            pIdx++;
+        } else {
+            slots.push({ slotIdx: sIdx, type: 'libre' });
+        }
+        sIdx++;
+        if (sIdx > 240) break; // Sécurité anti-boucle infinie
+    }
+
+    return { slots, nbParPage, nbCols };
 }
 
 function afficherResultatsRechercheEtiquettes() {
-    const cont = document.getElementById('listeChoixEtiquettes');
-    if (!cont) return;
-    cont.style.maxHeight = '380px';
+    const cont = document.getElementById('listeChoixEtiquettes');
+    if (!cont) return;
+    cont.style.maxHeight = '460px';
 
-    let liste = getAteliersFiltresEtiquettes();
+    let liste = getAteliersFiltresEtiquettes();
+    let nbSautees = casesSauteesEtiquettes.size;
 
-    let panierHtml = '<div style="background:#f4ecf7; border:2px solid #8e44ad; border-radius:8px; padding:10px 12px; margin-bottom:12px;">' +
-        '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:6px;">' +
-            '<strong style="color:#6c3483; font-size:13.5px;">📋 Ma planche d\'étiquettes à imprimer (' + panierEtiquettesIds.length + ' étiquette' + (panierEtiquettesIds.length > 1 ? 's' : '') + ' sélectionnée' + (panierEtiquettesIds.length > 1 ? 's' : '') + ') :</strong>' +
-            (panierEtiquettesIds.length > 0 ? '<button type="button" class="btn-remove" style="padding:3px 9px; font-size:11.5px;" onclick="viderPanierEtiquettes()">🗑️ Vider toute la planche</button>' : '') +
-        '</div>';
+    let barrePlacementPlancheHtml = '<div style="background:#fef9e7; border:2px solid #f39c12; border-radius:8px; padding:10px 12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">' +
+        '<div style="font-size:12.5px; color:#7d6608;">' +
+            '<strong>🎯 Réutiliser une planche d\'étiquettes déjà entamée :</strong><br>' +
+            '<span>Cliquez directement sur les cases de l\'aperçu A4 ci-dessous pour barrer (🚫) les emplacements déjà décollés, ou glissez-déposez vos étiquettes !</span>' +
+        '</div>' +
+        '<div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">' +
+            '<label style="font-size:12px; font-weight:bold; color:#7d6608;">Commencer à la case N° :' +
+                '<input type="number" min="1" max="100" value="' + (nbSautees + 1) + '" onchange="definirPremiereCaseLibreEtiquettes(this.value)" style="width:58px; margin-left:5px; padding:4px; font-weight:bold; text-align:center; border:1px solid #d35400; border-radius:4px;">' +
+            '</label>' +
+            (nbSautees > 0 ? '<button type="button" class="filter-btn" style="padding:4px 9px; font-size:11.5px; background:#fff; color:#d35400; border-color:#d35400; font-weight:bold;" onclick="libererToutesCasesEtiquettes()">🔄 Libérer les ' + nbSautees + ' case(s) sautée(s)</button>' : '') +
+        '</div>' +
+    '</div>';
 
-    if (panierEtiquettesIds.length === 0) {
-        panierHtml += '<div style="font-size:12.5px; color:#666; font-style:italic;">Aucune étiquette sélectionnée. Filtrez par séquence ou recherchez un atelier ci-dessous puis cliquez dessus pour l\'ajouter à votre planche !</div>';
-    } else {
-        panierHtml += '<div style="display:flex; flex-wrap:wrap; gap:6px; max-height:115px; overflow-y:auto; padding-top:4px;">' +
-            panierEtiquettesIds.map((id, idxP) => {
-                let a = baseDonnees.find(b => b.id === id);
-                if (!a) return '';
-                let rep = getRepereAtelierHtml(a, null, 14);
-                return '<span class="comp-tag-pill" style="background:#fff; border-color:#8e44ad; color:#2c3e50; font-size:12px; padding:3px 8px;">' +
-                    '<strong>[' + escHTML(a.niveau) + ']</strong> ' +
-                    (rep.codeTexte ? '<strong>' + escHTML(rep.codeTexte) + '</strong> ' : '') +
-                    escHTML(a.ressource) + ' <small style="color:#6c3483;">(' + escHTML(a.sequence || a.matiere) + ')</small>' +
-                    ' <span style="cursor:pointer; color:#2980b9; font-weight:bold; margin-left:3px;" title="Ajouter un exemplaire supplémentaire de cette étiquette" onclick="dupliquerEtiquetteDansPanier(\'' + a.id + '\')">➕</span>' +
-                    ' <span class="comp-tag-remove" title="Retirer de la planche" onclick="retirerEtiquetteDuPanierIndex(' + idxP + ')">✖</span>' +
-                '</span>';
-            }).join('') +
-        '</div>';
-    }
-    panierHtml += '</div>';
+    let panierHtml = '<div style="background:#f4ecf7; border:2px solid #8e44ad; border-radius:8px; padding:10px 12px; margin-bottom:12px;">' +
+        '<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:6px;">' +
+            '<strong style="color:#6c3483; font-size:13.5px;">📋 Ma planche d\'étiquettes à imprimer (' + panierEtiquettesIds.length + ' étiquette' + (panierEtiquettesIds.length > 1 ? 's' : '') + ' sélectionnée' + (panierEtiquettesIds.length > 1 ? 's' : '') + (nbSautees > 0 ? ' • ' + nbSautees + ' emplacement(s) sauté(s)' : '') + ') :</strong>' +
+            (panierEtiquettesIds.length > 0 ? '<button type="button" class="btn-remove" style="padding:3px 9px; font-size:11.5px;" onclick="viderPanierEtiquettes()">🗑️ Vider toute la planche</button>' : '') +
+        '</div>';
 
-    let resultatsHtml = '<div style="font-size:12.5px; font-weight:bold; color:#1b4f72; margin-bottom:6px;">🔎 Ateliers trouvés dans ce filtre (' + liste.length + ') — Cliquez pour ajouter ou retirer de la planche :</div>';
+    if (panierEtiquettesIds.length === 0) {
+        panierHtml += '<div style="font-size:12.5px; color:#666; font-style:italic;">Aucune étiquette sélectionnée. Filtrez par séquence ou recherchez un atelier ci-dessous puis cliquez dessus pour l\'ajouter à votre planche !</div>';
+    } else {
+        panierHtml += '<div style="display:flex; flex-wrap:wrap; gap:6px; max-height:115px; overflow-y:auto; padding-top:4px;">' +
+            panierEtiquettesIds.map((id, idxP) => {
+                let a = baseDonnees.find(b => b.id === id);
+                if (!a) return '';
+                let rep = getRepereAtelierHtml(a, null, 14);
+                return '<span class="comp-tag-pill" style="background:#fff; border-color:#8e44ad; color:#2c3e50; font-size:12px; padding:3px 8px;">' +
+                    '<strong>[' + escHTML(a.niveau) + ']</strong> ' +
+                    (rep.codeTexte ? '<strong>' + escHTML(rep.codeTexte) + '</strong> ' : '') +
+                    escHTML(a.ressource) + ' <small style="color:#6c3483;">(' + escHTML(a.sequence || a.matiere) + ')</small>' +
+                    ' <span style="cursor:pointer; color:#2980b9; font-weight:bold; margin-left:3px;" title="Ajouter un exemplaire supplémentaire de cette étiquette" onclick="dupliquerEtiquetteDansPanier(\'' + a.id + '\')">➕</span>' +
+                    ' <span class="comp-tag-remove" title="Retirer de la planche" onclick="retirerEtiquetteDuPanierIndex(' + idxP + ')">✖</span>' +
+                '</span>';
+            }).join('') +
+        '</div>';
+    }
+    panierHtml += '</div>';
 
-    if (liste.length === 0) {
-        resultatsHtml += '<div style="color:#7f8c8d; font-size:13px; padding:10px; text-align:center;">Aucun atelier ne correspond à cette recherche.</div>';
-    } else {
-        resultatsHtml += '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:6px;">' +
-            liste.map(a => {
-                let rep = getRepereAtelierHtml(a, null, 18);
-                let estSelectionne = panierEtiquettesIds.includes(a.id);
-                let bgCard = estSelectionne ? '#e8f8f5' : '#f8fafc';
-                let borderCard = estSelectionne ? '2px solid #27ae60' : '1px solid #cbd5e1';
-                return '<label style="display:flex; align-items:center; gap:7px; padding:6px 9px; border-radius:6px; background:' + bgCard + '; border:' + borderCard + '; font-size:12.5px; cursor:pointer;">' +
-                    '<input type="checkbox" class="cb-etiq-item" value="' + a.id + '" ' + (estSelectionne ? 'checked' : '') + ' onchange="toggleEtiquetteDansPanier(\'' + a.id + '\')" style="transform:scale(1.15); cursor:pointer;">' +
-                    '<div style="flex:1; line-height:1.25;">' +
-                        '<strong>[' + escHTML(a.niveau) + ']</strong> ' +
-                        (rep.codeTexte ? '<strong style="color:#1b4f72;">' + escHTML(rep.codeTexte) + '</strong> — ' : '') +
-                        '<strong>' + escHTML(a.ressource) + '</strong><br>' +
-                        '<small style="color:#555;">📑 ' + escHTML(a.sequence || 'Sans séquence') + (a.lecon ? ' (' + escHTML(a.lecon) + ')' : '') + ' • ' + escHTML(a.typeRes || '') + '</small>' +
-                    '</div>' +
-                '</label>';
-            }).join('') +
-        '</div>';
-    }
+    let resultatsHtml = '<div style="font-size:12.5px; font-weight:bold; color:#1b4f72; margin-bottom:6px;">🔎 Ateliers trouvés dans ce filtre (' + liste.length + ') — Cliquez pour ajouter ou retirer de la planche :</div>';
 
-    cont.innerHTML = panierHtml + resultatsHtml;
-    genererApercuEtiquettes();
+    if (liste.length === 0) {
+        resultatsHtml += '<div style="color:#7f8c8d; font-size:13px; padding:10px; text-align:center;">Aucun atelier ne correspond à cette recherche.</div>';
+    } else {
+        resultatsHtml += '<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:6px;">' +
+            liste.map(a => {
+                let rep = getRepereAtelierHtml(a, null, 18);
+                let estSelectionne = panierEtiquettesIds.includes(a.id);
+                let bgCard = estSelectionne ? '#e8f8f5' : '#f8fafc';
+                let borderCard = estSelectionne ? '2px solid #27ae60' : '1px solid #cbd5e1';
+                return '<label style="display:flex; align-items:center; gap:7px; padding:6px 9px; border-radius:6px; background:' + bgCard + '; border:' + borderCard + '; font-size:12.5px; cursor:pointer;">' +
+                    '<input type="checkbox" class="cb-etiq-item" value="' + a.id + '" ' + (estSelectionne ? 'checked' : '') + ' onchange="toggleEtiquetteDansPanier(\'' + a.id + '\')" style="transform:scale(1.15); cursor:pointer;">' +
+                    '<div style="flex:1; line-height:1.25;">' +
+                        '<strong>[' + escHTML(a.niveau) + ']</strong> ' +
+                        (rep.codeTexte ? '<strong style="color:#1b4f72;">' + escHTML(rep.codeTexte) + '</strong> — ' : '') +
+                        '<strong>' + escHTML(a.ressource) + '</strong><br>' +
+                        '<small style="color:#555;">📑 ' + escHTML(a.sequence || 'Sans séquence') + (a.lecon ? ' (' + escHTML(a.lecon) + ')' : '') + ' • ' + escHTML(a.typeRes || '') + '</small>' +
+                    '</div>' +
+                '</label>';
+            }).join('') +
+        '</div>';
+    }
+
+    cont.innerHTML = barrePlacementPlancheHtml + panierHtml + resultatsHtml;
+    genererApercuEtiquettes();
 }
 
 function genererApercuEtiquettes() {
-    const zone = document.getElementById('printEtiquettesContainer'); if (!zone) return;
-    let wMm = parseFloat(document.getElementById('etiqLargeurInput')?.value) || 66;
-    let hMm = parseFloat(document.getElementById('etiqHauteurInput')?.value) || 33.8;
-    let fsPt = parseFloat(document.getElementById('etiqFontInput')?.value) || 10.5;
-    let nbCols = parseInt(document.getElementById('etiqColsInput')?.value) || 3;
+    initialiserStyleInteractifEtiquettes();
+    const zone = document.getElementById('printEtiquettesContainer'); if (!zone) return;
+    let wMm = parseFloat(document.getElementById('etiqLargeurInput')?.value) || 66;
+    let hMm = parseFloat(document.getElementById('etiqHauteurInput')?.value) || 33.8;
+    let fsPt = parseFloat(document.getElementById('etiqFontInput')?.value) || 10.5;
+    let nbCols = parseInt(document.getElementById('etiqColsInput')?.value) || 3;
 
-    let showCode = document.getElementById('cbEtiqShowCode') ? document.getElementById('cbEtiqShowCode').checked : true;
-    let showMatiere = document.getElementById('cbEtiqShowMatiere') ? document.getElementById('cbEtiqShowMatiere').checked : true;
-    let showNiveau = document.getElementById('cbEtiqShowNiveau') ? document.getElementById('cbEtiqShowNiveau').checked : true;
-    let showNom = document.getElementById('cbEtiqShowNom') ? document.getElementById('cbEtiqShowNom').checked : true;
-    let showSeq = document.getElementById('cbEtiqShowSeq') ? document.getElementById('cbEtiqShowSeq').checked : true;
-    let showComp = document.getElementById('cbEtiqShowComp') ? document.getElementById('cbEtiqShowComp').checked : true;
-    let showEtoiles = document.getElementById('cbEtiqShowEtoiles') ? document.getElementById('cbEtiqShowEtoiles').checked : true;
-    let showPers = document.getElementById('cbEtiqShowPers') ? document.getElementById('cbEtiqShowPers').checked : true;
-    let showBorder = document.getElementById('cbEtiqShowBorder') ? document.getElementById('cbEtiqShowBorder').checked : true;
+    let showCode = document.getElementById('cbEtiqShowCode') ? document.getElementById('cbEtiqShowCode').checked : true;
+    let showMatiere = document.getElementById('cbEtiqShowMatiere') ? document.getElementById('cbEtiqShowMatiere').checked : true;
+    let showNiveau = document.getElementById('cbEtiqShowNiveau') ? document.getElementById('cbEtiqShowNiveau').checked : true;
+    let showNom = document.getElementById('cbEtiqShowNom') ? document.getElementById('cbEtiqShowNom').checked : true;
+    let showSeq = document.getElementById('cbEtiqShowSeq') ? document.getElementById('cbEtiqShowSeq').checked : true;
+    let showComp = document.getElementById('cbEtiqShowComp') ? document.getElementById('cbEtiqShowComp').checked : true;
+    let showEtoiles = document.getElementById('cbEtiqShowEtoiles') ? document.getElementById('cbEtiqShowEtoiles').checked : true;
+    let showPers = document.getElementById('cbEtiqShowPers') ? document.getElementById('cbEtiqShowPers').checked : true;
+    let showBorder = document.getElementById('cbEtiqShowBorder') ? document.getElementById('cbEtiqShowBorder').checked : true;
 
-    zone.style.gridTemplateColumns = "repeat(" + nbCols + ", " + wMm + "mm)";
-    zone.style.gap = "0mm";
+    zone.style.gridTemplateColumns = "repeat(" + nbCols + ", " + wMm + "mm)";
+    zone.style.gap = "0mm";
 
-    let ids = [...panierEtiquettesIds];
+    let grille = construireGrillePlacementEtiquettes();
 
-    zone.innerHTML = ids.map(id => {
-        let a = baseDonnees.find(b => b.id === id); if (!a) return '';
-        let coul = getCouleurMatiereBandeau(a.matiere);
-        let rep = getRepereAtelierHtml(a, null, Math.round(fsPt * 2.1));
-        let bgEtiq = rep.bg;
-        let borderCss = showBorder ? ("0.4mm solid " + coul.bg) : "none";
+    zone.innerHTML = grille.slots.map(slot => {
+        let numCase = slot.slotIdx + 1;
 
-        let matRaw = (a.matiere || "").trim();
-        let libelleMatBandeau = (rep.emojiMat && !matRaw.startsWith(rep.emojiMat))
-            ? (rep.emojiMat + " " + matRaw)
-            : matRaw;
+        // 1. Cas d'un emplacement barré (déjà utilisé sur la planche d'étiquettes physique)
+        if (slot.type === 'saute') {
+            return '<div class="etiquette-item etiquette-slot-vide" ' +
+                'onclick="toggleCaseSauteeEtiquette(' + slot.slotIdx + ')" ' +
+                'ondragover="survolerDropEtiquette(event, this)" ondragleave="quitterDropEtiquette(this)" ondrop="deposerEtiquetteSurCase(event, ' + slot.slotIdx + ')" ' +
+                'title="Emplacement N° ' + numCase + ' ignoré à l\'impression. Cliquez pour réactiver cet emplacement." ' +
+                'style="width:' + wMm + 'mm; height:' + hMm + 'mm; background:repeating-linear-gradient(45deg, #f8fafc, #f8fafc 6px, #fdedec 6px, #fdedec 12px); border:1px dashed #e74c3c; color:#c0392b;">' +
+                '<strong style="font-size:11px;">🚫 Case N° ' + numCase + ' sautée</strong>' +
+                '<span style="font-size:9.5px; color:#7f8c8d; margin-top:2px;">(Déjà décollée — Cliquez pour libérer)</span>' +
+            '</div>';
+        }
 
-        let bandeauHtml = (showMatiere || showNiveau) ?
-            '<div style="background:' + coul.bg + ' !important; color:' + coul.text + ' !important; font-size:' + Math.max(7, fsPt - 2.5) + 'pt; font-weight:bold; padding:1px 5px; border-radius:3px; display:flex; justify-content:space-between; align-items:center; width:100%;">' +
-                '<span>' + (showMatiere ? escHTML(libelleMatBandeau) : escHTML(rep.emojiMat || '')) + '</span>' +
-                '<span>' + (showNiveau ? escHTML(a.niveau) : '') + '</span>' +
-            '</div>' : '';
+        // 2. Cas d'un emplacement libre en fin de planche
+        if (slot.type === 'libre') {
+            return '<div class="etiquette-item etiquette-slot-vide" ' +
+                'onclick="toggleCaseSauteeEtiquette(' + slot.slotIdx + ')" ' +
+                'ondragover="survolerDropEtiquette(event, this)" ondragleave="quitterDropEtiquette(this)" ondrop="deposerEtiquetteSurCase(event, ' + slot.slotIdx + ')" ' +
+                'title="Cliquez pour marquer la case N° ' + numCase + ' comme déjà utilisée, ou glissez une étiquette ici." ' +
+                'style="width:' + wMm + 'mm; height:' + hMm + 'mm; background:#fbfcfc; border:1px dashed #cbd5e1; color:#95a5a6;">' +
+                '<strong style="font-size:11px;">⬜ Case N° ' + numCase + ' libre</strong>' +
+                '<span style="font-size:9.5px; margin-top:2px;">(Cliquer si déjà décollée)</span>' +
+            '</div>';
+        }
 
-        let codeHtml = (showCode && rep.html) ?
-            '<div style="font-size:' + Math.round(fsPt * 1.35) + 'pt; font-weight:bold; margin:1px 0; padding:1px 6px; background:rgba(255,255,255,0.72); border-radius:4px; display:inline-block; align-self:center; line-height:1.1;">' +
-                rep.html +
-            '</div>' : '';
+        // 3. Cas d'une étiquette à imprimer dans cette case
+        let a = baseDonnees.find(b => b.id === slot.idAct);
+        if (!a) return '';
+        let coul = getCouleurMatiereBandeau(a.matiere);
+        let rep = getRepereAtelierHtml(a, null, Math.round(fsPt * 2.1));
+        let bgEtiq = rep.bg;
+        let borderCss = showBorder ? ("0.4mm solid " + coul.bg) : "none";
 
-        let prefixNomSiSansCode = (!showCode && rep.emojiMat) ? (escHTML(rep.emojiMat) + " ") : '';
-        let nomHtml = showNom ? '<div style="font-weight:bold; font-size:' + fsPt + 'pt; color:#1e293b; line-height:1.15;">' + prefixNomSiSansCode + escHTML(a.ressource) + '</div>' : '';
-        let seqHtml = (showSeq && (a.sequence || a.lecon)) ? '<div style="font-size:' + Math.max(7, fsPt - 2) + 'pt; color:#333; line-height:1.1;">' + escHTML(a.sequence || '') + ' ' + (a.lecon ? '— ' + escHTML(a.lecon) : '') + '</div>' : '';
-        let compHtml = (showComp && a.competence) ? '<div style="font-size:' + Math.max(6.5, fsPt - 2.5) + 'pt; color:#444; font-style:italic; line-height:1.1;">' + escHTML(a.competence) + '</div>' : '';
-        let piedHtml = (showEtoiles || showPers) ?
-            '<div style="display:flex; justify-content:space-between; align-items:center; font-size:' + Math.max(7, fsPt - 2.5) + 'pt; width:100%;">' +
-                '<span>' + (showEtoiles ? formaterEtoiles(a.difficulte) : '') + '</span>' +
-                '<span>' + (showPers ? escHTML(a.personnes || '') : '') + '</span>' +
-            '</div>' : '';
+        let matRaw = (a.matiere || "").trim();
+        let libelleMatBandeau = (rep.emojiMat && !matRaw.startsWith(rep.emojiMat))
+            ? (rep.emojiMat + " " + matRaw)
+            : matRaw;
 
-        return '<div class="etiquette-item" style="width:' + wMm + 'mm; height:' + hMm + 'mm; background:' + bgEtiq + ' !important; border:' + borderCss + '; font-size:' + fsPt + 'pt;">' +
-            bandeauHtml +
-            codeHtml +
-            nomHtml +
-            seqHtml +
-            compHtml +
-            piedHtml +
-        '</div>';
-    }).join('');
+        let bandeauHtml = (showMatiere || showNiveau) ?
+            '<div style="background:' + coul.bg + ' !important; color:' + coul.text + ' !important; font-size:' + Math.max(7, fsPt - 2.5) + 'pt; font-weight:bold; padding:1px 5px; border-radius:3px; display:flex; justify-content:space-between; align-items:center; width:100%;">' +
+                '<span>' + (showMatiere ? escHTML(libelleMatBandeau) : escHTML(rep.emojiMat || '')) + '</span>' +
+                '<span>' + (showNiveau ? escHTML(a.niveau) : '') + '</span>' +
+            '</div>' : '';
+
+        let codeHtml = (showCode && rep.html) ?
+            '<div style="font-size:' + Math.round(fsPt * 1.35) + 'pt; font-weight:bold; margin:1px 0; padding:1px 6px; background:rgba(255,255,255,0.72); border-radius:4px; display:inline-block; align-self:center; line-height:1.1;">' +
+                rep.html +
+            '</div>' : '';
+
+        let prefixNomSiSansCode = (!showCode && rep.emojiMat) ? (escHTML(rep.emojiMat) + " ") : '';
+        let nomHtml = showNom ? '<div style="font-weight:bold; font-size:' + fsPt + 'pt; color:#1e293b; line-height:1.15;">' + prefixNomSiSansCode + escHTML(a.ressource) + '</div>' : '';
+        let seqHtml = (showSeq && (a.sequence || a.lecon)) ? '<div style="font-size:' + Math.max(7, fsPt - 2) + 'pt; color:#333; line-height:1.1;">' + escHTML(a.sequence || '') + ' ' + (a.lecon ? '— ' + escHTML(a.lecon) : '') + '</div>' : '';
+        let compHtml = (showComp && a.competence) ? '<div style="font-size:' + Math.max(6.5, fsPt - 2.5) + 'pt; color:#444; font-style:italic; line-height:1.1;">' + escHTML(a.competence) + '</div>' : '';
+        let piedHtml = (showEtoiles || showPers) ?
+            '<div style="display:flex; justify-content:space-between; align-items:center; font-size:' + Math.max(7, fsPt - 2.5) + 'pt; width:100%;">' +
+                '<span>' + (showEtoiles ? formaterEtoiles(a.difficulte) : '') + '</span>' +
+                '<span>' + (showPers ? escHTML(a.personnes || '') : '') + '</span>' +
+            '</div>' : '';
+
+        // Petits boutons qui apparaissent au survol de la souris (invisibles à l'impression)
+        let actionsSurvolHtml = '<div class="etiq-overlay-actions no-print" style="opacity:0; position:absolute; top:2px; right:2px; display:flex; gap:3px; background:rgba(255,255,255,0.92); padding:2px 4px; border-radius:4px; box-shadow:0 1px 4px rgba(0,0,0,0.2); z-index:5;">' +
+            '<span style="font-size:9.5px; font-weight:bold; color:#555; padding:1px 3px;">N°' + numCase + '</span>' +
+            '<button type="button" onclick="event.stopPropagation(); toggleCaseSauteeEtiquette(' + slot.slotIdx + ')" title="Marquer cette case N° ' + numCase + ' comme déjà décollée et pousser l\'étiquette à la case suivante" style="border:none; background:#fef9e7; color:#d35400; font-size:10px; font-weight:bold; padding:1px 5px; border-radius:3px; cursor:pointer;">⏩ Décaler</button>' +
+            '<button type="button" onclick="event.stopPropagation(); retirerEtiquetteDuPanierIndex(' + slot.panierIdx + ')" title="Retirer cette étiquette de la planche" style="border:none; background:#fdedec; color:#c0392b; font-size:10px; font-weight:bold; padding:1px 5px; border-radius:3px; cursor:pointer;">✖</button>' +
+        '</div>';
+
+        return '<div class="etiquette-item" draggable="true" ' +
+            'ondragstart="demarrerDragEtiquette(event, ' + slot.slotIdx + ')" ' +
+            'ondragover="survolerDropEtiquette(event, this)" ondragleave="quitterDropEtiquette(this)" ondrop="deposerEtiquetteSurCase(event, ' + slot.slotIdx + ')" ' +
+            'title="Case N° ' + numCase + ' — Glissez-déposez pour déplacer vers une autre case" ' +
+            'style="width:' + wMm + 'mm; height:' + hMm + 'mm; background:' + bgEtiq + ' !important; border:' + borderCss + '; font-size:' + fsPt + 'pt; cursor:grab;">' +
+            actionsSurvolHtml +
+            bandeauHtml +
+            codeHtml +
+            nomHtml +
+            seqHtml +
+            compHtml +
+            piedHtml +
+        '</div>';
+    }).join('');
 }
 
 function lancerImpressionEtiquettes() {
-    if (panierEtiquettesIds.length === 0) {
-        showToast("⚠️ Sélectionnez au moins une étiquette à imprimer !", "error");
-        return;
-    }
-    document.body.classList.remove('print-lecons-only');
-    genererApercuEtiquettes();
-    window.print();
+    if (panierEtiquettesIds.length === 0) {
+        showToast("⚠️ Sélectionnez au moins une étiquette à imprimer !", "error");
+        return;
+    }
+    document.body.classList.remove('print-lecons-only');
+    genererApercuEtiquettes();
+    window.print();
 }
 
 function genererMatriceCompetences() {
